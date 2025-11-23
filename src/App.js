@@ -23,6 +23,7 @@ import DoctorDirectoryPage from './components/DoctorDirectoryPage';
 import DoctorPublicProfilePage from './components/DoctorPublicProfilePage';
 import AIQuestionnairesPage from './components/AIQuestionnairesPage';
 import ScrollToTop from './components/ScrollToTop';
+import DoctorNotificationsPage from './components/DoctorNotificationsPage';
 // Interview flow is integrated into QuestionnairePage; no separate page import
 
 // Config
@@ -435,21 +436,31 @@ function ProtectedRoute({ children, role }) {
   const auth = useAuth();
   const navigate = useNavigate();
 
-  if (auth.loading) return <div className="p-6">Loading...</div>;
-  if (!auth.session) return <Navigate to="/login" replace />;
+  console.log('ProtectedRoute: auth.loading =', auth.loading, 'auth.session =', !!auth.session, 'auth.profile?.role =', auth.profile?.role, 'required role =', role);
 
+  if (auth.loading) {
+    console.log('ProtectedRoute: Showing loading...');
+    return <div className="p-6">Loading...</div>;
+  }
+  if (!auth.session) {
+    console.log('ProtectedRoute: No session, redirecting to /login');
+    return <Navigate to="/login" replace />;
+  }
+  
   const effectiveRole = auth.profile?.role;
-
+  
   if (role && effectiveRole !== role) {
+    console.log('ProtectedRoute: Wrong role, showing RoleGate');
     return <RoleGate requiredRole={role} />;
   }
   
+  console.log('ProtectedRoute: Access granted, rendering children');
   return children;
-}
-
-function RoleGate({ requiredRole }) {
+}function RoleGate({ requiredRole }) {
   const auth = useAuth();
   const navigate = useNavigate();
+
+  console.log('RoleGate: Showing access restricted for role:', requiredRole, 'user role:', auth.profile?.role);
 
   return (
     <div className="card" style={{ maxWidth: 560, margin: '40px auto' }}>
@@ -537,6 +548,7 @@ function Header() {
               {auth.profile.role === 'patient' && <Link to="/patient" className="nav-link">Patient</Link>}
               {auth.profile.role === 'doctor' && <Link to="/doctor" className="nav-link">Doctor</Link>}
               {auth.profile.role === 'doctor' && <Link to="/doctor/profile" className="nav-link">My Profile</Link>}
+              {auth.profile.role === 'doctor' && <Link to="/doctor/notifications" className="nav-link">Notifications</Link>}
               {auth.profile.role === 'admin' && <Link to="/admin" className="nav-link">Admin</Link>}
             </>
           )}
@@ -1168,6 +1180,11 @@ function PatientPortal() {
           <div className="mt-4"><Link to="/patient/profile" className="btn btn-light">Edit</Link></div>
         </div>
         <div className="feature-card tilt">
+          <h3>AI Questionnaires</h3>
+          <p>Interactive AI-powered interviews with doctor selection and report sharing.</p>
+          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">Start AI Interview</Link></div>
+        </div>
+        <div className="feature-card tilt">
           <h3>AI Reports</h3>
           <p>View reports generated from your latest completed assessments and questionnaires.</p>
           <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">View</Link></div>
@@ -1184,8 +1201,7 @@ function QuestionnairePage() {
   const [loading, setLoading] = useState({ generate: false, report: false });
   const [error, setError] = useState('');
   const [report, setReport] = useState('');
-  const [testLoading, setTestLoading] = useState(false);
-  const [testResult, setTestResult] = useState('');
+  
   const auth = useAuth();
   const navigate = useNavigate();
   // Interview-mode state (AI-driven sequential Q&A)
@@ -1194,7 +1210,13 @@ function QuestionnairePage() {
   const [iLoading, setILoading] = useState({ start: false, next: false, report: false });
   const [serverBase, setServerBase] = useState(SERVER_BASE);
   const [health, setHealth] = useState({ checked: false, ok: false, detail: '' });
-  const LS_KEYS = { interview: 'interview_state_v1', base: 'api_server_base_v1', questionnaire: 'questionnaire_progress_v1' };
+  const LS_KEYS = { interview: 'interview_state_v1', base: 'api_server_base_v1', questionnaire: 'questionnaire_progress_v1', selectedDoctors: 'selected_doctors_v1' };
+
+  // Doctor selection for sharing reports
+  const [selectedDoctors, setSelectedDoctors] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [doctorQuery, setDoctorQuery] = useState('');
+  const [filteredDoctors, setFilteredDoctors] = useState([]);
 
   // Generic POST helper with fallback to localhost:5001 if current base fails/non-JSON
   const apiPostJSON = async (path, body) => {
@@ -1250,6 +1272,16 @@ function QuestionnairePage() {
         }
       }
     } catch (_) {}
+    // Restore selected doctors
+    try {
+      const rawSel = window.localStorage.getItem(LS_KEYS.selectedDoctors);
+      if (rawSel) {
+        const parsed = JSON.parse(rawSel);
+        if (Array.isArray(parsed)) setSelectedDoctors(parsed);
+      }
+    } catch (_) {}
+    // Fetch available doctors for selection
+    try { fetchDoctors(); } catch (_) {}
   }, []);
 
   // Persist base and interview whenever they change
@@ -1260,49 +1292,12 @@ function QuestionnairePage() {
     try { window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ ...interview, report })); } catch (_) {}
   }, [interview, report]);
 
-  async function testOpenAI() {
-    setTestLoading(true);
-    setTestResult('');
-    try {
-      const qs = await MedicalAI.generateQuestionnaire({ test: true });
-      setTestResult(`OK — received ${Array.isArray(qs) ? qs.length : 0} items`);
-      console.log('MedicalAI.generateQuestionnaire result:', qs);
-      // Auto-load into the questionnaire UI
-      setQuestions(qs);
-      setAnswers({});
-      setCurrentStep(0);
+  // Persist selected doctors so choices survive reloads/navigation
+  useEffect(() => {
+    try { window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors)); } catch (_) {}
+  }, [selectedDoctors]);
 
-      // Attempt to persist to Supabase if user is signed in
-      try {
-        const uid = auth?.session?.user?.id;
-        if (uid) {
-          const { data: inserted, error: insErr } = await supabase
-            .from('questionnaires')
-            .insert([{ user_id: uid, questions: qs }])
-            .select()
-            .single();
-          if (!insErr && inserted) {
-            setTestResult(prev => prev + ` — saved (id=${inserted.id})`);
-          } else if (insErr) {
-            setTestResult(prev => prev + ` — save failed: ${insErr.message}`);
-          }
-        }
-      } catch (persistErr) {
-        console.warn('Persist questionnaire failed:', persistErr);
-        setTestResult(prev => prev + ' — save failed');
-      }
-
-      alert(`OpenAI test succeeded — received ${Array.isArray(qs) ? qs.length : 0} items.`);
-    } catch (err) {
-      console.error('AI test failed', err);
-      setTestResult(`ERROR: ${err?.message || String(err)}`);
-      alert(`AI test failed: ${err?.message || String(err)}`);
-      // Clear questions on failure - no fallback questions
-      setQuestions([]);
-    } finally {
-      setTestLoading(false);
-    }
-  }
+  // testOpenAI removed - developer test helper was removed from UI
 
   // Interview mode helpers
   async function buildInterviewContext() {
@@ -1379,6 +1374,54 @@ function QuestionnairePage() {
     }
   }
 
+  // Fetch doctors (used for sharing reports)
+  async function fetchDoctors() {
+    try {
+      let data = [];
+      try {
+        const res = await supabase
+          .from('doctors')
+          .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(100);
+        if (res.error) throw res.error;
+        data = res.data || [];
+      } catch (_) {
+        const res2 = await supabase
+          .from('doctor_profiles')
+          .select('id, user_id, full_name, email, specialty, location, city, bio, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(100);
+        if (res2.error) throw res2.error;
+        data = res2.data || [];
+      }
+      setDoctors(data || []);
+      try { setFilteredDoctors(data || []); } catch (_) {}
+    } catch (err) {
+      console.error('fetchDoctors error:', err);
+    }
+  }
+
+  // Keep filtered list in sync with query
+  useEffect(() => {
+    try {
+      const q = String(doctorQuery || '').trim().toLowerCase();
+      if (!q) {
+        setFilteredDoctors(doctors || []);
+        return;
+      }
+      const out = (doctors || []).filter(d => {
+        const name = String(d.full_name || d.name || d.user_id || '').toLowerCase();
+        const spec = String(d.specialist || d.specialty || d.specialities || d.city || '').toLowerCase();
+        const email = String(d.email || '').toLowerCase();
+        return name.includes(q) || spec.includes(q) || email.includes(q);
+      });
+      setFilteredDoctors(out);
+    } catch (_) {
+      setFilteredDoctors(doctors || []);
+    }
+  }, [doctorQuery, doctors]);
+
   async function generateInterviewReport() {
     if (!interview.sessionId) return;
     setILoading(prev => ({ ...prev, report: true }));
@@ -1414,36 +1457,7 @@ function QuestionnairePage() {
     }
   }
 
-  async function runHealthCheck() {
-    setHealth({ checked: true, ok: false, detail: 'Checking…' });
-    const tryOnce = async (url) => {
-      const res = await fetch(url);
-      const txt = await res.text();
-      let j; try { j = JSON.parse(txt); } catch { j = null; }
-      return { ok: res.ok && j && j.ok, detail: res.ok && j ? `Provider: ${j.provider}, hasKey: ${String(j.hasKey)}` : `HTTP ${res.status}: ${txt.slice(0,120)}` };
-    };
-    try {
-      const base = serverBase || '';
-      const urls = [
-        `${base}/health`,
-        `${base}/api/health`,
-        base ? '' : 'http://localhost:5001/health',
-        base ? '' : 'http://localhost:5001/api/health'
-      ].filter(Boolean);
-      let result = { ok: false, detail: 'No attempts' };
-      for (const u of urls) {
-        try {
-          result = await tryOnce(u);
-          if (result.ok) break;
-        } catch (e) {
-          result = { ok: false, detail: String(e?.message || e) };
-        }
-      }
-      setHealth({ checked: true, ok: result.ok, detail: result.detail });
-    } catch (e) {
-      setHealth({ checked: true, ok: false, detail: String(e?.message || e) });
-    }
-  }
+  // runHealthCheck removed - kept in codebase but not exposed in UI
 
   const handleAnswer = (questionId, value) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
@@ -1522,25 +1536,51 @@ function QuestionnairePage() {
       
       setReport(report);
 
-      // Persist AI report to Supabase (report table)
+      // Persist AI report to Supabase (report table) and notify selected doctors
       try {
         const uid = auth?.session?.user?.id;
         if (uid) {
-          await supabase.from(TBL_REPORT).insert([{
-            patient_id: uid,
-            doctor_id: null,
-            content: report,
-            ai_generated: true,
-            severity: MedicalAI._determineSeverity(report),
-            metadata: { 
-              from: 'questionnaire',
-              answers: answers,
-              created_via: 'QuestionnairePage.generateReport'
+          const { data: inserted, error: insErr } = await supabase.from(TBL_REPORT)
+            .insert([{
+              patient_id: uid,
+              doctor_id: null,
+              content: report,
+              ai_generated: true,
+              severity: MedicalAI._determineSeverity(report),
+              metadata: { 
+                from: 'questionnaire',
+                answers: answers,
+                created_via: 'QuestionnairePage.generateReport'
+              }
+            }])
+            .select('id')
+            .single();
+
+          if (insErr) {
+            console.warn('Failed to save AI report:', insErr?.message || insErr);
+          } else {
+            // If doctors were selected, create notifications for them (best-effort)
+            if (Array.isArray(selectedDoctors) && selectedDoctors.length > 0) {
+              try {
+                const notifications = selectedDoctors.map(docId => ({
+                  doctor_id: docId,
+                  patient_id: uid,
+                  report_id: inserted?.id || null,
+                  message: `New AI-generated report available for patient ${auth?.session?.user?.email || 'patient'}`,
+                  type: 'report_shared',
+                  is_read: false
+                }));
+
+                const { error: notifErr } = await supabase.from('notifications').insert(notifications);
+                if (notifErr) console.warn('Failed to create notifications:', notifErr);
+              } catch (notifEx) {
+                console.warn('Notification creation failed:', notifEx);
+              }
             }
-          }]);
+          }
         }
       } catch (persistErr) {
-        console.warn('Failed to save AI report:', persistErr?.message || persistErr);
+        console.warn('Failed to save AI report and notify:', persistErr?.message || persistErr);
       }
     } catch (err) {
       setError(err.message || 'Failed to generate report');
@@ -1660,52 +1700,75 @@ function QuestionnairePage() {
 
   return (
     <main>
-  <div className="card questionnaire-container route-screen">
+        <div className="card questionnaire-container route-screen">
+          <div style={{ maxWidth: 980, margin: '0 auto', padding: 20 }}>
         <div className="questionnaire-header">
           <h1 className="card-title">Health Questionnaire</h1>
-          <div className="questionnaire-actions">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                className="btn btn-outline"
-                onClick={testOpenAI}
-                disabled={testLoading}
-                title="Quickly test the AI integration"
-                style={{ marginLeft: 8 }}
-              >
-                {testLoading ? 'Testing…' : 'Test AI'}
-              </button>
-              {testResult && <small style={{ marginLeft: 8 }}>{testResult}</small>}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                className="btn btn-primary"
-                onClick={startInterview}
-                disabled={iLoading.start}
-                title="Start AI interview (one-by-one questions)"
-              >
-                {iLoading.start ? 'Starting…' : 'Start Interview'}
-              </button>
-              <button
-                className="btn btn-light"
-                onClick={runHealthCheck}
-                disabled={iLoading.start}
-                title="Check backend reachability"
-              >
-                Test Backend
-              </button>
-            </div>
-          </div>
         </div>
-        
+
+        {/* Centered primary action */}
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={startInterview}
+            disabled={iLoading.start || selectedDoctors.length === 0}
+            title={selectedDoctors.length === 0 ? "Please select at least one doctor first" : "Start Interview"}
+            style={{ padding: '12px 28px', width: '100%', maxWidth: 420 }}
+          >
+            {iLoading.start ? 'Starting…' : 'Start Interview'}
+          </button>
+        </div>
+
         {error && <div className="alert alert-danger">{error}</div>}
-        <div style={{ marginBottom: '12px', padding: '8px', background: '#f0f8ff', border: '1px solid #add8e6', borderRadius: 6 }}>
-          <div><strong>API Base:</strong> <code>{serverBase || '(relative /api)'}</code></div>
-          {health.checked && (
-            <div style={{ marginTop: 6, color: health.ok ? '#0a7' : '#a00' }}>
-              Health: {health.ok ? 'OK' : 'FAILED'} {health.detail ? `- ${health.detail}` : ''}
+
+  {/* Doctor selection for report sharing */}
+  <div className="card" style={{ marginBottom: 16 }}>
+          <h3 className="card-title">Select Doctors to Share Report With</h3>
+          <p className="muted">Choose which doctors should receive your AI-generated health report after the assessment.</p>
+          {filteredDoctors.length > 0 ? (
+            <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, marginBottom: 8 }}>
+                <input
+                  className="form-input"
+                  placeholder="Search doctors by name or specialty"
+                  value={doctorQuery}
+                  onChange={e => setDoctorQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { /* triggers filtering via effect */ } }}
+                  style={{ flex: 1, minWidth: 160 }}
+                />
+                <button className="btn btn-outline" onClick={() => { /* explicit search: effect already handles */ setDoctorQuery(doctorQuery); }}>Search</button>
+                <button className="btn btn-light" onClick={() => setDoctorQuery('')}>Clear</button>
+              </div>
+              <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
+              {filteredDoctors.map(doctor => (
+                <label key={doctor.id || doctor.user_id} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id || doctor.user_id) ? '#f0f8ff' : 'transparent' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedDoctors.includes(doctor.id || doctor.user_id)}
+                    onChange={(e) => {
+                      const doctorId = doctor.id || doctor.user_id;
+                      if (e.target.checked) setSelectedDoctors(prev => [...prev, doctorId]);
+                      else setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                    }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{doctor.full_name || doctor.name || 'Doctor'}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{doctor.specialist || doctor.specialty || 'General'}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            </>
+          ) : (
+            <p className="muted" style={{ marginTop: 8 }}>No doctors available at the moment.</p>
+          )}
+          {selectedDoctors.length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 14 }}>
+              <strong>Selected: {selectedDoctors.length} doctor(s)</strong>
             </div>
           )}
-        </div>
+  </div>
+  </div>
 
             {/* Raw JSON display removed - questions are generated by AI only */}
 
@@ -1759,7 +1822,7 @@ function QuestionnairePage() {
         {/* Legacy list mode */}
         {!interview.sessionId && questions.length === 0 ? (
           <div className="empty-state">
-            {loading.generate || testLoading ? (
+            {loading.generate ? (
               <div className="card" style={{ maxWidth: 720, margin: '0 auto', textAlign: 'left' }}>
                 <h3 className="card-title">Generating Questionnaire…</h3>
                 <div style={{ display:'grid', gap:16 }}>
@@ -1792,7 +1855,7 @@ function QuestionnairePage() {
             </div>
 
             <div className="question-container">
-              {loading.generate || testLoading ? (
+              {loading.generate ? (
                 <div style={{ display:'grid', gap:12 }}>
                   <div className="skeleton animate" style={{ height: 28, width:'60%', borderRadius:'0.75rem' }} />
                   <div className="skeleton animate" style={{ height: 96, width:'100%', borderRadius:'1rem' }} />
@@ -2932,7 +2995,7 @@ function App() {
               } />
               <Route path="/patient/ai-questionnaires" element={
                 <ProtectedRoute role="patient">
-                  <AIQuestionnairesPage />
+                  <Navigate to="/patient/questionnaire" replace />
                 </ProtectedRoute>
               } />
               <Route path="/patient/sensor-data" element={
@@ -2969,6 +3032,11 @@ function App() {
               <Route path="/doctor/profile" element={
                 <ProtectedRoute role="doctor">
                   <DoctorProfilePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/doctor/notifications" element={
+                <ProtectedRoute role="doctor">
+                  <DoctorNotificationsPage />
                 </ProtectedRoute>
               } />
               <Route path="/doctor/patient/:id" element={
