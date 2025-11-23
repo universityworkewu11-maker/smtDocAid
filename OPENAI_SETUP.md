@@ -18,7 +18,7 @@ Your website is already deployed with Supabase keys! To enable AI features, add 
 4. Add this variable:
    ```
    Name: REACT_APP_OPENAI_API_KEY
-   Value: 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
+   Value: [Your OpenAI API Key Here]
    Environment: Production and Preview
    ```
 5. Click **Save** and redeploy
@@ -32,7 +32,7 @@ vercel env add REACT_APP_OPENAI_API_KEY production
 ### Method 3: Local Testing
 For local development, add to your `.env` file:
 ```
-REACT_APP_OPENAI_API_KEY=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
+REACT_APP_OPENAI_API_KEY=[Your OpenAI API Key Here]
 ```
 
 ## 🎯 What You'll Get After Adding OpenAI Key:
