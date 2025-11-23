@@ -29,11 +29,11 @@ Your server is already configured correctly! It will work with Vercel's Node.js 
 In your **backend project** settings, add these variables:
 
 ```
-OPENAI_API_KEY=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
+OPENAI_API_KEY=your_openai_api_key_here
 
-REACT_APP_SUPABASE_URL=https://cjysjpbgdisenofeccgu.supabase.co
+REACT_APP_SUPABASE_URL=your_supabase_url_here
 
-REACT_APP_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqeXNqcGJnZGlzZW5vZmVjY2d1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDQwNjM2NiwiZXhwIjoyMDY5OTgyMzY2fQ.qH3QAsbebavCSP4S5EzuOZNn-uFIhTC51iwcijzNT9o
+REACT_APP_SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 
 PORT=5001
 ```
