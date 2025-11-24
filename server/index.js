@@ -9,9 +9,23 @@ import fetch from 'cross-fetch';
 const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetch;
 
 const app = express();
-app.use(cors());
-// Handle preflight for all routes
-app.options('*', cors());
+
+// CORS configuration for Vercel serverless functions
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 // Basic request logging to debug 404/method/path issues
 app.use((req, _res, next) => {
 	try {
