@@ -10,28 +10,17 @@ const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetc
 
 const app = express();
 
-// CORS configuration for Vercel serverless functions
-app.use((req, res, next) => {
-  // Set CORS headers for all requests
+// CORS helper function for Vercel serverless functions
+function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'false');
-
-  // Handle preflight OPTIONS requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  next();
-});
+}
 
 // Handle all OPTIONS requests globally
 app.options('*', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  setCorsHeaders(res);
   res.status(200).end();
 });
 // Basic request logging to debug 404/method/path issues
@@ -50,23 +39,17 @@ const DEFAULT_ASSISTANT_ID = process.env.ASSISTANT_ID || '';
 
 // Health under both /api/health and /health for compatibility
 app.get('/health', (_req, res) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	setCorsHeaders(res);
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
 });
 app.get('/api/health', (_req, res) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	setCorsHeaders(res);
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
 });
 
 // Chat proxy: POST /api/v1/ai/chat { messages: [...], model?: string, temperature?: number, max_tokens?: number }
 app.post('/api/v1/ai/chat', async (req, res) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	setCorsHeaders(res);
 	try {
 		if (!OPENAI_API_KEY) {
 			return res.status(400).json({ ok: false, error: 'Missing OPENAI_API_KEY on server' });
@@ -240,9 +223,7 @@ function buildInterviewSystemPrompt() {
 // Start interview
 // body: { context?: any }
 app.post('/api/v1/ai/interview/start', async (req, res) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	setCorsHeaders(res);
 	try {
 		const { context } = req.body || {};
 		const sessionId = uuid();
@@ -269,9 +250,7 @@ app.post('/api/v1/ai/interview/start', async (req, res) => {
 // Next question based on previous answer
 // body: { sessionId: string, answer: string }
 app.post('/api/v1/ai/interview/next', async (req, res) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	setCorsHeaders(res);
 	try {
 		const { sessionId, answer } = req.body || {};
 		const sess = sessions.get(sessionId);
@@ -298,9 +277,7 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 // Generate final report
 // body: { sessionId: string }
 app.post('/api/v1/ai/interview/report', async (req, res) => {
-	res.setHeader('Access-Control-Allow-Origin', '*');
-	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	setCorsHeaders(res);
 	try {
 		const { sessionId } = req.body || {};
 		const sess = sessions.get(sessionId);
