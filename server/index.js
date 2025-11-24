@@ -288,35 +288,41 @@ app.all('/api/v1/ai/interview/*', (req, res, next) => {
 	return next();
 });
 
-process.on('unhandledRejection', (reason) => {
-	console.error('[server] Unhandled Rejection:', reason);
-});
-process.on('uncaughtException', (err) => {
-	console.error('[server] Uncaught Exception:', err);
-});
+// Export for Vercel serverless functions
+export default app;
 
-try {
-	const server = app.listen(PORT, () => {
-		console.log(`[server] listening on http://localhost:${PORT}`);
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+	process.on('unhandledRejection', (reason) => {
+		console.error('[server] Unhandled Rejection:', reason);
 	});
-	// Extra diagnostics to detect unexpected shutdowns
-	server.on('close', () => {
-		console.log('[server] http server closed');
+	process.on('uncaughtException', (err) => {
+		console.error('[server] Uncaught Exception:', err);
 	});
-	process.on('exit', (code) => {
-		console.log('[server] process exit with code', code);
-	});
-	process.on('SIGINT', () => {
-		console.log('[server] SIGINT received, shutting down');
-		try { server.close(() => process.exit(0)); } catch (_) { process.exit(0); }
-	});
-	process.on('SIGTERM', () => {
-		console.log('[server] SIGTERM received, shutting down');
-		try { server.close(() => process.exit(0)); } catch (_) { process.exit(0); }
-	});
-} catch (e) {
-	console.error('[server] Failed to start:', e);
-	process.exit(1);
+
+	try {
+		const server = app.listen(PORT, () => {
+			console.log(`[server] listening on http://localhost:${PORT}`);
+		});
+		// Extra diagnostics to detect unexpected shutdowns
+		server.on('close', () => {
+			console.log('[server] http server closed');
+		});
+		process.on('exit', (code) => {
+			console.log('[server] process exit with code', code);
+		});
+		process.on('SIGINT', () => {
+			console.log('[server] SIGINT received, shutting down');
+			try { server.close(() => process.exit(0)); } catch (_) { process.exit(0); }
+		});
+		process.on('SIGTERM', () => {
+			console.log('[server] SIGTERM received, shutting down');
+			try { server.close(() => process.exit(0)); } catch (_) { process.exit(0); }
+		});
+	} catch (e) {
+		console.error('[server] Failed to start:', e);
+		process.exit(1);
+	}
 }
 
  
