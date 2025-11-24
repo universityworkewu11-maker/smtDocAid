@@ -1,6 +1,6 @@
 {
   "framework": "create-react-app",
-  "buildCommand": "react-scripts build",
+  "buildCommand": "npx react-scripts build",
   "outputDirectory": "build",
   "installCommand": "npm ci",
   "rewrites": [{"source": "/(.*)", "destination": "/index.html"}]
