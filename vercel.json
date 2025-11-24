@@ -1,7 +1,18 @@
 {
-  "framework": "create-react-app",
-  "buildCommand": "npx react-scripts build",
-  "outputDirectory": "build",
-  "installCommand": "npm ci",
-  "rewrites": [{"source": "/(.*)", "destination": "/index.html"}]
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
 }
