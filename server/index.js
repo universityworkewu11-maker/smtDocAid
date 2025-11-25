@@ -305,6 +305,36 @@ app.all('/api/v1/ai/interview/*', (req, res, next) => {
 	return next();
 });
 
+// In-memory storage for latest vitals from raspi
+let latestVitals = { temperature: null, heartRate: null, spo2: null, timestamp: null };
+
+// POST /api/vitals - Receive vitals data from raspi
+app.post('/api/vitals', (req, res) => {
+  setCorsHeaders(res);
+  try {
+    const { temperature, heartRate, spo2 } = req.body || {};
+    if (typeof temperature === 'number' || typeof heartRate === 'number' || typeof spo2 === 'number') {
+      latestVitals = {
+        temperature: typeof temperature === 'number' ? temperature : latestVitals.temperature,
+        heartRate: typeof heartRate === 'number' ? heartRate : latestVitals.heartRate,
+        spo2: typeof spo2 === 'number' ? spo2 : latestVitals.spo2,
+        timestamp: new Date().toISOString()
+      };
+      return res.json({ ok: true, message: 'Vitals updated' });
+    } else {
+      return res.status(400).json({ ok: false, error: 'Invalid vitals data' });
+    }
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
+  }
+});
+
+// GET /api/vitals - Get latest vitals for frontend
+app.get('/api/vitals', (req, res) => {
+  setCorsHeaders(res);
+  res.json(latestVitals);
+});
+
 // Export for Vercel serverless functions
 export default app;
 

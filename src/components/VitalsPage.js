@@ -98,23 +98,34 @@ const VitalsPage = () => {
     setError('');
 
     try {
-      // Simulate Raspberry Pi API call
-      // In production, this would connect to actual Raspberry Pi via WebSocket/MQTT/USB
-      const response = await mockRaspberryPiAPI(vitalType, pinNumber);
+      // Fetch latest vitals from backend API
+      const response = await fetch('/api/vitals');
+      if (!response.ok) {
+        throw new Error('Failed to fetch vitals from server');
+      }
+      const data = await response.json();
 
-      if (response.success) {
-        const timestamp = new Date().toISOString();
+      // Map vitalType to API keys
+      const apiKeyMap = {
+        temperature: 'temperature',
+        heartRate: 'heartRate',
+        spo2: 'spo2'
+      };
+      const value = data[apiKeyMap[vitalType]];
+
+      if (value !== null && value !== undefined) {
+        const timestamp = data.timestamp || new Date().toISOString();
         setVitalsData(prev => ({
           ...prev,
           [vitalType]: {
-            value: response.value,
+            value: value,
             status: 'measured',
             timestamp,
             confirmed: false
           }
         }));
       } else {
-        throw new Error(response.message || 'Failed to read vital');
+        throw new Error(`No ${vitalType} reading available`);
       }
     } catch (err) {
       setError(err.message);
@@ -130,25 +141,6 @@ const VitalsPage = () => {
     }
   };
 
-  // Mock Raspberry Pi API (replace with actual implementation)
-  const mockRaspberryPiAPI = (vitalType, pinNumber) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Simulate realistic vital readings
-        const readings = {
-          temperature: 98.6 + (Math.random() - 0.5) * 2,
-          heartRate: 72 + (Math.random() - 0.5) * 20,
-          spo2: 98 + (Math.random() - 0.5) * 3
-        };
-
-        resolve({
-          success: true,
-          value: Math.round(readings[vitalType] * 10) / 10,
-          message: `Successfully read ${vitalType} from pin ${pinNumber}`
-        });
-      }, 2000 + Math.random() * 1000); // 2-3 second delay
-    });
-  };
 
   const confirmVital = () => {
     setVitalsData(prev => ({
