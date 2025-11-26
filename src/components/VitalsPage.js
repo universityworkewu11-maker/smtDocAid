@@ -98,23 +98,30 @@ const VitalsPage = () => {
     setError('');
 
     try {
-      // Fetch latest vitals from backend API
-      const response = await fetch('/api/vitals');
+      // Fetch specific vital from Raspberry Pi API
+      const endpointMap = {
+        temperature: `/api/read/temperature?pin=${pinNumber}`,
+        heartRate: `/api/read/heartRate?pin=${pinNumber}`,
+        spo2: `/api/read/spo2?pin=${pinNumber}`
+      };
+      const response = await fetch(`http://10.60.194.209:7000${endpointMap[vitalType]}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch vitals from server');
+        throw new Error('Failed to fetch vitals from Raspberry Pi server');
       }
       const data = await response.json();
 
-      // Map vitalType to API keys
-      const apiKeyMap = {
-        temperature: 'temperature',
-        heartRate: 'heartRate',
-        spo2: 'spo2'
-      };
-      const value = data[apiKeyMap[vitalType]];
+      // Extract value based on vitalType
+      let value = null;
+      if (vitalType === 'temperature') {
+        value = data.object_temp_C;
+      } else if (vitalType === 'heartRate') {
+        value = data.heart_rate_bpm;
+      } else if (vitalType === 'spo2') {
+        value = data.spo2_percent;
+      }
 
       if (value !== null && value !== undefined) {
-        const timestamp = data.timestamp || new Date().toISOString();
+        const timestamp = new Date().toISOString();
         setVitalsData(prev => ({
           ...prev,
           [vitalType]: {
