@@ -41,15 +41,10 @@ function parseJSON(s, fallback = null) {
   try { return JSON.parse(String(s)); } catch { return fallback; }
 }
 
-export default async function handler(req, res) {
-  // Handle CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+import { handleCors } from '../../corsHelper.js';
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+export default async function handler(req, res) {
+  if (handleCors(req, res)) return;
 
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method Not Allowed. Use POST.' });
