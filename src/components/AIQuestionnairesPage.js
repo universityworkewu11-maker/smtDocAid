@@ -832,7 +832,7 @@ function AIQuestionnairesPage() {
                 }} style={{ width: '100%', padding: '8px', borderRadius: 4 }}>
                   <option value="">-- choose a doctor --</option>
                   {doctors.map(d => (
-                    <option key={d.user_id} value={d.user_id}>{d.full_name || d.user_id}</option>
+                    <option key={d.user_id} value={d.user_id}>{d.full_name || d.name || d.user_id}</option>
                   ))}
                 </select>
               </div>
