@@ -9,9 +9,17 @@ import fetch from 'cross-fetch';
 const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetch;
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'https://smt-doc-aid-amitubs-projects.vercel.app',
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  credentials: true
+}));
 // Handle preflight for all routes
-app.options('*', cors());
+app.options('*', cors({
+  origin: 'https://smt-doc-aid-amitubs-projects.vercel.app',
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  credentials: true
+}));
 // Basic request logging to debug 404/method/path issues
 app.use((req, _res, next) => {
 	try {
