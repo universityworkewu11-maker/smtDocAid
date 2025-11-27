@@ -110,8 +110,32 @@ function AIQuestionnairesPage() {
   // load list of doctors for patient to choose from
   const fetchDoctors = async () => {
     try {
-      const { data } = await supabase.from('doctor_profiles').select('user_id,full_name').order('full_name', { ascending: true }).limit(200);
-      setDoctors(data || []);
+      // Prefer the `doctors` table if present; fall back to `doctor_profiles` for backward compatibility
+      let data = [];
+      let err = null;
+      try {
+        const res = await supabase
+          .from('doctors')
+          .select('user_id, name')
+          .order('name', { ascending: true })
+          .limit(200);
+        if (res.error) throw res.error;
+        data = res.data || [];
+      } catch (e) {
+        err = e;
+      }
+
+      if (!data || data.length === 0) {
+        const res2 = await supabase
+          .from('doctor_profiles')
+          .select('user_id, full_name')
+          .order('full_name', { ascending: true })
+          .limit(200);
+        if (res2.error && !data?.length) throw (err || res2.error);
+        data = res2.data || data || [];
+      }
+
+      setDoctors(data);
       try {
         const saved = window.localStorage.getItem('selected_doctor_id');
         if (saved) setSelectedDoctorId(saved);
