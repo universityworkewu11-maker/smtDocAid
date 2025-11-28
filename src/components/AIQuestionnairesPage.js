@@ -46,6 +46,7 @@ function AIQuestionnairesPage() {
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(body || {})
       });
       const raw = await resp.text();
