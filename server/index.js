@@ -12,10 +12,10 @@ const app = express();
 
 // CORS helper function for Vercel serverless functions
 function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'false');
+   res.setHeader('Access-Control-Allow-Origin', 'https://smt-doc-aid-amitubs-projects.vercel.app');
+   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+   res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
 
 // Handle all OPTIONS requests globally
