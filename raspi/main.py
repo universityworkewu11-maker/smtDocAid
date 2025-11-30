@@ -5,7 +5,7 @@ import time
 SENSOR_BASE_URL = "http://10.60.216.96:7000"
 
 # Backend API endpoint to post vitals
-BACKEND_URL = "http://localhost:5001/api/vitals"  # Change this to the actual backend IP/port
+BACKEND_URL = "https://smt-doc-aid-amitubs-projects.vercel.app/api/vitals"
 
 def get_sensor_readings():
     readings = {}
