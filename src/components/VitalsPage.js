@@ -198,9 +198,28 @@ const VitalsPage = () => {
     return value >= range.min && value <= range.max;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     // Store vitals data and navigate to next step
     localStorage.setItem('vitalsData', JSON.stringify(vitalsData));
+
+    // Upload vitals to backend
+    try {
+      const SERVER_BASE = process.env.REACT_APP_SERVER_BASE || '';
+      const uploadUrl = SERVER_BASE ? `${SERVER_BASE}/api/vitals` : '/api/vitals';
+      const vitalsToUpload = {
+        temperature: vitalsData.temperature.value,
+        heartRate: vitalsData.heartRate.value,
+        spo2: vitalsData.spo2.value
+      };
+      await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vitalsToUpload)
+      });
+    } catch (error) {
+      console.error('Failed to upload vitals:', error);
+    }
+
     navigate('/patient/uploads');
   };
 
