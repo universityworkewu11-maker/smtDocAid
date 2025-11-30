@@ -859,7 +859,7 @@ function AIQuestionnairesPage() {
                               onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
                             />
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                             <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
                               {iLoading.next ? 'Sending…' : 'Send Answer'}
                             </button>
