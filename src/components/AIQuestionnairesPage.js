@@ -875,7 +875,7 @@ function AIQuestionnairesPage() {
                         <>
                           <h3 className="card-title">Interview Complete</h3>
                           <p className="muted">You can switch to other sections now.</p>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
                             <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
                               Start Over
                             </button>
