@@ -32,6 +32,10 @@ function AIQuestionnairesPage() {
   const [serverBase, setServerBase] = useState(SERVER_BASE);
   const [selectedDoctors, setSelectedDoctors] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [completedQuestionnaire, setCompletedQuestionnaire] = useState(null);
+  const [questionnaireReport, setQuestionnaireReport] = useState('');
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [sharingReport, setSharingReport] = useState(false);
   const LS_KEYS = {
     interview: 'interview_state_v1',
     base: 'api_server_base_v1',
@@ -432,7 +436,7 @@ function AIQuestionnairesPage() {
 
       // Save report to diagnoses table and notify selected doctors
       if (selectedDoctors.length > 0) {
-        await saveReportAndNotify(reportContent);
+        await saveReportAndNotify(reportContent, { from: 'interview', turns: interview.turns });
       }
     } catch (e) {
       setError(e?.message || String(e));
@@ -456,6 +460,7 @@ function AIQuestionnairesPage() {
     setAnswers({});
   };
 
+<<<<<<< HEAD
   const saveReportAndNotify = async (reportContent) => {
     if (!reportContent || !String(reportContent).trim()) {
       alert('Please generate a report before sharing it with doctors.');
@@ -465,6 +470,9 @@ function AIQuestionnairesPage() {
       alert('Please select at least one doctor before sharing the report.');
       return;
     }
+=======
+  const saveReportAndNotify = async (reportContent, metadata = {}) => {
+>>>>>>> 77cd9b8 (Add Start Over, Generate Report, and Share with Doctor buttons to AI Questionnaires page completion screen)
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
@@ -477,7 +485,7 @@ function AIQuestionnairesPage() {
           content: reportContent,
           severity: 'medium', // Default, can be analyzed
           ai_generated: true,
-          metadata: { from: 'interview', turns: interview.turns, created_via: 'AIQuestionnairesPage.generateInterviewReport' }
+          metadata: { ...metadata, created_via: 'AIQuestionnairesPage' }
         }])
         .select('id')
         .single();
@@ -556,10 +564,10 @@ function AIQuestionnairesPage() {
 
   const submitQuestionnaire = async () => {
     setSubmitting(true);
-    
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       const { error } = await supabase
         .from('patient_questionnaire_responses')
         .insert([{
@@ -572,15 +580,12 @@ function AIQuestionnairesPage() {
 
       if (error) throw error;
 
-      // Reset state
-      setCurrentQuestionnaire(null);
-      setCurrentQuestionIndex(0);
-      setAnswers({});
-      
+      // Set completed questionnaire for showing completion screen
+      setCompletedQuestionnaire({ questionnaire: currentQuestionnaire, answers });
+
       // Refresh completed questionnaires
       await fetchCompletedQuestionnaires();
-      
-      alert('Questionnaire completed successfully!');
+
     } catch (err) {
       console.error('Error submitting questionnaire:', err);
       alert('Failed to submit questionnaire. Please try again.');
@@ -744,7 +749,7 @@ function AIQuestionnairesPage() {
             >
               Previous
             </button>
-            
+
             {currentQuestionIndex < currentQuestionnaire.questions.length - 1 ? (
               <button
                 className="btn-primary"
@@ -762,7 +767,7 @@ function AIQuestionnairesPage() {
                 {submitting ? 'Submitting...' : 'Complete Questionnaire'}
               </button>
             )}
-            
+
             <button
               className="btn-secondary"
               onClick={() => setCurrentQuestionnaire(null)}
@@ -783,6 +788,101 @@ function AIQuestionnairesPage() {
         </div>
       );
     }
+  }
+
+  if (completedQuestionnaire) {
+    const { questionnaire, answers } = completedQuestionnaire;
+    const result = getAssessmentResult(questionnaire, answers);
+
+    return (
+      <div className="questionnaire-container">
+        <div className="questionnaire-content">
+          <div className="questionnaire-header">
+            <h2>{questionnaire.title} - Completed</h2>
+            <p>Assessment Result</p>
+          </div>
+
+          <div className="assessment-result" style={{ backgroundColor: result.color, padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+            <h3>{result.level}</h3>
+            <p>{result.advice}</p>
+          </div>
+
+          {questionnaireReport && (
+            <div className="card" style={{ marginBottom: '20px' }}>
+              <h3 className="card-title">AI Generated Report</h3>
+              <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
+                {questionnaireReport}
+              </pre>
+            </div>
+          )}
+
+          <div className="completion-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setCompletedQuestionnaire(null);
+                setQuestionnaireReport('');
+                startQuestionnaire(questionnaire);
+              }}
+            >
+              Start Over
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={async () => {
+                setGeneratingReport(true);
+                try {
+                  // Generate report using interview API with questionnaire context
+                  const ctx = await buildInterviewContext();
+                  const questionnaireContext = {
+                    ...ctx,
+                    questionnaire: { title: questionnaire.title, answers }
+                  };
+                  const j = await apiPostJSON('/api/v1/ai/interview/report', { context: questionnaireContext, type: 'questionnaire' });
+                  if (!j.ok) throw new Error(j?.error || 'Report generation failed');
+                  setQuestionnaireReport(j.report || 'Report generated successfully.');
+                } catch (e) {
+                  setError(e?.message || String(e));
+                  alert('Failed to generate report.');
+                } finally {
+                  setGeneratingReport(false);
+                }
+              }}
+              disabled={generatingReport}
+            >
+              {generatingReport ? 'Generating...' : 'Generate Report'}
+            </button>
+            {questionnaireReport && selectedDoctors.length > 0 && (
+              <button
+                className="btn btn-secondary"
+                onClick={async () => {
+                  setSharingReport(true);
+                  try {
+                    await saveReportAndNotify(questionnaireReport, { from: 'questionnaire', questionnaire: questionnaire.title, answers });
+                  } catch (e) {
+                    alert('Failed to share report.');
+                  } finally {
+                    setSharingReport(false);
+                  }
+                }}
+                disabled={sharingReport}
+              >
+                {sharingReport ? 'Sharing...' : 'Share with Doctor'}
+              </button>
+            )}
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setCompletedQuestionnaire(null);
+                setQuestionnaireReport('');
+              }}
+            >
+              Back to Questionnaires
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   

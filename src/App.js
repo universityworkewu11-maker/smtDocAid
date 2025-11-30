@@ -1618,8 +1618,8 @@ function QuestionnairePage() {
             const anyVital = vd && ((vd.temperature && vd.temperature.value != null) || (vd.heartRate && vd.heartRate.value != null) || (vd.spo2 && vd.spo2.value != null));
             const uploads = JSON.parse(window.localStorage.getItem('uploadedDocuments') || '[]');
             const anyUpload = Array.isArray(uploads) && uploads.length > 0;
-            const ans = JSON.parse(window.localStorage.getItem('questionnaireAnswers') || '{}');
-            const anyAnswer = ans && Object.values(ans).some(v => Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''));
+            const ans = JSON.parse(window.localStorage.getItem('questionnaireAnswers') || '{}') || {};
+            const anyAnswer = Object.values(ans).some(v => Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''));
             return Boolean(anyVital || anyUpload || anyAnswer);
           } catch (_) { return false; }
         })();
