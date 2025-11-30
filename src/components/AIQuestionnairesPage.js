@@ -218,24 +218,41 @@ function AIQuestionnairesPage() {
     let uploads = [];
     let patient = {};
     try {
-      // Support both historical keys: 'vitalsData' (camel) and 'vitals_data' (snake)
-      let raw = null;
-      if (typeof window !== 'undefined') {
-        raw = window.localStorage.getItem('vitalsData') || window.localStorage.getItem('vitals_data');
-      }
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && typeof parsed === 'object') {
-        // Normalize to a compact list for prompts
-        const t = parsed.temperature?.value ?? null;
-        const h = parsed.heartRate?.value ?? null;
-        const s = parsed.spo2?.value ?? null;
-        const ts = parsed.temperature?.timestamp || parsed.heartRate?.timestamp || parsed.spo2?.timestamp || null;
-        vitals = [
-          { type: 'temperature', value: t, unit: '°F' },
-          { type: 'heartRate', value: h, unit: 'bpm' },
-          { type: 'spo2', value: s, unit: '%' }
-        ];
-        if (ts) vitals.timestamp = ts;
+      // Fetch latest vitals from server
+      const vitalsResponse = await fetch(`${serverBase}/api/vitals`);
+      if (vitalsResponse.ok) {
+        const latestVitals = await vitalsResponse.json();
+        if (latestVitals && typeof latestVitals === 'object') {
+          const t = latestVitals.temperature ?? null;
+          const h = latestVitals.heartRate ?? null;
+          const s = latestVitals.spo2 ?? null;
+          const ts = latestVitals.timestamp || null;
+          vitals = [
+            { type: 'temperature', value: t, unit: '°F' },
+            { type: 'heartRate', value: h, unit: 'bpm' },
+            { type: 'spo2', value: s, unit: '%' }
+          ];
+          if (ts) vitals.timestamp = ts;
+        }
+      } else {
+        // Fallback to localStorage if server fetch fails
+        let raw = null;
+        if (typeof window !== 'undefined') {
+          raw = window.localStorage.getItem('vitalsData') || window.localStorage.getItem('vitals_data');
+        }
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object') {
+          const t = parsed.temperature?.value ?? null;
+          const h = parsed.heartRate?.value ?? null;
+          const s = parsed.spo2?.value ?? null;
+          const ts = parsed.temperature?.timestamp || parsed.heartRate?.timestamp || parsed.spo2?.timestamp || null;
+          vitals = [
+            { type: 'temperature', value: t, unit: '°F' },
+            { type: 'heartRate', value: h, unit: 'bpm' },
+            { type: 'spo2', value: s, unit: '%' }
+          ];
+          if (ts) vitals.timestamp = ts;
+        }
       }
     } catch (_) {}
     // Patient profile (name, age, gender, phone)
