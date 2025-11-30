@@ -863,11 +863,11 @@ function AIQuestionnairesPage() {
                             <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
                               {iLoading.next ? 'Sending…' : 'Send Answer'}
                             </button>
-                            <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
-                              {iLoading.report ? 'Generating…' : 'Finish & Generate Report'}
-                            </button>
-                            <button className="btn btn-light" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
+                            <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
                               Start Over
+                            </button>
+                            <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
+                              {iLoading.report ? 'Generating…' : 'Generate Report'}
                             </button>
                           </div>
                         </>
