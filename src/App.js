@@ -2891,7 +2891,6 @@ function App() {
   useEffect(() => {
     const handleScroll = () => {
       const scrolled = window.pageYOffset;
-      const rate = scrolled * -0.5;
 
       // Parallax effect for hero blobs
       const blobs = document.querySelectorAll('.hero-parallax-layer .blob');
