@@ -58,6 +58,107 @@ const UploadDocumentsPage = () => {
   }, []);
 
 
+  // Mock file upload with progress simulation
+  const mockFileUpload = useCallback((file, fileId, fileName) => {
+    return new Promise((resolve, reject) => {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 30;
+        setUploadProgress(prev => ({ ...prev, [fileId]: Math.min(progress, 90) }));
+
+        if (progress >= 90) {
+          clearInterval(interval);
+          // Simulate completion
+          setTimeout(() => {
+            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+            resolve({ success: true });
+          }, 500);
+        }
+      }, 200);
+
+      // Simulate occasional errors
+      if (Math.random() < 0.1) {
+        setTimeout(() => {
+          clearInterval(interval);
+          reject(new Error('Upload failed'));
+        }, 1000);
+      }
+    });
+  }, [setUploadProgress]);
+
+  // Upload files to Supabase (or mock)
+  const uploadFiles = useCallback(async (files) => {
+    setIsUploading(true);
+    const newFiles = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const fileName = `${fileId}-${file.name}`;
+
+      try {
+        // Simulate upload progress
+        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+
+        // Mock upload process
+        await mockFileUpload(file, fileId, fileName);
+
+        const uploadedFile = {
+          id: fileId,
+          name: file.name,
+          fileName,
+          size: file.size,
+          type: file.type,
+          url: `https://example.com/uploads/${fileName}`, // Mock URL
+          uploadedAt: new Date().toISOString(),
+          status: 'completed'
+        };
+
+        newFiles.push(uploadedFile);
+
+        // Update progress
+        setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+
+      } catch (err) {
+        console.error('Upload failed:', err);
+        setUploadProgress(prev => ({ ...prev, [fileId]: 'error' }));
+      }
+    }
+
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+    setIsUploading(false);
+  }, [mockFileUpload]);
+
+  // Process selected files
+  const handleFiles = useCallback(async (files) => {
+    const validFiles = [];
+    const errors = [];
+
+    files.forEach(file => {
+      // Validate file type
+      if (!ALLOWED_UPLOAD_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type. Please upload JPG, PNG, or PDF files.`);
+        return;
+      }
+
+      // Validate file size
+      if (file.size > MAX_UPLOAD_FILE_SIZE) {
+        errors.push(`${file.name}: File too large. Maximum size is 10MB.`);
+        return;
+      }
+
+      validFiles.push(file);
+    });
+
+    if (errors.length > 0) {
+      setError(errors.join('\n'));
+      return;
+    }
+
+    setError('');
+    await uploadFiles(validFiles);
+  }, [uploadFiles]);
+
   // Handle drag events
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -83,107 +184,6 @@ const UploadDocumentsPage = () => {
   const handleFileSelect = (e) => {
     const files = [...e.target.files];
     handleFiles(files);
-  };
-
-  // Process selected files
-  const handleFiles = async (files) => {
-    const validFiles = [];
-    const errors = [];
-
-    files.forEach(file => {
-      // Validate file type
-      if (!allowedTypes.includes(file.type)) {
-        errors.push(`${file.name}: Invalid file type. Please upload JPG, PNG, or PDF files.`);
-        return;
-      }
-
-      // Validate file size
-      if (file.size > maxFileSize) {
-        errors.push(`${file.name}: File too large. Maximum size is 10MB.`);
-        return;
-      }
-
-      validFiles.push(file);
-    });
-
-    if (errors.length > 0) {
-      setError(errors.join('\n'));
-      return;
-    }
-
-    setError('');
-    await uploadFiles(validFiles);
-  };
-
-  // Upload files to Supabase (or mock)
-  const uploadFiles = async (files) => {
-    setIsUploading(true);
-    const newFiles = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const fileName = `${fileId}-${file.name}`;
-
-      try {
-        // Simulate upload progress
-        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
-
-        // Mock upload process
-        await mockFileUpload(file, fileId, fileName);
-
-        const uploadedFile = {
-          id: fileId,
-          name: file.name,
-          fileName: fileName,
-          size: file.size,
-          type: file.type,
-          url: `https://example.com/uploads/${fileName}`, // Mock URL
-          uploadedAt: new Date().toISOString(),
-          status: 'completed'
-        };
-
-        newFiles.push(uploadedFile);
-
-        // Update progress
-        setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-
-      } catch (err) {
-        console.error('Upload failed:', err);
-        setUploadProgress(prev => ({ ...prev, [fileId]: 'error' }));
-      }
-    }
-
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-    setIsUploading(false);
-  };
-
-  // Mock file upload with progress simulation
-  const mockFileUpload = (file, fileId, fileName) => {
-    return new Promise((resolve, reject) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 30;
-        setUploadProgress(prev => ({ ...prev, [fileId]: Math.min(progress, 90) }));
-
-        if (progress >= 90) {
-          clearInterval(interval);
-          // Simulate completion
-          setTimeout(() => {
-            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-            resolve({ success: true });
-          }, 500);
-        }
-      }, 200);
-
-      // Simulate occasional errors
-      if (Math.random() < 0.1) {
-        setTimeout(() => {
-          clearInterval(interval);
-          reject(new Error('Upload failed'));
-        }, 1000);
-      }
-    });
   };
 
   // Remove uploaded file
