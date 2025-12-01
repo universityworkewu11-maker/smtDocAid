@@ -1975,13 +1975,11 @@ function ProfilePage() {
   const [copied, setCopied] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (auth.session?.user) {
       fetchPatientProfile();
     }
-  }, [auth.session]);
+  }, [auth.session, fetchPatientProfile]);
 
   // Check Raspberry Pi device connectivity via /health endpoint
   const checkDevice = async () => {
@@ -2007,41 +2005,7 @@ function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchPatientProfile = async () => {
-    if (!auth.session?.user?.id) return;
-
-    setLoading(true);
-    try {
-      // Fetch patient profile from patient_profiles table
-      const { data: patientProfile, error } = await supabase
-        .from('patient_profiles')
-        .select('*')
-        .eq('user_id', auth.session.user.id)
-        .single();
-
-      if (patientProfile && !error) {
-        setProfileData({
-          fullName: patientProfile.full_name || auth.profile?.full_name || "",
-          email: auth.session.user.email || "",
-          phone: patientProfile.phone || "",
-          dob: patientProfile.date_of_birth || "",
-          address: patientProfile.address || "",
-          patientId: patientProfile.id || null
-        });
-      } else {
-        // If no patient profile exists, create one
-        await createPatientProfile();
-      }
-    } catch (err) {
-      console.error('Error fetching patient profile:', err);
-      // Try to create a patient profile if fetch failed
-      await createPatientProfile();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createPatientProfile = async () => {
+  const createPatientProfile = useCallback(async () => {
     if (!auth.session?.user?.id) return;
 
     try {
@@ -2093,7 +2057,41 @@ function ProfilePage() {
         patientId: null
       });
     }
-  };
+  }, [auth.session, auth.profile]);
+
+  const fetchPatientProfile = useCallback(async () => {
+    if (!auth.session?.user?.id) return;
+
+    setLoading(true);
+    try {
+      // Fetch patient profile from patient_profiles table
+      const { data: patientProfile, error } = await supabase
+        .from('patient_profiles')
+        .select('*')
+        .eq('user_id', auth.session.user.id)
+        .single();
+
+      if (patientProfile && !error) {
+        setProfileData({
+          fullName: patientProfile.full_name || auth.profile?.full_name || "",
+          email: auth.session.user.email || "",
+          phone: patientProfile.phone || "",
+          dob: patientProfile.date_of_birth || "",
+          address: patientProfile.address || "",
+          patientId: patientProfile.id || null
+        });
+      } else {
+        // If no patient profile exists, create one
+        await createPatientProfile();
+      }
+    } catch (err) {
+      console.error('Error fetching patient profile:', err);
+      // Try to create a patient profile if fetch failed
+      await createPatientProfile();
+    } finally {
+      setLoading(false);
+    }
+  }, [auth.session, auth.profile, createPatientProfile]);
 
   const handleSave = async () => {
     if (!auth.session?.user?.id) return;
