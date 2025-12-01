@@ -2376,7 +2376,7 @@ function DoctorPortal() {
   }, []);
 
   // Fetch patients from Supabase `patients` table (preferred DB source)
-  const fetchPatientsFromSupabase = async () => {
+  const fetchPatientsFromSupabase = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('patients')
@@ -2422,7 +2422,7 @@ function DoctorPortal() {
     } catch (_) {
       return false;
     }
-  };
+  }, [fetchLatestDiagnosesMap, fetchLatestVitalsTime, patientsCount]);
 
   async function retryServiceFetch() {
     try {
