@@ -2424,9 +2424,9 @@ function DoctorPortal() {
     }
   }, [fetchLatestDiagnosesMap, fetchLatestVitalsTime, patientsCount]);
 
-  async function retryServiceFetch() {
+  const retryServiceFetch = useCallback(async () => {
     try {
-  const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
+      const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
       const health = await fetch(`${BASE}/health`);
       if (!health.ok) throw new Error('Service health not OK');
 
@@ -2477,14 +2477,14 @@ function DoctorPortal() {
       setError(e?.message || String(e));
       return false;
     }
-  }
+  }, [fetchLatestDiagnosesMap]);
 
-  async function refreshPatients() {
+  const refreshPatients = useCallback(async () => {
     const ok = await retryServiceFetch();
     if (!ok) {
       await fetchPatientsFromSupabase();
     }
-  }
+  }, [retryServiceFetch, fetchPatientsFromSupabase]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
