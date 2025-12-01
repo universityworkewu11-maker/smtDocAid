@@ -1457,6 +1457,22 @@ function QuestionnairePage() {
     }
   }
 
+  function restartInterview() {
+    setInterview({ sessionId: null, question: '', turns: [], done: false });
+    setIAnswer('');
+    setReport('');
+    setError('');
+    try {
+      const raw = window.localStorage.getItem(LS_KEYS.interview);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ ...parsed, sessionId: null, question: '', turns: [], done: false, report: '' }));
+      } else {
+        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ sessionId: null, question: '', turns: [], done: false, report: '' }));
+      }
+    } catch (_) {}
+  }
+
   // runHealthCheck removed - kept in codebase but not exposed in UI
 
   const handleAnswer = (questionId, value) => {
@@ -1788,17 +1804,30 @@ function QuestionnairePage() {
                     onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
                   />
                 </div>
-                <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
-                  {iLoading.next ? 'Sending…' : 'Send Answer'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
+                    {iLoading.next ? 'Sending…' : 'Send Answer'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
+                    Start Over
+                  </button>
+                  <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
+                    {iLoading.report ? 'Generating…' : 'Generate Report'}
+                  </button>
+                </div>
               </>
             ) : (
               <>
                 <h3 className="card-title">Interview Complete</h3>
                 <p className="muted">Generate a final report based on your answers.</p>
-                <button className="btn btn-success" onClick={generateInterviewReport} disabled={iLoading.report}>
-                  {iLoading.report ? 'Generating…' : 'Generate Report'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
+                    Start Over
+                  </button>
+                  <button className="btn btn-success" onClick={generateInterviewReport} disabled={iLoading.report}>
+                    {iLoading.report ? 'Generating…' : 'Generate Report'}
+                  </button>
+                </div>
               </>
             )}
           </div>
