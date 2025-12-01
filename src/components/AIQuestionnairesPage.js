@@ -928,13 +928,20 @@ function AIQuestionnairesPage() {
                         <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
                           {interview.report}
                         </pre>
-                        {selectedDoctors.length > 0 && (
-                          <div style={{ marginTop: 12 }}>
-                            <button className="btn btn-secondary" onClick={() => saveReportAndNotify(interview.report)}>
-                              Share with Doctor
-                            </button>
-                          </div>
-                        )}
+                        <div style={{ marginTop: 12 }}>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={() => saveReportAndNotify(interview.report)}
+                            disabled={!selectedDoctors.length}
+                          >
+                            {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
+                          </button>
+                          {!selectedDoctors.length && (
+                            <p className="muted" style={{ marginTop: 8 }}>
+                              Select at least one doctor above to send notifications with this report.
+                            </p>
+                          )}
+                        </div>
                       </div>
                     ) : null}
                   </div>
