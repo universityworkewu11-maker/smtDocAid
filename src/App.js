@@ -1065,38 +1065,7 @@ function PatientPortal() {
   const navigate = useNavigate();
   const user = auth.session?.user || null;
   const patientId = user?.id || null;
-  const [vitalsStatus, setVitalsStatus] = useState('offline'); // offline, measuring, measured
-  const [vitalsTimestamp, setVitalsTimestamp] = useState(null);
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
-
-  // Helper function to calculate data freshness
-  const calculateDataFreshness = (timestamp) => {
-    if (!timestamp) return 'old';
-    
-    const now = Date.now();
-    const diffInMinutes = (now - timestamp) / (1000 * 60);
-    
-    if (diffInMinutes < 5) {
-      return 'fresh';  // Less than 5 minutes old
-    } else if (diffInMinutes < 30) {
-      return 'stale';  // Less than 30 minutes old
-    } else {
-      return 'old';    // 30 minutes or older
-    }
-  };
-
-  // Helper function to format timestamp
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return 'Never';
-    
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  useEffect(() => {
-    // Initialize status indicators when component mounts
-    setVitalsStatus('offline');
-  }, []);
 
   // Check Raspberry Pi device connectivity via /health endpoint
   const checkDevice = async () => {
