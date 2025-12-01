@@ -1743,14 +1743,17 @@ function QuestionnairePage() {
                 <button className="btn btn-light" onClick={() => setDoctorQuery('')}>Clear</button>
               </div>
               <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-              {filteredDoctors.map(doctor => (
-                <label key={doctor.id || doctor.user_id} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id || doctor.user_id) ? '#f0f8ff' : 'transparent' }}>
+              {filteredDoctors.map(doctor => {
+                const doctorKey = doctor?.user_id || doctor?.id;
+                return (
+                <label key={doctorKey || (doctor?.email ?? Math.random())} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: doctorKey && selectedDoctors.includes(doctorKey) ? '#f0f8ff' : 'transparent' }}>
                   <input
                     type="checkbox"
-                    checked={selectedDoctors.includes(doctor.id || doctor.user_id)}
+                    checked={doctorKey ? selectedDoctors.includes(doctorKey) : false}
                     onChange={(e) => {
-                      const doctorId = doctor.id || doctor.user_id;
-                      if (e.target.checked) setSelectedDoctors(prev => [...prev, doctorId]);
+                      const doctorId = doctor?.user_id || doctor?.id;
+                      if (!doctorId) return;
+                      if (e.target.checked) setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
                       else setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
                     }}
                   />
@@ -1759,7 +1762,7 @@ function QuestionnairePage() {
                     <div className="muted" style={{ fontSize: 12 }}>{doctor.specialist || doctor.specialty || 'General'}</div>
                   </div>
                 </label>
-              ))}
+              );})}
             </div>
             </>
           ) : (
