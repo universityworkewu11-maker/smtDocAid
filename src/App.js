@@ -2486,9 +2486,11 @@ function DoctorPortal() {
     }
   }, [retryServiceFetch, fetchPatientsFromSupabase]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (initialLoadRef.current) {
+      return;
+    }
+    initialLoadRef.current = true;
     let mounted = true;
     (async () => {
       setLoading(true);
@@ -2694,7 +2696,7 @@ function DoctorPortal() {
       }
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [fetchLatestVitalsTime, fetchPatientsFromSupabase, patientsCount]);
 
   // Severity summary dashboard
   const severityCounts = patients.reduce((acc, p) => {
