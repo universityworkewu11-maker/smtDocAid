@@ -1182,7 +1182,6 @@ function QuestionnairePage() {
   const [iAnswer, setIAnswer] = useState('');
   const [iLoading, setILoading] = useState({ start: false, next: false, report: false });
   const [serverBase, setServerBase] = useState(SERVER_BASE);
-  const LS_KEYS = INTERVIEW_STORAGE_KEYS;
 
   // Doctor selection for sharing reports
   const [selectedDoctors, setSelectedDoctors] = useState([]);
