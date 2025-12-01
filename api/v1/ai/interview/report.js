@@ -41,19 +41,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { sessionId } = req.body || {};
-    const sess = sessions.get(sessionId);
-    if (!sess) return res.status(400).json({ ok: false, error: 'invalid sessionId' });
-    const system = 'Return ONLY valid JSON with a single key: {"report":"<markdown>"}. At the very top of the markdown (before any headings), include four lines in this exact format using available context (or N/A if unknown):\nName: <name>\nAge: <age>\nGender: <gender>\nContact: <phone>. After those lines, produce a concise, structured clinical report with headings exactly: Chief Complaint, History of Present Illness, Vitals, Probable Diagnosis, Recommendations.';
-    const history = [
-      { role: 'system', content: system },
-      ...sess.history,
-      { role: 'user', content: 'Generate the final report now as JSON.' }
-    ];
-    const content = await openaiChat(history, { temperature: 0.2, max_tokens: 800 });
-    const data = parseJSON(content, {});
-    const report = typeof data?.report === 'string' && data.report.trim() ? data.report.trim() : 'Chief Complaint:\n- N/A\n\nHistory of Present Illness:\n- N/A\n\nVitals:\n- N/A\n\nProbable Diagnosis:\n- N/A\n\nRecommendations:\n- N/A';
-    return res.json({ ok: true, report });
+    const SERVER_BASE = (process.env.SERVER_BASE || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
+    if (!SERVER_BASE) return res.status(500).json({ ok: false, error: 'SERVER_BASE not configured on serverless proxy' });
+    const upstream = `${SERVER_BASE}/api/v1/ai/interview/report`;
+    const r = await fetch(upstream, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': req.headers['authorization'] || '' },
+      body: JSON.stringify(req.body || {})
+    });
+    const text = await r.text();
+    res.status(r.status);
+    try { return res.send(text); } catch { return res.end(text); }
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
