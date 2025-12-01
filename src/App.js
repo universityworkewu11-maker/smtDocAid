@@ -1976,6 +1976,7 @@ function ProfilePage() {
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (auth.session?.user) {
       fetchPatientProfile();
