@@ -111,6 +111,16 @@ function AIInterviewPage() {
     }
   }
 
+  function restartInterview() {
+    setSessionId(null);
+    setQuestion('');
+    setAnswer('');
+    setTurns([]);
+    setReport('');
+    setDone(false);
+    setError('');
+  }
+
   return (
     <main>
       <div className="card">
@@ -142,9 +152,17 @@ function AIInterviewPage() {
                 onKeyDown={(e) => { if (e.key === 'Enter') sendAnswer(); }}
               />
             </div>
-            <button className="btn btn-primary" onClick={sendAnswer} disabled={loading.next || !answer.trim()}>
-              {loading.next ? 'Sending…' : 'Send Answer'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={sendAnswer} disabled={loading.next || !answer.trim()}>
+                {loading.next ? 'Sending…' : 'Send Answer'}
+              </button>
+              <button className="btn btn-secondary" onClick={restartInterview} disabled={loading.next || loading.report}>
+                Start Over
+              </button>
+              <button className="btn btn-secondary" onClick={generateReport} disabled={loading.report} title="Finish now and generate a report">
+                {loading.report ? 'Generating…' : 'Generate Report'}
+              </button>
+            </div>
           </div>
         )}
 
