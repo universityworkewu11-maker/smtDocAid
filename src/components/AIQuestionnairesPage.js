@@ -926,28 +926,37 @@ function AIQuestionnairesPage() {
                         </div>
                       </div>
                     )}
-                    {interview.report ? (
-                      <div className="card" style={{ marginTop: 16 }}>
-                        <h3 className="card-title">Interview Report</h3>
+                    <div className="card" style={{ marginTop: 16 }}>
+                      <h3 className="card-title">Interview Report</h3>
+                      {interview.report ? (
                         <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
                           {interview.report}
                         </pre>
-                        <div style={{ marginTop: 12 }}>
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => saveReportAndNotify(interview.report)}
-                            disabled={!selectedDoctors.length}
-                          >
-                            {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
-                          </button>
-                          {!selectedDoctors.length && (
-                            <p className="muted" style={{ marginTop: 8 }}>
-                              Select at least one doctor above to send notifications with this report.
-                            </p>
-                          )}
-                        </div>
+                      ) : (
+                        <p className="muted">
+                          Generate a report to review findings and share it with your care team.
+                        </p>
+                      )}
+                      <div style={{ marginTop: 12 }}>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => saveReportAndNotify(interview.report)}
+                          disabled={!interview.report || !selectedDoctors.length}
+                        >
+                          {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
+                        </button>
+                        {!interview.report && (
+                          <p className="muted" style={{ marginTop: 8 }}>
+                            Generate a report first to enable sharing.
+                          </p>
+                        )}
+                        {interview.report && !selectedDoctors.length && (
+                          <p className="muted" style={{ marginTop: 8 }}>
+                            Select at least one doctor above to send notifications with this report.
+                          </p>
+                        )}
                       </div>
-                    ) : null}
+                    </div>
                   </div>
 
                   {questionnaires.length > 0 ? (
