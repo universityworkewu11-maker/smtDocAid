@@ -2304,7 +2304,7 @@ function DoctorPortal() {
     }
   };
 
-  const fetchLatestVitalsTime = async (userId) => {
+  const fetchLatestVitalsTime = useCallback(async (userId) => {
     try {
       let q = await supabase.from(TBL_VITALS).select('*').eq('user_id', userId).order(COL_TIME, { ascending: false }).limit(1);
       if (q.error && /column|Could not find/i.test(q.error.message)) {
@@ -2323,7 +2323,7 @@ function DoctorPortal() {
     } catch {
       return null;
     }
-  };
+  }, [TBL_VITALS, COL_TIME]);
 
   // Batch fetch latest diagnosis per patient, returns a Map<user_id, {severity, created_at, ai_generated}>
   const fetchLatestDiagnosesMap = async (userIds) => {
