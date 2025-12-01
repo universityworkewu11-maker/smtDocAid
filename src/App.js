@@ -2326,7 +2326,7 @@ function DoctorPortal() {
   }, [TBL_VITALS, COL_TIME]);
 
   // Batch fetch latest diagnosis per patient, returns a Map<user_id, {severity, created_at, ai_generated}>
-  const fetchLatestDiagnosesMap = async (userIds) => {
+  const fetchLatestDiagnosesMap = useCallback(async (userIds) => {
     const map = new Map();
     if (!Array.isArray(userIds) || !userIds.length) return map;
     try {
@@ -2373,7 +2373,7 @@ function DoctorPortal() {
       } catch (_) {}
     }
     return map;
-  };
+  }, []);
 
   // Fetch patients from Supabase `patients` table (preferred DB source)
   const fetchPatientsFromSupabase = async () => {
