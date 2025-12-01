@@ -441,6 +441,10 @@ function AIQuestionnairesPage() {
   };
 
   const saveReportAndNotify = async (reportContent) => {
+    if (!selectedDoctors.length) {
+      alert('Please select at least one doctor before sharing the report.');
+      return;
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
