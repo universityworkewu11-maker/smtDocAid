@@ -1175,6 +1175,7 @@ function QuestionnairePage() {
   const [loading, setLoading] = useState({ generate: false, report: false });
   const [error, setError] = useState('');
   const [report, setReport] = useState('');
+  const [sharingReport, setSharingReport] = useState(false);
   
   const auth = useAuth();
   // Interview-mode state (AI-driven sequential Q&A)
@@ -1531,6 +1532,66 @@ function QuestionnairePage() {
     }
   }
 
+  async function shareReportWithDoctors() {
+    if (!report || !String(report).trim()) {
+      alert('Generate a report before sharing it with doctors.');
+      return;
+    }
+    if (!selectedDoctors.length) {
+      alert('Please select at least one doctor to notify.');
+      return;
+    }
+    const uid = auth?.session?.user?.id;
+    if (!uid) {
+      alert('Sign in to share reports with doctors.');
+      return;
+    }
+    setSharingReport(true);
+    try {
+      const metadata = interview?.sessionId
+        ? { from: 'interview-manual-share', turns: interview.turns, created_via: 'QuestionnairePage.shareReportWithDoctors' }
+        : { from: 'questionnaire-manual-share', answers, created_via: 'QuestionnairePage.shareReportWithDoctors' };
+
+      const { data: inserted, error: shareErr } = await supabase
+        .from(TBL_REPORT)
+        .insert([{
+          patient_id: uid,
+          doctor_id: null,
+          content: report,
+          ai_generated: true,
+          severity: MedicalAI._determineSeverity(report),
+          metadata
+        }])
+        .select('id')
+        .single();
+
+      if (shareErr) throw shareErr;
+
+      const notifications = selectedDoctors.map(docId => ({
+        doctor_id: docId,
+        patient_id: uid,
+        report_id: inserted?.id || null,
+        message: `New AI-generated report shared by ${auth?.session?.user?.email || 'patient'}`,
+        type: 'report_shared',
+        is_read: false
+      }));
+
+      if (notifications.length) {
+        const { error: notifErr } = await supabase.from('notifications').insert(notifications);
+        if (notifErr) {
+          console.warn('Notifications failed:', notifErr);
+        }
+      }
+
+      alert(`Report shared with ${selectedDoctors.length} doctor(s).`);
+    } catch (shareErr) {
+      console.error('Share report failed:', shareErr);
+      alert('Failed to share the report. Please try again.');
+    } finally {
+      setSharingReport(false);
+    }
+  }
+
   const handleSubmit = () => {
     (async () => {
       try {
@@ -1881,6 +1942,20 @@ function QuestionnairePage() {
               <div className="card report-container">
                 <h3 className="card-title">AI Health Report</h3>
                 <pre className="report-content">{report}</pre>
+                <div className="report-share-actions" style={{ marginTop: 12 }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={shareReportWithDoctors}
+                    disabled={sharingReport || !selectedDoctors.length}
+                  >
+                    {sharingReport ? 'Sharing…' : selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
+                  </button>
+                  {!selectedDoctors.length && (
+                    <p className="muted" style={{ marginTop: 8 }}>
+                      Select at least one doctor above to send this report.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </>
@@ -1891,6 +1966,20 @@ function QuestionnairePage() {
           <div className="card report-container" style={{ marginTop: 16 }}>
             <h3 className="card-title">AI Health Report</h3>
             <pre className="report-content">{report}</pre>
+            <div className="report-share-actions" style={{ marginTop: 12 }}>
+              <button
+                className="btn btn-secondary"
+                onClick={shareReportWithDoctors}
+                disabled={sharingReport || !selectedDoctors.length}
+              >
+                {sharingReport ? 'Sharing…' : selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
+              </button>
+              {!selectedDoctors.length && (
+                <p className="muted" style={{ marginTop: 8 }}>
+                  Select at least one doctor above to send this report.
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>
