@@ -1456,51 +1456,6 @@ function QuestionnairePage() {
 
   // Removed key management UI; keys are now server-side only
 
-  async function generateQuestions() {
-    setLoading(prev => ({ ...prev, generate: true }));
-    setError('');
-    
-    try {
-  // Collect context: recent vitals and uploaded document names for the current user
-      let vitals = [];
-      let uploads = [];
-
-      try {
-        const stored = typeof window !== 'undefined' ? window.localStorage.getItem('vitals_data') : null;
-        vitals = stored ? JSON.parse(stored) : [];
-      } catch (_) { vitals = []; }
-
-      try {
-        // attempt to list uploads from Supabase if auth available
-        const uid = auth?.session?.user?.id;
-        if (uid) {
-          const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-          const { data } = await supabase.storage.from(bucket).list(uid, { limit: 50 });
-          uploads = (data || []).map(i => i.name);
-        }
-      } catch (_) { uploads = []; }
-
-      try {
-        const questions = await MedicalAI.generateQuestionnaire({ vitals, uploads });
-        setQuestions(questions);
-      } catch (e) {
-        console.error('AI questionnaire generation failed:', e);
-        setError(e?.message || 'AI questionnaire generation failed. Please check your OpenAI API key and try again.');
-        setQuestions([]);
-        // rethrow so caller (if any) can handle
-        throw e;
-      }
-      setAnswers({});
-      setReport('');
-      setCurrentStep(0);
-      try { window.localStorage.setItem('questionnaireAnswers', JSON.stringify({})); } catch (_) {}
-    } catch (err) {
-      setError(err.message || 'Failed to generate questions');
-    } finally {
-      setLoading(prev => ({ ...prev, generate: false }));
-    }
-  }
-
   async function generateReport() {
     setLoading(prev => ({ ...prev, report: true }));
     setError('');
