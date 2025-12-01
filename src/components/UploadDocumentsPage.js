@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
 // Supabase client imported from centralized module
+const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_UPLOAD_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'application/pdf'
+];
 
 const UploadDocumentsPage = () => {
   const navigate = useNavigate();
