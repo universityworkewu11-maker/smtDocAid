@@ -78,7 +78,7 @@ const UploadDocumentsPage = () => {
 
     const files = [...e.dataTransfer.files];
     handleFiles(files);
-  }, []);
+  }, [handleFiles]);
 
   // Handle file selection
   const handleFileSelect = (e) => {
