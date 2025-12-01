@@ -460,8 +460,7 @@ function AIQuestionnairesPage() {
     setAnswers({});
   };
 
-<<<<<<< HEAD
-  const saveReportAndNotify = async (reportContent) => {
+  const saveReportAndNotify = async (reportContent, metadata = {}) => {
     if (!reportContent || !String(reportContent).trim()) {
       alert('Please generate a report before sharing it with doctors.');
       return;
@@ -470,9 +469,6 @@ function AIQuestionnairesPage() {
       alert('Please select at least one doctor before sharing the report.');
       return;
     }
-=======
-  const saveReportAndNotify = async (reportContent, metadata = {}) => {
->>>>>>> 77cd9b8 (Add Start Over, Generate Report, and Share with Doctor buttons to AI Questionnaires page completion screen)
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
