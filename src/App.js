@@ -2290,6 +2290,7 @@ function DoctorPortal() {
   const [usingService, setUsingService] = useState(false);
   const [patientsCount, setPatientsCount] = useState(null);
   const [patientsCountMeta, setPatientsCountMeta] = useState(null);
+  const initialLoadRef = useRef(false);
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
