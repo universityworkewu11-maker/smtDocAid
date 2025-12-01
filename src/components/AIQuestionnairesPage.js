@@ -122,6 +122,22 @@ function AIQuestionnairesPage() {
     try { window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors)); } catch (_) {}
   }, [selectedDoctors]);
 
+  useEffect(() => {
+    if (!Array.isArray(doctors) || !doctors.length) return;
+    setSelectedDoctors(prev => {
+      if (!Array.isArray(prev) || !prev.length) return prev;
+      let changed = false;
+      const mapped = prev.map(id => {
+        const match = doctors.find(doc => doc?.user_id === id || doc?.id === id);
+        const normalized = match?.user_id || match?.id || id;
+        if (normalized !== id) changed = true;
+        return normalized;
+      });
+      if (!changed) return prev;
+      return Array.from(new Set(mapped));
+    });
+  }, [doctors]);
+
   // Patient/context data for the right-side context panel (vitals, uploads, demographics)
   const [contextData, setContextData] = useState({ vitals: [], uploads: [], patient: {} });
 
