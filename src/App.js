@@ -182,271 +182,268 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
 
   static _parseQuestionnaire(response) {
     try {
-      const sanitize = (s) => {
-        if (!s) return '';
-        let t = String(s);
-        // Strip code fences and headings
-        t = t.replace(/```(?:json)?[\s\S]*?```/gi, (m) => m.replace(/```(?:json)?/i, '').replace(/```$/, ''));
-        t = t.replace(/^#+\s.*$/gm, ''); // remove markdown headers
-        // If contains a JSON array somewhere, slice to it
-        const first = t.indexOf('[');
-        const last = t.lastIndexOf(']');
-        if (first !== -1 && last !== -1 && last > first) t = t.slice(first, last + 1);
-        // Remove trailing commas before } or ]
-        t = t.replace(/,\s*([}\]])/g, '$1');
-        // Normalize smart quotes
-        t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
-        return t.trim();
+      const [patients, setPatients] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState('');
+      const [patientsCount, setPatientsCount] = useState(0);
+      const [lastSynced, setLastSynced] = useState(null);
+
+      const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
+      const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
+
+      const getRiskClass = (risk) => {
+        switch (risk) {
+          case 'high': return 'badge-high';
+          case 'medium': return 'badge-medium';
+          case 'low':
+          default:
+            return 'badge-low';
+        }
       };
 
-      let text = sanitize(response);
-      let arr = [];
-      try {
-        arr = JSON.parse(text);
-      } catch {
-        // last resort: try to extract the largest JSON array again
-        const m = text.match(/\[[\s\S]*\]/);
-        if (m) {
-          const cleaned = sanitize(m[0]);
-          arr = JSON.parse(cleaned);
-        } else {
-          throw new Error('No JSON array found');
-        }
-      }
-
-      if (!Array.isArray(arr)) throw new Error('Invalid questionnaire format');
-
-      return arr.map((q, i) => {
-        const type = ['radio','checkbox','range','text','scale'].includes(q.type) ? q.type : 'text';
-        const base = {
-          id: Number.isFinite(q.id) ? q.id : (parseInt(q.id, 10) || i + 1),
-          text: String(q.text || `Question ${i + 1}`),
-          type,
-          required: typeof q.required === 'boolean' ? q.required : Boolean(q.required)
-        };
-
-        if (type === 'radio' || type === 'checkbox') {
-          base.options = Array.isArray(q.options) ? q.options.map(String) : ['Yes', 'No'];
-        }
-        if (type === 'range' || type === 'scale') {
-          base.min = Number.isFinite(q.min) ? q.min : 1;
-          base.max = Number.isFinite(q.max) ? q.max : 10;
-        }
-        return base;
-      });
-    } catch (e) {
-      console.warn('Questionnaire parse failed:', e);
-      throw new Error('Failed to parse AI-generated questionnaire. Please try again.');
-    }
-  }
-
-
-  static async _callAI(messages) {
-    // Always route via backend
-    return openaiChat(messages);
-  }
-
-  static _determineSeverity(text) {
-    const lower = (text || '').toLowerCase();
-    if (lower.includes('emergency') || lower.includes('immediate')) return 'high';
-    if (lower.includes('urgent') || lower.includes('soon')) return 'medium';
-    return 'low';
-  }
-}
-
-// Auth context
-const AuthContext = createContext(null);
-
-function useAuth() {
-  return useContext(AuthContext);
-}
-
-function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(session);
-
-      if (session?.user) {
+      const fetchLatestVitalsTime = useCallback(async (userId) => {
         try {
-          const p = await fetchProfile(session.user.id);
-          setProfile(p);
+          let q = await supabase.from(TBL_VITALS).select('*').eq('user_id', userId).order(COL_TIME, { ascending: false }).limit(1);
+          if (q.error && /column|Could not find/i.test(q.error.message)) {
+            q = await supabase.from(TBL_VITALS).select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
+          }
+          if (q.error && /relation\s+"?vitals"?\s+does not exist/i.test(q.error.message) && TBL_VITALS === 'vitals') {
+            let r2 = await supabase.from('vitales').select('*').eq('user_id', userId).order(COL_TIME, { ascending: false }).limit(1);
+            if (r2.error && /column|Could not find/i.test(r2.error.message)) {
+              r2 = await supabase.from('vitales').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1);
+            }
+            const row = (r2.data && r2.data[0]) || null;
+            return row ? (row[COL_TIME] || row.created_at) : null;
+          }
+          const row = (q.data && q.data[0]) || null;
+          return row ? (row[COL_TIME] || row.created_at) : null;
+        } catch {
+          return null;
+        }
+      }, [TBL_VITALS, COL_TIME]);
+
+      const fetchLatestDiagnosesMap = useCallback(async (userIds) => {
+        const map = new Map();
+        if (!Array.isArray(userIds) || !userIds.length) return map;
+        try {
+          const { data, error } = await supabase
+            .from(TBL_REPORT)
+            .select('patient_id,severity,created_at,ai_generated')
+            .in('patient_id', userIds)
+            .order('created_at', { ascending: false })
+            .limit(1000);
+          if (error) throw error;
+          for (const row of (data || [])) {
+            const pid = row.patient_id;
+            if (!pid || map.has(pid)) continue;
+            map.set(pid, { severity: (row.severity || 'low'), created_at: row.created_at, ai_generated: !!row.ai_generated });
+          }
+        } catch (_) {}
+        if (map.size === 0) {
+          try {
+            const { data } = await supabase
+              .from('patients')
+              .select('id,user_id')
+              .in('user_id', userIds)
+              .limit(userIds.length);
+            const idToUser = new Map((data || []).map(r => [r.id, r.user_id]));
+            if (idToUser.size) {
+              const { data: d2 } = await supabase
+                .from(TBL_REPORT)
+                .select('patient_id,severity,created_at,ai_generated')
+                .in('patient_id', Array.from(idToUser.keys()))
+                .order('created_at', { ascending: false })
+                .limit(1000);
+              for (const row of (d2 || [])) {
+                const mapped = idToUser.get(row.patient_id);
+                const key = mapped || row.patient_id;
+                if (!map.has(key)) {
+                  map.set(key, { severity: (row.severity || 'low'), created_at: row.created_at, ai_generated: !!row.ai_generated });
+                }
+              }
+            }
+          } catch (_) {}
+        }
+        return map;
+      }, []);
+
+      const loadSharedPatients = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw new Error('Not authenticated');
+
+          const { data: shareRows, error: shareErr } = await supabase
+            .from('notifications')
+            .select('patient_id, created_at')
+            .eq('doctor_id', user.id)
+            .eq('type', 'report_shared')
+            .order('created_at', { ascending: false })
+            .limit(500);
+          if (shareErr) throw shareErr;
+
+          const sharedIds = Array.from(new Set((shareRows || []).map(row => row.patient_id).filter(Boolean)));
+          if (!sharedIds.length) {
+            setPatients([]);
+            setPatientsCount(0);
+            setLastSynced(new Date().toISOString());
+            return;
+          }
+
+          const { data: patientRows, error: patientErr } = await supabase
+            .from('patients')
+            .select('user_id, full_name, name, updated_at, created_at')
+            .in('user_id', sharedIds);
+          if (patientErr) throw patientErr;
+
+          const diagMap = await fetchLatestDiagnosesMap(sharedIds);
+          const enriched = [];
+          for (const r of (patientRows || [])) {
+            const lastTime = await fetchLatestVitalsTime(r.user_id);
+            const latest = diagMap.get(r.user_id);
+            enriched.push({
+              user_id: r.user_id,
+              name: r.full_name || r.name || `(UID ${String(r.user_id).slice(0, 8)}…)`,
+              condition: latest ? `Latest report ${latest.ai_generated ? '(AI)' : ''}` : '—',
+              risk: typeof latest?.severity === 'string' ? latest.severity.toLowerCase() : 'low',
+              lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '—'
+            });
+          }
+
+          enriched.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
+          setPatients(enriched);
+          setPatientsCount(enriched.length);
+          setLastSynced(new Date().toISOString());
+          try {
+            const map = Object.fromEntries(enriched.map(p => [String(p.user_id), p.name]));
+            window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
+          } catch (_) {}
+        } catch (e) {
+          setError(e?.message || String(e));
+          setPatients([]);
+          setPatientsCount(0);
         } finally {
           setLoading(false);
         }
-      } else {
-        setLoading(false);
-      }
+      }, [fetchLatestDiagnosesMap, fetchLatestVitalsTime]);
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, sess) => {
-        setLoading(true);
-        setSession(sess);
-        if (sess?.user) {
-          const p = await fetchProfile(sess.user.id);
-          setProfile(p);
-        } else {
-          setProfile(null);
-        }
-        setLoading(false);
-      });
+      useEffect(() => {
+        loadSharedPatients();
+      }, [loadSharedPatients]);
 
-      return () => {
-        mounted = false;
-        subscription?.unsubscribe();
+      const refreshPatients = () => {
+        loadSharedPatients();
       };
-    }
 
-    init();
-  }, []);
+      const severityCounts = patients.reduce((acc, p) => {
+        if (p.risk === 'high') acc.high++;
+        else if (p.risk === 'medium') acc.medium++;
+        else acc.low++;
+        return acc;
+      }, { low: 0, medium: 0, high: 0 });
 
-  async function fetchProfile(userId) {
-    // Try to fetch existing profile
-    const { data: existing, error: selError } = await supabase
-      .from('profiles')
-      .select('id, full_name, role')
-      .eq('id', userId)
-      .single();
-
-    if (!selError && existing) {
-      // Ensure doctor has a public profile row after login
-      if (existing.role === 'doctor') {
-        try {
-          const { data: userRes } = await supabase.auth.getUser();
-          const email = userRes?.user?.email || null;
-          await supabase.from('doctor_profiles').upsert({
-            user_id: userId,
-            full_name: existing.full_name || (email ? email.split('@')[0] : null),
-            email: email || null
-          });
-        } catch (e) {
-          console.warn('ensure doctor_profiles (existing) failed:', e?.message || e);
-        }
-      } else if (existing.role === 'patient') {
-        // Ensure a patient profile row exists for patients
-        try {
-          await supabase.from('patient_profiles').upsert({
-            user_id: userId,
-            full_name: existing.full_name || null,
-            phone: '',
-            address: '',
-            medical_history: '',
-            current_medications: ''
-          });
-        } catch (e) {
-          console.warn('ensure patient_profiles (existing) failed:', e?.message || e);
-        }
-        // Ensure public.patients row with email for authenticated patient
-        try {
-          const { data: userRes } = await supabase.auth.getUser();
-          const email = userRes?.user?.email || null;
-          const meta = userRes?.user?.user_metadata || {};
-          const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name,
-            name: full_name,
-            email
-          });
-        } catch (e) {
-          console.warn('ensure patients (existing) failed:', e?.message || e);
-        }
+      if (loading) {
+        return (
+          <main>
+            <section className="hero">
+              <h1 className="hero-title">Doctor Dashboard</h1>
+              <p className="hero-subtitle">Loading the latest patient data…</p>
+            </section>
+          </main>
+        );
       }
-      return existing;
+
+      return (
+        <main>
+          <section className="hero">
+            <h1 className="hero-title">Doctor Dashboard</h1>
+            <p className="hero-subtitle">Only patients who explicitly shared their records appear in your panel.</p>
+            <div className="hero-cta">
+              <button className="btn btn-light" onClick={refreshPatients} disabled={loading}>
+                {loading ? 'Syncing…' : 'Refresh Patients'}
+              </button>
+            </div>
+            <div className="hero-stats">
+              <div className="hero-stat"><div className="text-xl font-semibold">Shared</div><div className="text-3xl font-extrabold">{patientsCount}</div></div>
+              <div className="hero-stat"><div className="text-xl font-semibold">High Risk</div><div className="text-3xl font-extrabold">{severityCounts.high}</div></div>
+              <div className="hero-stat"><div className="text-xl font-semibold">Medium Risk</div><div className="text-3xl font-extrabold">{severityCounts.medium}</div></div>
+              <div className="hero-stat"><div className="text-xl font-semibold">Low Risk</div><div className="text-3xl font-extrabold">{severityCounts.low}</div></div>
+            </div>
+            {lastSynced && (
+              <div className="muted mt-2 text-xs">Last synced {new Date(lastSynced).toLocaleString()}</div>
+            )}
+            {error && (<div className="alert alert-danger mt-2">{error}</div>)}
+          </section>
+
+          <section className="feature-grid">
+            <div className="feature-card">
+              <h3>Patients</h3>
+              <p>Only patients who shared a report or questionnaire with you are listed here.</p>
+              <div className="mt-4"><button className="btn btn-primary" onClick={refreshPatients} disabled={loading}>{loading ? 'Syncing…' : 'Sync'}</button></div>
+            </div>
+            <div className="feature-card">
+              <h3>Analytics</h3>
+              <p>Track risk distribution across your shared panel at a glance.</p>
+              <div className="mt-4"><span className="badge">Soon</span></div>
+            </div>
+            <div className="feature-card">
+              <h3>Reports</h3>
+              <p>Review AI reports generated from patient assessments that were shared with you.</p>
+              <div className="mt-4"><span className="badge">Soon</span></div>
+            </div>
+          </section>
+
+          <div className="card mt-8">
+            <h3 className="card-title">Patient List</h3>
+            {patients.length === 0 && !loading && (
+              <div className="alert alert-info mb-3">
+                No patients have shared their records with you yet. Ask patients to share a report from the assessments page.
+              </div>
+            )}
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Patient</th>
+                    <th>Condition</th>
+                    <th>Risk Level</th>
+                    <th>Last Check</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patients.map(patient => (
+                    <tr key={patient.user_id}>
+                      <td>{patient.name}</td>
+                      <td>{patient.condition}</td>
+                      <td>
+                        <span className={`badge ${getRiskClass(patient.risk)}`}>
+                          {patient.risk}
+                        </span>
+                      </td>
+                      <td>{patient.lastCheck}</td>
+                      <td>
+                        <Link
+                          className="btn btn-primary"
+                          to={`/doctor/patient/${patient.user_id}`}
+                          state={{ name: patient.name }}
+                        >
+                          View Details
+                        </Link>
+                        <button className="btn btn-success ml-2">
+                          Add Feedback
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      );
     }
-
-    // Create default profile if not found (prefer user metadata from signup)
-    const { data: userRes } = await supabase.auth.getUser();
-    const email = userRes?.user?.email || 'user@example.com';
-    const meta = userRes?.user?.user_metadata || {};
-    const full_name = String(meta.full_name || email.split('@')[0]);
-    const role = String(meta.role || (email.endsWith('@hospital.com') ? 'doctor' : 'patient'));
-
-    const { data: upserted, error: upError } = await supabase
-      .from('profiles')
-      .upsert({ id: userId, full_name, role })
-      .select()
-      .single();
-
-    if (upError) {
-      console.error('Profile creation failed:', upError);
-      return { id: userId, full_name, role };
-    }
-
-    // Ensure doctor has a public profile row after creating profile
-    try {
-      if ((upserted?.role || role) === 'doctor') {
-        await supabase.from('doctor_profiles').upsert({
-          user_id: userId,
-          full_name: upserted?.full_name || full_name,
-          email
-        });
-      } else if ((upserted?.role || role) === 'patient') {
-        await supabase.from('patient_profiles').upsert({
-          user_id: userId,
-          full_name: upserted?.full_name || full_name,
-          phone: '',
-          address: '',
-          medical_history: '',
-          current_medications: ''
-        });
-        // Also upsert into public.patients with email for quick access and filtering
-        try {
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name: upserted?.full_name || full_name,
-            name: upserted?.full_name || full_name,
-            email
-          });
-        } catch (e) {
-          console.warn('ensure patients (created) failed:', e?.message || e);
-        }
-      }
-    } catch (e) {
-      console.warn('ensure doctor_profiles (created) failed:', e?.message || e);
-    }
-
-    return upserted;
-  }
-
-  async function updateProfileRole(newRole) {
-    if (!session?.user) return;
-    
-    const email = session.user.email || 'user@example.com';
-    const full_name = profile?.full_name || email.split('@')[0];
-    
-    await supabase
-      .from('profiles')
-      .upsert({ id: session.user.id, full_name, role: newRole });
-      
-    try {
-      window.localStorage.setItem('roleOverride', newRole);
-    } catch (_) {}
-    
-    setProfile(prev => ({ 
-      ...(prev || { id: session.user.id, full_name }), 
-      role: newRole 
-    }));
-  }
-
-  return (
-    <AuthContext.Provider value={{ session, profile, loading, updateProfileRole }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-function ProtectedRoute({ children, role }) {
-  const auth = useAuth();
-
-  console.log('ProtectedRoute: auth.loading =', auth.loading, 'auth.session =', !!auth.session, 'auth.profile?.role =', auth.profile?.role, 'required role =', role);
-
   if (auth.loading) {
     console.log('ProtectedRoute: Showing loading...');
     return <div className="p-6">Loading...</div>;
