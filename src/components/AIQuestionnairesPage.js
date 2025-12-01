@@ -773,8 +773,8 @@ function AIQuestionnairesPage() {
             <button
               className="btn btn-primary btn-lg"
               onClick={startInterview}
-              disabled={iLoading.start || selectedDoctors.length === 0}
-              title={selectedDoctors.length === 0 ? "Please select at least one doctor first" : "Start Interview"}
+              disabled={iLoading.start}
+              title="Start Interview"
               style={{ padding: '12px 28px' }}
             >
               {iLoading.start ? 'Starting…' : 'Start Interview'}
