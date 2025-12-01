@@ -29,8 +29,10 @@ const DoctorNotificationsPage = () => {
           is_read,
           created_at,
           diagnosis_id,
+          patient_id,
           patient:patient_id (
             id,
+            user_id,
             full_name,
             name,
             email
@@ -75,8 +77,17 @@ const DoctorNotificationsPage = () => {
     }
   };
 
-  const viewPatientReport = (patientId) => {
-    navigate(`/doctor/patient/${patientId}`);
+  const viewPatientReport = (notification) => {
+    const patientIdentifier = notification.patient?.user_id || notification.patient?.id || notification.patient_id;
+    if (!patientIdentifier) {
+      setError('Unable to open patient record. Missing identifier.');
+      return;
+    }
+    navigate(`/doctor/patient/${patientIdentifier}`, {
+      state: {
+        name: notification.patient?.full_name || notification.patient?.name
+      }
+    });
   };
 
   return (
@@ -168,7 +179,7 @@ const DoctorNotificationsPage = () => {
                 <div className="notification-actions" style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
                   <button
                     className="btn btn-primary"
-                    onClick={() => viewPatientReport(notification.patient?.id)}
+                    onClick={() => viewPatientReport(notification)}
                     style={{ fontSize: '12px', padding: '6px 12px' }}
                   >
                     View Full Report

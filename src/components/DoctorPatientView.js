@@ -18,15 +18,66 @@ const DoctorPatientView = () => {
 		const [filterTimeStart, setFilterTimeStart] = useState('');
 		const [filterTimeEnd, setFilterTimeEnd] = useState('');
 
+	const verifyDoctorAccess = async (doctorId, patientIdentifier) => {
+		const { data, error } = await supabase
+			.from('notifications')
+			.select('id')
+			.eq('doctor_id', doctorId)
+			.eq('patient_id', patientIdentifier)
+			.eq('type', 'report_shared')
+			.limit(1);
+		if (error) throw error;
+		if (Array.isArray(data) && data.length) return true;
+		// Fallback: some rows may use patients.id instead of user_id
+		try {
+			const { data: patientRow, error: patientErr } = await supabase
+				.from('patients')
+				.select('id')
+				.eq('user_id', patientIdentifier)
+				.maybeSingle();
+			if (patientErr) throw patientErr;
+			if (patientRow?.id && patientRow.id !== patientIdentifier) {
+				const { data: fallbackData, error: fallbackErr } = await supabase
+					.from('notifications')
+					.select('id')
+					.eq('doctor_id', doctorId)
+					.eq('patient_id', patientRow.id)
+					.eq('type', 'report_shared')
+					.limit(1);
+				if (fallbackErr) throw fallbackErr;
+				return Array.isArray(fallbackData) && fallbackData.length > 0;
+			}
+		} catch (fallbackError) {
+			console.warn('DoctorPatientView access fallback failed:', fallbackError?.message || fallbackError);
+		}
+		return false;
+	};
+
 	useEffect(() => {
+		let mounted = true;
 		(async () => {
 			setLoading(true);
 			setError('');
 			try {
+				const { data: { user } } = await supabase.auth.getUser();
+				if (!user) throw new Error('Not authenticated');
+				const allowed = await verifyDoctorAccess(user.id, id);
+				if (!allowed) {
+					if (mounted) {
+						setError('Access denied. This patient has not shared their records with you yet.');
+						setPatient(null);
+						setVitals(null);
+						setReports([]);
+						setSeverityCounts({ low: 0, medium: 0, high: 0 });
+						setLatestSeverity(null);
+					}
+					return;
+				}
+				if (!mounted) return;
 				// Strictly fetch patient details from public.patients by user_id
 				let p = await supabase
 					.from('patients')
-					.select('user_id, full_name, name, age, gender, phone, email, address, created_at, updated_at')
+					.select('user_id, full_name, name, age, gender, phone, email, address, created_at, updated_at, id')
 					.eq('user_id', id)
 					.maybeSingle();
 				if (p.data) {
@@ -102,11 +153,12 @@ const DoctorPatientView = () => {
 					console.warn('[diagnoses] empty result. Possible RLS/permission issue:', diagError.message || diagError);
 				}
 			} catch (e) {
-				setError(e?.message || String(e));
+				if (mounted) setError(e?.message || String(e));
 			} finally {
-				setLoading(false);
+				if (mounted) setLoading(false);
 			}
 		})();
+		return () => { mounted = false; };
 	}, [id]);
 
 		return (

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+=======
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+>>>>>>> c60cace (Restrict doctors to shared patient records)
 import { useLocation } from 'react-router-dom';
 import supabase, { getSupabaseStatus } from './lib/supabaseClient';
 import {
@@ -2395,20 +2399,20 @@ function DoctorPortal() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [usingService, setUsingService] = useState(false);
-  const [patientsCount, setPatientsCount] = useState(null);
-  const [patientsCountMeta, setPatientsCountMeta] = useState(null);
-  const initialLoadRef = useRef(false);
+  const [patientsCount, setPatientsCount] = useState(0);
+  const [lastSynced, setLastSynced] = useState(null);
+  const [lastSynced, setLastSynced] = useState(null);
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
 
   const getRiskClass = (risk) => {
     switch (risk) {
-      case "high": return "badge-high";
-      case "medium": return "badge-medium";
-      case "low": return "badge-low";
-      default: return "";
+      case 'high': return 'badge-high';
+      case 'medium': return 'badge-medium';
+      case 'low':
+      default:
+        return 'badge-low';
     }
   };
 
@@ -2433,14 +2437,12 @@ function DoctorPortal() {
     }
   }, [TBL_VITALS, COL_TIME]);
 
-  // Batch fetch latest diagnosis per patient, returns a Map<user_id, {severity, created_at, ai_generated}>
   const fetchLatestDiagnosesMap = useCallback(async (userIds) => {
     const map = new Map();
     if (!Array.isArray(userIds) || !userIds.length) return map;
     try {
-      // Pull recent diagnoses for these users and reduce to the latest per patient
       const { data, error } = await supabase
-        .from(process.env.REACT_APP_TBL_REPORT || 'diagnoses')
+        .from(TBL_REPORT)
         .select('patient_id,severity,created_at,ai_generated')
         .in('patient_id', userIds)
         .order('created_at', { ascending: false })
@@ -2448,13 +2450,10 @@ function DoctorPortal() {
       if (error) throw error;
       for (const row of (data || [])) {
         const pid = row.patient_id;
-        if (!pid) continue;
-        if (!map.has(pid)) {
-          map.set(pid, { severity: (row.severity || 'low'), created_at: row.created_at, ai_generated: !!row.ai_generated });
-        }
+        if (!pid || map.has(pid)) continue;
+        map.set(pid, { severity: (row.severity || 'low'), created_at: row.created_at, ai_generated: !!row.ai_generated });
       }
     } catch (_) {}
-    // Secondary attempt: some rows might have been saved with internal patients.id instead of auth user_id
     if (map.size === 0) {
       try {
         const { data } = await supabase
@@ -2465,7 +2464,7 @@ function DoctorPortal() {
         const idToUser = new Map((data || []).map(r => [r.id, r.user_id]));
         if (idToUser.size) {
           const { data: d2 } = await supabase
-            .from(process.env.REACT_APP_TBL_REPORT || 'diagnoses')
+            .from(TBL_REPORT)
             .select('patient_id,severity,created_at,ai_generated')
             .in('patient_id', Array.from(idToUser.keys()))
             .order('created_at', { ascending: false })
@@ -2483,40 +2482,59 @@ function DoctorPortal() {
     return map;
   }, []);
 
-  // Fetch patients from Supabase `patients` table (preferred DB source)
-  const fetchPatientsFromSupabase = useCallback(async () => {
+  const loadSharedPatients = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: shareRows, error: shareErr } = await supabase
+        .from('notifications')
+        .select('patient_id, created_at')
+        .eq('doctor_id', user.id)
+        .eq('type', 'report_shared')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (shareErr) throw shareErr;
+
+      const sharedIds = Array.from(new Set((shareRows || []).map(row => row.patient_id).filter(Boolean)));
+      if (!sharedIds.length) {
+        setPatients([]);
+        setPatientsCount(0);
+        setLastSynced(new Date().toISOString());
+        return;
+      }
+
+      const { data: patientRows, error: patientErr } = await supabase
         .from('patients')
         .select('user_id, full_name, name, updated_at, created_at')
-        .order('updated_at', { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      const rows = Array.isArray(data) ? data : [];
-      if (!rows.length) return false;
+        .in('user_id', sharedIds);
+      if (patientErr) throw patientErr;
 
-      const userIds = rows.map(r => r.user_id).filter(Boolean);
-      const diagMap = await fetchLatestDiagnosesMap(userIds);
-      const list = [];
-      for (const r of rows) {
+      const diagMap = await fetchLatestDiagnosesMap(sharedIds);
+      const enriched = [];
+      for (const r of (patientRows || [])) {
         const lastTime = await fetchLatestVitalsTime(r.user_id);
         const latest = diagMap.get(r.user_id);
-        const severity = latest?.severity || 'low';
-        list.push({
+        enriched.push({
           user_id: r.user_id,
           name: r.full_name || r.name || `(UID ${String(r.user_id).slice(0, 8)}…)`,
           condition: latest ? `Latest report ${latest.ai_generated ? '(AI)' : ''}` : '—',
-          risk: typeof severity === 'string' ? severity.toLowerCase() : 'low',
+          risk: typeof latest?.severity === 'string' ? latest.severity.toLowerCase() : 'low',
           lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '—'
         });
       }
-      list.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
-      setPatients(list);
-      setUsingService(false);
+
+      enriched.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
+      setPatients(enriched);
+      setPatientsCount(enriched.length);
+      setLastSynced(new Date().toISOString());
       try {
-        const map = Object.fromEntries((list || []).map(p => [String(p.user_id), p.name]));
+        const map = Object.fromEntries(enriched.map(p => [String(p.user_id), p.name]));
         window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
       } catch (_) {}
+<<<<<<< HEAD
       // Prefer exact count from patients table
       try {
         if (patientsCount == null) {
@@ -2581,88 +2599,22 @@ function DoctorPortal() {
         return true;
       }
       throw new Error('Service returned empty list');
+=======
+>>>>>>> c60cace (Restrict doctors to shared patient records)
     } catch (e) {
       setError(e?.message || String(e));
-      return false;
+      setPatients([]);
+      setPatientsCount(0);
+    } finally {
+      setLoading(false);
     }
+<<<<<<< HEAD
   }, [fetchLatestDiagnosesMap]);
 
   const refreshPatients = useCallback(async () => {
     const ok = await retryServiceFetch();
     if (!ok) {
       await fetchPatientsFromSupabase();
-    }
-  }, [retryServiceFetch, fetchPatientsFromSupabase]);
-
-  useEffect(() => {
-    if (initialLoadRef.current) {
-      return;
-    }
-    initialLoadRef.current = true;
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        // If a service endpoint is available, prefer it to bypass RLS and list all patients
-        try {
-          const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
-          const health = await fetch(`${BASE}/health`);
-          if (health.ok) {
-            setUsingService(true);
-            // Fetch total patients from profiles via service
-            let svcCount = null;
-            try {
-              const cRes = await fetch(`${BASE}/api/v1/patient-count`);
-              if (cRes.ok) {
-                const cJson = await cRes.json();
-                if (cJson?.ok) {
-                  svcCount = Number(cJson.count || 0);
-                  setPatientsCount(svcCount);
-                  setPatientsCountMeta(cJson.counts || null);
-                }
-              }
-            } catch (_) {}
-
-            // Try patients-with-latest first
-            let svcList = [];
-            try {
-              const resp = await fetch(`${BASE}/api/v1/patients-with-latest`);
-              if (resp.ok) {
-                const json = await resp.json();
-                if (json?.ok && Array.isArray(json.patients)) {
-                  svcList = json.patients.map(p => ({
-                    user_id: p.user_id,
-                    name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-                    condition: '\u2014',
-                    risk: 'low',
-                    lastCheck: p.lastCheck ? new Date(p.lastCheck).toLocaleString() : '\u2014'
-                  }));
-                }
-              }
-            } catch (_) {}
-
-            // If service count suggests more patients than we received, fall back to /patients
-            if ((svcCount != null) && (svcList.length < svcCount)) {
-              try {
-                const resp2 = await fetch(`${BASE}/api/v1/patients`);
-                if (resp2.ok) {
-                  const json2 = await resp2.json();
-                  if (json2?.ok && Array.isArray(json2.patients)) {
-                    const list2 = json2.patients.map(p => ({
-                      user_id: p.user_id,
-                      name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-                      condition: '—',
-                      risk: 'low',
-                      lastCheck: '—'
-                    }));
-                    if (list2.length > svcList.length) svcList = list2;
-                  }
-                }
-              } catch (_) {}
-            }
-
-            if (svcList.length) {
               if (mounted) {
                 setPatients(svcList);
                 // Persist a simple map of user_id -> name for detail page fallback
@@ -2670,224 +2622,17 @@ function DoctorPortal() {
                   const map = Object.fromEntries((svcList || []).map(p => [String(p.user_id), p.name]));
                   window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
                 } catch (_) {}
-              }
-              // Early return: service provided list; avoid browser fallback that might be limited by RLS
-              return;
-            } else {
-              // If service is up but empty list, continue to browser fallback below
-              setUsingService(false);
-            }
-          }
-        } catch (_) {
-          // ignore service errors and fall back to Supabase
-        }
+    }
+  }, [fetchLatestDiagnosesMap, fetchLatestVitalsTime]);
 
-        // Try dedicated patients table first
-        const okPatients = await fetchPatientsFromSupabase();
-        if (okPatients) {
-          return;
-        }
+  useEffect(() => {
+    loadSharedPatients();
+  }, [loadSharedPatients]);
 
-        const { data, error } = await supabase
-          .from('patient_profiles')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(100);
-        if (error) throw error;
-        const ppList = Array.isArray(data) ? data : [];
+  const refreshPatients = () => {
+    loadSharedPatients();
+  };
 
-        // Also load profiles to include patients without a patient_profiles row
-        let profsAll = [];
-        try {
-          const { data: profs, error: pErr } = await supabase
-            .from('profiles')
-            .select('id,email,full_name,role')
-            .limit(500);
-          if (!pErr) profsAll = profs || [];
-        } catch (_) {}
-
-        // Build a map of candidates by user_id
-        const byId = new Map();
-        for (const p of ppList) {
-          if (!p?.user_id) continue;
-          byId.set(p.user_id, { source: 'patient_profiles', user_id: p.user_id, full_name: p.full_name, email: null, role: 'patient' });
-        }
-        for (const pr of profsAll) {
-          if (!pr?.id) continue;
-          // If role column exists and is not 'patient', skip adding as patient
-          if (typeof pr.role === 'string' && pr.role && pr.role.toLowerCase() !== 'patient') {
-            // Keep existing entry if already present from patient_profiles
-            if (!byId.has(pr.id)) continue;
-          }
-          if (!byId.has(pr.id)) {
-            byId.set(pr.id, { source: 'profiles', user_id: pr.id, full_name: pr.full_name, email: pr.email, role: pr.role || null });
-          } else {
-            const cur = byId.get(pr.id);
-            // Prefer profiles.full_name over patient_profiles.full_name
-            byId.set(pr.id, { ...cur, email: pr.email ?? cur.email, full_name: pr.full_name || cur.full_name });
-          }
-        }
-
-        // Enrich with latest vitals time and friendly name
-        const candidates = Array.from(byId.values());
-        const enriched = [];
-        for (const c of candidates) {
-          const lastTime = await fetchLatestVitalsTime(c.user_id);
-          enriched.push({
-            user_id: c.user_id,
-            name: c.full_name || c.email || `(UID ${String(c.user_id).slice(0, 8)}…)`,
-            condition: '—',
-            risk: 'low',
-            lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '—'
-          });
-        }
-        // Sort by lastCheck desc then name
-        enriched.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
-        let finalList = enriched;
-
-        // If we only received a small subset (likely due to RLS), try service fallback
-        if (finalList.length <= 1) {
-          try {
-            const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
-            const resp = await fetch(`${BASE}/api/v1/patients-with-latest`);
-            if (resp.ok) {
-              const json = await resp.json();
-              if (json?.ok && Array.isArray(json.patients) && json.patients.length > finalList.length) {
-                finalList = json.patients.map(p => ({
-                  user_id: p.user_id,
-                  name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-                  condition: '—',
-                  risk: 'low',
-                  lastCheck: p.lastCheck ? new Date(p.lastCheck).toLocaleString() : '—'
-                }));
-                setUsingService(true);
-              }
-            } else {
-              // surface partial info
-              const txt = await resp.text().catch(() => '');
-              console.warn('Service patients fetch failed:', resp.status, txt);
-            }
-          } catch (svcErr) {
-            console.warn('Service patients fetch error:', svcErr?.message || svcErr);
-          }
-        }
-
-        if (mounted) setPatients(finalList);
-        // Persist a simple map of user_id -> name for detail page fallback
-        try {
-          const map = Object.fromEntries((finalList || []).map(p => [String(p.user_id), p.name]));
-          window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
-        } catch (_) {}
-
-        // Browser-side fallback: profiles count (role ilike 'patient') if service count not available
-        try {
-          if (patientsCount == null) {
-            // Prefer patients table count if exists; otherwise fall back to profiles role
-            let set = false;
-            try {
-              const { count: c } = await supabase.from('patients').select('id', { count: 'exact', head: true });
-              if (mounted && (c || c === 0)) { setPatientsCount(Number(c)); set = true; }
-            } catch (_) {}
-            if (!set) {
-              const { count: pCount } = await supabase
-                .from('profiles')
-                .select('id', { count: 'exact', head: true })
-                .ilike('role', 'patient');
-              if (mounted && (pCount || pCount === 0)) setPatientsCount(Number(pCount));
-            }
-          }
-        } catch (_) {}
-      } catch (e) {
-        if (mounted) setError(e?.message || String(e));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [fetchLatestVitalsTime, fetchPatientsFromSupabase, patientsCount]);
-
-  // Severity summary dashboard
-  const severityCounts = patients.reduce((acc, p) => {
-    if (p.risk === 'high') acc.high++;
-    else if (p.risk === 'medium') acc.medium++;
-    else acc.low++;
-    return acc;
-  }, { low: 0, medium: 0, high: 0 });
-
-  if (loading) {
-    return (
-      <main>
-        <section className="hero">
-          <h1 className="hero-title">Doctor Dashboard</h1>
-          <p className="hero-subtitle">Loading the latest patient data…</p>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main>
-      <section className="hero">
-        <h1 className="hero-title">Doctor Dashboard</h1>
-        <p className="hero-subtitle">Patient overview, risk indicators, and quick access to clinical reviews.</p>
-        <div className="hero-cta">
-          <button className="btn btn-light" onClick={refreshPatients}>Refresh Patients</button>
-        </div>
-        <div className="hero-stats">
-          <div className="hero-stat"><div className="text-xl font-semibold">Total</div><div className="text-3xl font-extrabold">{patientsCount != null ? patientsCount : patients.length}</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">High Risk</div><div className="text-3xl font-extrabold">{severityCounts.high}</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">Medium Risk</div><div className="text-3xl font-extrabold">{severityCounts.medium}</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">Low Risk</div><div className="text-3xl font-extrabold">{severityCounts.low}</div></div>
-        </div>
-        {usingService && (
-          <div className="alert alert-info mt-4">Using service endpoint to bypass RLS for listing patients.</div>
-        )}
-        {patientsCountMeta && (
-          <div className="muted mt-2 text-xs">profiles={patientsCountMeta.profilesRolePatient} · patient_profiles={patientsCountMeta.patientProfiles} · union={patientsCountMeta.unionDistinct}</div>
-        )}
-        {error && (<div className="alert alert-danger mt-2">{error}</div>)}
-      </section>
-
-      <section className="feature-grid">
-        <div className="feature-card">
-          <h3>Patients</h3>
-          <p>Browse the latest patient list and open detailed views to add clinical notes.</p>
-          <div className="mt-4"><button className="btn btn-primary" onClick={refreshPatients}>Sync</button></div>
-        </div>
-        <div className="feature-card">
-          <h3>Analytics</h3>
-          <p>Track risk distribution and activity across your panel at a glance.</p>
-          <div className="mt-4"><span className="badge">Soon</span></div>
-        </div>
-        <div className="feature-card">
-          <h3>Reports</h3>
-          <p>Review AI reports generated from recent patient assessments.</p>
-          <div className="mt-4"><span className="badge">Soon</span></div>
-        </div>
-      </section>
-
-      <div className="card mt-8">
-        <h3 className="card-title">Patient List</h3>
-        {patientsCount != null && patients.length < patientsCount && (
-          <div className="alert alert-warning mb-3">
-            Showing {patients.length} of {patientsCount} patients. Some results may be hidden by RLS.
-            <button className="btn btn-outline ml-2" onClick={retryServiceFetch}>Try service again</button>
-          </div>
-        )}
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Patient</th>
-                <th>Condition</th>
-                <th>Risk Level</th>
-                <th>Last Check</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map(patient => (
-                <tr key={patient.user_id}>
                   <td>{patient.name}</td>
                   <td>{patient.condition}</td>
                   <td>
@@ -2897,9 +2642,9 @@ function DoctorPortal() {
                   </td>
                   <td>{patient.lastCheck}</td>
                   <td>
-                    <Link 
-                      className="btn btn-primary" 
-                      to={`/doctor/patient/${patient.user_id}`} 
+                    <Link
+                      className="btn btn-primary"
+                      to={`/doctor/patient/${patient.user_id}`}
                       state={{ name: patient.name }}
                     >
                       View Details

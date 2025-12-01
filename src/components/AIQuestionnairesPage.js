@@ -893,7 +893,7 @@ function AIQuestionnairesPage() {
         <section className="hero animate-fade-up">
           <h1 className="hero-title">AI Health Questionnaires</h1>
           <p className="hero-subtitle">Adaptive interview and intelligent forms to tailor insights to your condition.</p>
-          <div className="hero-cta" style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+          <div className="hero-cta" style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button
               className="btn btn-primary btn-lg"
               onClick={startInterview}
@@ -903,6 +903,32 @@ function AIQuestionnairesPage() {
             >
               {iLoading.start ? 'Starting…' : 'Start Interview'}
             </button>
+            <button
+              className="btn btn-secondary"
+              onClick={restartInterview}
+              disabled={iLoading.next || iLoading.report}
+              style={{ padding: '12px 28px' }}
+            >
+              Start Over
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={generateInterviewReport}
+              disabled={iLoading.report || !!interview.report}
+              title={interview.report ? 'Report already generated' : 'Generate a report from the current interview'}
+              style={{ padding: '12px 28px' }}
+            >
+              {iLoading.report ? 'Generating…' : interview.report ? 'Report Ready' : 'Generate Report'}
+            </button>
+            {interview.report && selectedDoctors.length > 0 && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns })}
+                style={{ padding: '12px 28px' }}
+              >
+                Share with Doctor
+              </button>
+            )}
           </div>
         </section>
 
