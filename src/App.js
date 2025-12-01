@@ -2703,6 +2703,17 @@ function DoctorPortal() {
     return acc;
   }, { low: 0, medium: 0, high: 0 });
 
+  if (loading) {
+    return (
+      <main>
+        <section className="hero">
+          <h1 className="hero-title">Doctor Dashboard</h1>
+          <p className="hero-subtitle">Loading the latest patient data…</p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main>
       <section className="hero">
