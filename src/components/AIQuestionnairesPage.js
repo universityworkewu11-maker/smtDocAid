@@ -805,15 +805,18 @@ function AIQuestionnairesPage() {
                   <p className="muted">Choose which doctors should receive your AI-generated health report after the assessment.</p>
                   {doctors.length > 0 ? (
                     <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px', marginTop: '12px' }}>
-                      {doctors.map(doctor => (
-                        <label key={doctor.id || doctor.user_id} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id || doctor.user_id) ? '#f0f8ff' : 'transparent' }}>
+                      {doctors.map(doctor => {
+                        const doctorKey = doctor?.user_id || doctor?.id;
+                        return (
+                        <label key={doctorKey || (doctor?.email ?? Math.random())} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: doctorKey && selectedDoctors.includes(doctorKey) ? '#f0f8ff' : 'transparent' }}>
                           <input
                             type="checkbox"
-                            checked={selectedDoctors.includes(doctor.id || doctor.user_id)}
+                            checked={doctorKey ? selectedDoctors.includes(doctorKey) : false}
                             onChange={(e) => {
-                              const doctorId = doctor.id || doctor.user_id;
+                              const doctorId = doctor?.user_id || doctor?.id;
+                              if (!doctorId) return;
                               if (e.target.checked) {
-                                setSelectedDoctors(prev => [...prev, doctorId]);
+                                setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
                               } else {
                                 setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
                               }
@@ -824,7 +827,7 @@ function AIQuestionnairesPage() {
                             <div className="muted" style={{ fontSize: '12px' }}>{doctor.specialist || doctor.specialty || doctor.specialities || 'General'}</div>
                           </div>
                         </label>
-                      ))}
+                      );})}
                     </div>
                   ) : (
                     <p className="muted">No doctors available at the moment.</p>
