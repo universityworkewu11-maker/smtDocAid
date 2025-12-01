@@ -1222,11 +1222,11 @@ function QuestionnairePage() {
   // Restore persisted base/interview on mount so minimizing or route changes don't reset
   useEffect(() => {
     try {
-      const savedBase = window.localStorage.getItem(LS_KEYS.base);
+      const savedBase = window.localStorage.getItem(INTERVIEW_STORAGE_KEYS.base);
       if (savedBase) setServerBase(savedBase);
     } catch (_) {}
     try {
-      const raw = window.localStorage.getItem(LS_KEYS.interview);
+      const raw = window.localStorage.getItem(INTERVIEW_STORAGE_KEYS.interview);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && (parsed.sessionId || parsed.turns)) {
@@ -1245,7 +1245,7 @@ function QuestionnairePage() {
     } catch (_) {}
     // Restore selected doctors
     try {
-      const rawSel = window.localStorage.getItem(LS_KEYS.selectedDoctors);
+      const rawSel = window.localStorage.getItem(INTERVIEW_STORAGE_KEYS.selectedDoctors);
       if (rawSel) {
         const parsed = JSON.parse(rawSel);
         if (Array.isArray(parsed)) setSelectedDoctors(parsed);
@@ -1257,15 +1257,15 @@ function QuestionnairePage() {
 
   // Persist base and interview whenever they change
   useEffect(() => {
-    try { window.localStorage.setItem(LS_KEYS.base, serverBase || ''); } catch (_) {}
+    try { window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.base, serverBase || ''); } catch (_) {}
   }, [serverBase]);
   useEffect(() => {
-    try { window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ ...interview, report })); } catch (_) {}
+    try { window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.interview, JSON.stringify({ ...interview, report })); } catch (_) {}
   }, [interview, report]);
 
   // Persist selected doctors so choices survive reloads/navigation
   useEffect(() => {
-    try { window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors)); } catch (_) {}
+    try { window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.selectedDoctors, JSON.stringify(selectedDoctors)); } catch (_) {}
   }, [selectedDoctors]);
 
   // testOpenAI removed - developer test helper was removed from UI
@@ -1298,7 +1298,7 @@ function QuestionnairePage() {
       const j = await apiPostJSON('/api/v1/ai/interview/start', { context });
       if (!j.ok) throw new Error(j?.error || 'Interview start failed');
   setInterview({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done) });
-  try { window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done), report: '' })); } catch (_) {}
+  try { window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.interview, JSON.stringify({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done), report: '' })); } catch (_) {}
       setIAnswer('');
       // Hide legacy list UI on start
       setQuestions([]);
@@ -1336,7 +1336,7 @@ function QuestionnairePage() {
           done: Boolean(j.done),
           report
         };
-        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(nextState));
+        window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.interview, JSON.stringify(nextState));
       } catch (_) {}
     } catch (e) {
       setError(e?.message || String(e));
@@ -1402,10 +1402,10 @@ function QuestionnairePage() {
       if (!j.ok) throw new Error(j?.error || 'Report failed');
       setReport(j.report || '');
       try {
-        const raw = window.localStorage.getItem(LS_KEYS.interview);
+        const raw = window.localStorage.getItem(INTERVIEW_STORAGE_KEYS.interview);
         const parsed = raw ? JSON.parse(raw) : {};
         parsed.report = j.report || '';
-        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(parsed));
+        window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.interview, JSON.stringify(parsed));
       } catch (_) {}
       // Persist AI report as with legacy mode
       try {
@@ -1434,12 +1434,12 @@ function QuestionnairePage() {
     setReport('');
     setError('');
     try {
-      const raw = window.localStorage.getItem(LS_KEYS.interview);
+      const raw = window.localStorage.getItem(INTERVIEW_STORAGE_KEYS.interview);
       if (raw) {
         const parsed = JSON.parse(raw);
-        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ ...parsed, sessionId: null, question: '', turns: [], done: false, report: '' }));
+        window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.interview, JSON.stringify({ ...parsed, sessionId: null, question: '', turns: [], done: false, report: '' }));
       } else {
-        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ sessionId: null, question: '', turns: [], done: false, report: '' }));
+        window.localStorage.setItem(INTERVIEW_STORAGE_KEYS.interview, JSON.stringify({ sessionId: null, question: '', turns: [], done: false, report: '' }));
       }
     } catch (_) {}
   }
