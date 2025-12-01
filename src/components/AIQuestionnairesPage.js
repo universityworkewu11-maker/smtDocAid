@@ -441,6 +441,10 @@ function AIQuestionnairesPage() {
   };
 
   const saveReportAndNotify = async (reportContent) => {
+    if (!reportContent || !String(reportContent).trim()) {
+      alert('Please generate a report before sharing it with doctors.');
+      return;
+    }
     if (!selectedDoctors.length) {
       alert('Please select at least one doctor before sharing the report.');
       return;
