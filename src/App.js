@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import supabase, { getSupabaseStatus } from './lib/supabaseClient';
 import {
