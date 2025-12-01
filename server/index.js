@@ -10,17 +10,32 @@ const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetc
 
 const app = express();
 
-// CORS helper function for Vercel serverless functions
-function setCorsHeaders(res) {
-   res.setHeader('Access-Control-Allow-Origin', 'https://smt-doc-aid.vercel.app');
-   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-   res.setHeader('Access-Control-Allow-Credentials', 'true');
+// CORS helper function (supports local dev + production)
+function setCorsHeaders(req, res) {
+	const defaults = [
+		'https://smt-doc-aid.vercel.app',
+		'http://localhost:3000',
+		'http://127.0.0.1:3000',
+		'http://localhost:5173',
+		'http://127.0.0.1:5173'
+	];
+	const extra = (process.env.ALLOWED_ORIGINS || process.env.REACT_APP_ALLOWED_ORIGINS || '')
+		.split(',')
+		.map(s => s.trim())
+		.filter(Boolean);
+	const allowed = new Set([...defaults, ...extra]);
+	const origin = req.headers?.origin;
+	const allowOrigin = origin && allowed.has(origin) ? origin : 'https://smt-doc-aid.vercel.app';
+	res.setHeader('Vary', 'Origin');
+	res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+	res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
 
 // Handle all OPTIONS requests globally
 app.options('*', (req, res) => {
-  setCorsHeaders(res);
+	setCorsHeaders(req, res);
   res.status(200).end();
 });
 // Basic request logging to debug 404/method/path issues
@@ -38,18 +53,18 @@ const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-2024-11-20';
 const DEFAULT_ASSISTANT_ID = process.env.ASSISTANT_ID || '';
 
 // Health under both /api/health and /health for compatibility
-app.get('/health', (_req, res) => {
-	setCorsHeaders(res);
+app.get('/health', (req, res) => {
+	setCorsHeaders(req, res);
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
 });
-app.get('/api/health', (_req, res) => {
-	setCorsHeaders(res);
+app.get('/api/health', (req, res) => {
+	setCorsHeaders(req, res);
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
 });
 
 // Chat proxy: POST /api/v1/ai/chat { messages: [...], model?: string, temperature?: number, max_tokens?: number }
 app.post('/api/v1/ai/chat', async (req, res) => {
-	setCorsHeaders(res);
+	setCorsHeaders(req, res);
 	try {
 		if (!OPENAI_API_KEY) {
 			return res.status(400).json({ ok: false, error: 'Missing OPENAI_API_KEY on server' });
@@ -223,7 +238,7 @@ function buildInterviewSystemPrompt() {
 // Start interview
 // body: { context?: any }
 app.post('/api/v1/ai/interview/start', async (req, res) => {
-	setCorsHeaders(res);
+	setCorsHeaders(req, res);
 	try {
 		const { context } = req.body || {};
 		const sessionId = uuid();
@@ -250,7 +265,7 @@ app.post('/api/v1/ai/interview/start', async (req, res) => {
 // Next question based on previous answer
 // body: { sessionId: string, answer: string }
 app.post('/api/v1/ai/interview/next', async (req, res) => {
-	setCorsHeaders(res);
+	setCorsHeaders(req, res);
 	try {
 		const { sessionId, answer } = req.body || {};
 		const sess = sessions.get(sessionId);
@@ -277,7 +292,7 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 // Generate final report
 // body: { sessionId: string }
 app.post('/api/v1/ai/interview/report', async (req, res) => {
-	setCorsHeaders(res);
+	setCorsHeaders(req, res);
 	try {
 		const { sessionId } = req.body || {};
 		const sess = sessions.get(sessionId);
@@ -310,7 +325,7 @@ let latestVitals = { temperature: null, heartRate: null, spo2: null, timestamp: 
 
 // POST /api/vitals - Receive vitals data from raspi
 app.post('/api/vitals', (req, res) => {
-  setCorsHeaders(res);
+	setCorsHeaders(req, res);
   try {
     const { temperature, heartRate, spo2 } = req.body || {};
     if (typeof temperature === 'number' || typeof heartRate === 'number' || typeof spo2 === 'number') {
@@ -331,7 +346,7 @@ app.post('/api/vitals', (req, res) => {
 
 // GET /api/vitals - Get latest vitals for frontend
 app.get('/api/vitals', (req, res) => {
-  setCorsHeaders(res);
+	setCorsHeaders(req, res);
   res.json(latestVitals);
 });
 
