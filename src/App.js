@@ -1170,14 +1170,12 @@ function QuestionnairePage() {
   const [report, setReport] = useState('');
   
   const auth = useAuth();
-  const navigate = useNavigate();
   // Interview-mode state (AI-driven sequential Q&A)
   const [interview, setInterview] = useState({ sessionId: null, question: '', turns: [], done: false });
   const [iAnswer, setIAnswer] = useState('');
   const [iLoading, setILoading] = useState({ start: false, next: false, report: false });
   const [serverBase, setServerBase] = useState(SERVER_BASE);
-  const [health, setHealth] = useState({ checked: false, ok: false, detail: '' });
-  const LS_KEYS = { interview: 'interview_state_v1', base: 'api_server_base_v1', questionnaire: 'questionnaire_progress_v1', selectedDoctors: 'selected_doctors_v1' };
+  const LS_KEYS = INTERVIEW_STORAGE_KEYS;
 
   // Doctor selection for sharing reports
   const [selectedDoctors, setSelectedDoctors] = useState([]);
