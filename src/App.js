@@ -1394,6 +1394,22 @@ function QuestionnairePage() {
     }
   }, [doctorQuery, doctors]);
 
+  useEffect(() => {
+    if (!Array.isArray(doctors) || !doctors.length) return;
+    setSelectedDoctors(prev => {
+      if (!Array.isArray(prev) || !prev.length) return prev;
+      let changed = false;
+      const mapped = prev.map(id => {
+        const match = doctors.find(doc => doc?.user_id === id || doc?.id === id);
+        const normalized = match?.user_id || match?.id || id;
+        if (normalized !== id) changed = true;
+        return normalized;
+      });
+      if (!changed) return prev;
+      return Array.from(new Set(mapped));
+    });
+  }, [doctors]);
+
   async function generateInterviewReport() {
     if (!interview.sessionId) return;
     setILoading(prev => ({ ...prev, report: true }));
