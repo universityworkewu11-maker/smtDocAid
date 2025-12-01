@@ -43,6 +43,13 @@ const SERVER_BASE = (() => {
 const TBL_REPORT = process.env.REACT_APP_TBL_REPORT || 'diagnoses';
 const TBL_QR = process.env.REACT_APP_TBL_QR || 'questionnaire_responses';
 
+const INTERVIEW_STORAGE_KEYS = Object.freeze({
+  interview: 'interview_state_v1',
+  base: 'api_server_base_v1',
+  questionnaire: 'questionnaire_progress_v1',
+  selectedDoctors: 'selected_doctors_v1'
+});
+
 async function openaiChat(messages) {
   // Always call backend server to keep API key private
   const res = await fetch(`${SERVER_BASE}/api/v1/ai/chat`, {
