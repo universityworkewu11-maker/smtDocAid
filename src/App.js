@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import supabase, { getSupabaseStatus } from './lib/supabaseClient';
 import {
@@ -21,7 +21,6 @@ import DoctorPatientView from './components/DoctorPatientView';
 import DoctorProfilePage from './components/DoctorProfilePage';
 import DoctorDirectoryPage from './components/DoctorDirectoryPage';
 import DoctorPublicProfilePage from './components/DoctorPublicProfilePage';
-import AIQuestionnairesPage from './components/AIQuestionnairesPage';
 import ScrollToTop from './components/ScrollToTop';
 import DoctorNotificationsPage from './components/DoctorNotificationsPage';
 // Interview flow is integrated into QuestionnairePage; no separate page import
