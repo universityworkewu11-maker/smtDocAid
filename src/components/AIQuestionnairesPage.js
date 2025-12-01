@@ -844,77 +844,100 @@ function AIQuestionnairesPage() {
                   </div>
                   {error && <div className="alert alert-danger" style={{ marginBottom: '20px' }}>{error}</div>}
 
-                  {interview.sessionId && (
-                    <div className="card" style={{ marginBottom: 20 }}>
-                      {!interview.done ? (
-                        <>
-                          <h3 className="card-title">Interview</h3>
-                          <p style={{ fontSize: 18 }}>{interview.question || '…'}</p>
-                          <div className="form-group">
-                            <input
-                              className="form-input"
-                              value={iAnswer}
-                              onChange={e => setIAnswer(e.target.value)}
-                              placeholder="Type your answer"
-                              onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
-                              {iLoading.next ? 'Sending…' : 'Send Answer'}
-                            </button>
-                            <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
-                              Start Over
-                            </button>
-                            <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
-                              {iLoading.report ? 'Generating…' : 'Generate Report'}
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <h3 className="card-title">Interview Complete</h3>
-                          <p className="muted">You can switch to other sections now.</p>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
-                              Start Over
-                            </button>
-                            <button className="btn btn-primary" onClick={generateInterviewReport} disabled={iLoading.report || !!interview.report}>
-                              {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                      {interview.turns.length > 0 && (
-                        <div className="card" style={{ marginTop: 16 }}>
-                          <h3 className="card-title">Transcript</h3>
-                          <div className="transcript">
-                            {interview.turns.map((t, idx) => (
-                              <div key={idx} style={{ marginBottom: 8 }}>
-                                <div><strong>Q{idx + 1}:</strong> {t.q}</div>
-                                <div><strong>A{idx + 1}:</strong> {t.a}</div>
-                              </div>
-                            ))}
-                          </div>
+                  <div className="card" style={{ marginBottom: 20 }}>
+                    {!interview.sessionId ? (
+                      <>
+                        <h3 className="card-title">Interview</h3>
+                        <p className="muted">Click "Start Interview" to begin. The controls appear here.</p>
+                        <div className="form-group">
+                          <input
+                            className="form-input"
+                            value={iAnswer}
+                            onChange={e => setIAnswer(e.target.value)}
+                            placeholder="Type your answer"
+                            disabled
+                          />
                         </div>
-                      )}
-                      {interview.report ? (
-                        <div className="card" style={{ marginTop: 16 }}>
-                          <h3 className="card-title">Interview Report</h3>
-                          <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
-                            {interview.report}
-                          </pre>
-                          {selectedDoctors.length > 0 && (
-                            <div style={{ marginTop: 12 }}>
-                              <button className="btn btn-secondary" onClick={() => saveReportAndNotify(interview.report)}>
-                                Share with Doctor
-                              </button>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button className="btn btn-primary" disabled>
+                            Send Answer
+                          </button>
+                          <button className="btn btn-secondary" disabled>
+                            Start Over
+                          </button>
+                          <button className="btn btn-secondary" disabled title="Generate a report after completing interview">
+                            Generate Report
+                          </button>
+                        </div>
+                      </>
+                    ) : (!interview.done ? (
+                      <>
+                        <h3 className="card-title">Interview</h3>
+                        <p style={{ fontSize: 18 }}>{interview.question || '…'}</p>
+                        <div className="form-group">
+                          <input
+                            className="form-input"
+                            value={iAnswer}
+                            onChange={e => setIAnswer(e.target.value)}
+                            placeholder="Type your answer"
+                            onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
+                            {iLoading.next ? 'Sending…' : 'Send Answer'}
+                          </button>
+                          <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
+                            Start Over
+                          </button>
+                          <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
+                            {iLoading.report ? 'Generating…' : 'Generate Report'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="card-title">Interview Complete</h3>
+                        <p className="muted">You can switch to other sections now.</p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
+                            Start Over
+                          </button>
+                          <button className="btn btn-primary" onClick={generateInterviewReport} disabled={iLoading.report || !!interview.report}>
+                            {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
+                          </button>
+                        </div>
+                      </>
+                    ))}
+                    {interview.turns.length > 0 && (
+                      <div className="card" style={{ marginTop: 16 }}>
+                        <h3 className="card-title">Transcript</h3>
+                        <div className="transcript">
+                          {interview.turns.map((t, idx) => (
+                            <div key={idx} style={{ marginBottom: 8 }}>
+                              <div><strong>Q{idx + 1}:</strong> {t.q}</div>
+                              <div><strong>A{idx + 1}:</strong> {t.a}</div>
                             </div>
-                          )}
+                          ))}
                         </div>
-                      ) : null}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                    {interview.report ? (
+                      <div className="card" style={{ marginTop: 16 }}>
+                        <h3 className="card-title">Interview Report</h3>
+                        <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
+                          {interview.report}
+                        </pre>
+                        {selectedDoctors.length > 0 && (
+                          <div style={{ marginTop: 12 }}>
+                            <button className="btn btn-secondary" onClick={() => saveReportAndNotify(interview.report)}>
+                              Share with Doctor
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
 
                   {questionnaires.length > 0 ? (
                     <div className="questionnaires-grid">
