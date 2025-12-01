@@ -1975,12 +1975,6 @@ function ProfilePage() {
   const [copied, setCopied] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
 
-  useEffect(() => {
-    if (auth.session?.user) {
-      fetchPatientProfile();
-    }
-  }, [auth.session, fetchPatientProfile]);
-
   // Check Raspberry Pi device connectivity via /health endpoint
   const checkDevice = async () => {
     const base = process.env.REACT_APP_RPI_API_BASE;
@@ -2092,6 +2086,12 @@ function ProfilePage() {
       setLoading(false);
     }
   }, [auth.session, auth.profile, createPatientProfile]);
+
+  useEffect(() => {
+    if (auth.session?.user) {
+      fetchPatientProfile();
+    }
+  }, [auth.session, fetchPatientProfile]);
 
   const handleSave = async () => {
     if (!auth.session?.user?.id) return;
