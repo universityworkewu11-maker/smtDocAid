@@ -19,9 +19,9 @@ export default function Footer() {
         <div>
           <div className="font-semibold text-slate-800 dark:text-slate-200">Company</div>
           <ul className="mt-2 space-y-1">
-            <li><a className="hover:text-primary" href="#">Privacy</a></li>
-            <li><a className="hover:text-primary" href="#">Terms</a></li>
-            <li><a className="hover:text-primary" href="#">Contact</a></li>
+            <li><a className="hover:text-primary" href="/privacy">Privacy</a></li>
+            <li><a className="hover:text-primary" href="/terms">Terms</a></li>
+            <li><a className="hover:text-primary" href="mailto:support@smtdocaid.example">Contact</a></li>
           </ul>
         </div>
       </div>
