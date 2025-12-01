@@ -433,7 +433,6 @@ function AuthProvider({ children }) {
 
 function ProtectedRoute({ children, role }) {
   const auth = useAuth();
-  const navigate = useNavigate();
 
   console.log('ProtectedRoute: auth.loading =', auth.loading, 'auth.session =', !!auth.session, 'auth.profile?.role =', auth.profile?.role, 'required role =', role);
 
