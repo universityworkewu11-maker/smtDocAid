@@ -21,14 +21,6 @@ const UploadDocumentsPage = () => {
   const fileInputRef = useRef(null);
   const [previousUploads, setPreviousUploads] = useState([]);
 
-  const maxFileSize = 10 * 1024 * 1024; // 10MB
-  const allowedTypes = [
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'application/pdf'
-  ];
-
   // Fetch previously uploaded files from Supabase Storage (bucket per user folder)
   useEffect(() => {
     (async () => {
