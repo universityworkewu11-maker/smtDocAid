@@ -43,7 +43,7 @@ const UploadDocumentsPage = () => {
       }
       const { data, error } = await supabase
         .from('documents')
-        .select('id, original_name, file_name, storage_path, public_url, mime_type, size_bytes, uploaded_at')
+        .select('*')
         .eq('user_id', uid)
         .order('uploaded_at', { ascending: false })
         .limit(100);
@@ -127,7 +127,7 @@ const UploadDocumentsPage = () => {
               public_url: publicUrl,
               metadata: { source: 'UploadDocumentsPage' }
             }])
-            .select('id, original_name, file_name, storage_path, public_url, mime_type, size_bytes, uploaded_at')
+            .select('*')
             .single();
           if (docError) throw docError;
           setPreviousUploads(prev => [mapDocumentRow(insertedDocument), ...prev]);
