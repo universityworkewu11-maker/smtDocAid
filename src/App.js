@@ -2027,17 +2027,45 @@ function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchPatientProfile = async () => {
-    if (!auth.session?.user?.id) return;
+  const mapPatientRowToProfileData = (row) => ({
+    fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
+    email: row?.email || auth.session?.user?.email || "",
+    phone: row?.phone || "",
+    dob: row?.date_of_birth || row?.dob || "",
+    address: row?.address || "",
+    patientId: row?.id || row?.patient_id || null
+  });
 
-    setLoading(true);
+  const syncPublicPatient = async (source = {}) => {
+    if (!auth.session?.user?.id) return;
+    const normalizedName = source.fullName || source.full_name || profileData.fullName || auth.profile?.full_name || "";
+    const payload = {
+      user_id: auth.session.user.id,
+      full_name: normalizedName,
+      name: normalizedName,
+      email: source.email || profileData.email || auth.session.user.email || "",
+      phone: source.phone ?? profileData.phone ?? "",
+      address: source.address ?? profileData.address ?? "",
+      date_of_birth: (source.dob ?? source.date_of_birth ?? profileData.dob) || null
+    };
+    if (source.device_status) {
+      payload.device_status = source.device_status;
+    }
     try {
-      // Fetch patient profile from patient_profiles table
+      await supabase.from('patients').upsert(payload);
+    } catch (e) {
+      console.warn('patients upsert failed:', e?.message || e);
+    }
+  };
+
+  const loadLegacyPatientProfile = async () => {
+    if (!auth.session?.user?.id) return false;
+    try {
       const { data: patientProfile, error } = await supabase
         .from('patient_profiles')
         .select('*')
         .eq('user_id', auth.session.user.id)
-        .single();
+        .maybeSingle();
 
       if (patientProfile && !error) {
         setProfileData({
@@ -2048,14 +2076,52 @@ function ProfilePage() {
           address: patientProfile.address || "",
           patientId: patientProfile.id || null
         });
-      } else {
-        // If no patient profile exists, create one
+        await syncPublicPatient({
+          fullName: patientProfile.full_name,
+          phone: patientProfile.phone,
+          address: patientProfile.address,
+          dob: patientProfile.date_of_birth
+        });
+        return true;
+      }
+    } catch (legacyError) {
+      console.error('Error fetching patient profile (legacy table):', legacyError);
+    }
+    return false;
+  };
+
+  const fetchPatientProfile = async () => {
+    if (!auth.session?.user?.id) return;
+
+    setLoading(true);
+    const hydrateFromLegacy = async () => {
+      const loaded = await loadLegacyPatientProfile();
+      if (!loaded) {
         await createPatientProfile();
+      }
+    };
+
+    try {
+      const { data: patientRow, error } = await supabase
+        .from('patients')
+        .select('id,user_id,full_name,name,email,phone,address,date_of_birth,device_status')
+        .eq('user_id', auth.session.user.id)
+        .maybeSingle();
+
+      if (patientRow) {
+        setProfileData(mapPatientRowToProfileData(patientRow));
+        if (patientRow.device_status) {
+          setDeviceStatus(patientRow.device_status);
+        }
+      } else {
+        if (error) {
+          console.warn('patients fetch error:', error.message || error);
+        }
+        await hydrateFromLegacy();
       }
     } catch (err) {
       console.error('Error fetching patient profile:', err);
-      // Try to create a patient profile if fetch failed
-      await createPatientProfile();
+      await hydrateFromLegacy();
     } finally {
       setLoading(false);
     }
@@ -2089,6 +2155,12 @@ function ProfilePage() {
           dob: newProfile.date_of_birth || "",
           address: newProfile.address || "",
           patientId: newProfile.id || null
+        });
+        await syncPublicPatient({
+          fullName: newProfile.full_name,
+          phone: newProfile.phone,
+          address: newProfile.address,
+          dob: newProfile.date_of_birth
         });
       } else {
         // Fallback to basic profile data if creation failed
@@ -2143,19 +2215,12 @@ function ProfilePage() {
         console.error('Patient profile update failed:', error);
       }
 
-      // Mirror core fields into public.patients for unified patient listing
-      try {
-        await supabase.from('patients').upsert({
-          user_id: auth.session.user.id,
-          full_name: profileData.fullName,
-          name: profileData.fullName,
-          email: auth.session.user.email,
-          phone: profileData.phone,
-          address: profileData.address
-        });
-      } catch (e) {
-        console.warn('patients upsert failed:', e?.message || e);
-      }
+      await syncPublicPatient({
+        fullName: profileData.fullName,
+        phone: profileData.phone,
+        address: profileData.address,
+        dob: profileData.dob
+      });
 
       setEditing(false);
     } catch (err) {
