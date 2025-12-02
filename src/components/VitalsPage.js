@@ -378,6 +378,11 @@ const VitalsPage = () => {
               {vitalsData[currentVital.key]?.status === 'pending' && !isLoading && (
                 <div className="muted" style={{marginTop:12}}>No reading yet. Click "Take {currentVital.name}".</div>
               )}
+              {vitalsData[currentVital.key]?.status === 'error' && !isLoading && (
+                <button className="btn btn-outline" onClick={skipCurrentVital} style={{ marginTop: 12 }}>
+                  Skip this vital for now
+                </button>
+              )}
               {isLoading && (
                 <div className="skeleton animate" style={{height:56, marginTop:16, borderRadius:'0.75rem'}} />
               )}
