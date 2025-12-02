@@ -161,27 +161,65 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
     setError('');
     
     try {
-      const { error } = await supabase
+      const canonicalName = (patientData.name || '').trim() || derivePatientName();
+      const patientPayload = {
+        user_id: user.id,
+        full_name: canonicalName,
+        name: canonicalName,
+        email: user.email,
+        phone: patientData.phone || null,
+        address: patientData.address || null,
+        date_of_birth: patientData.dateOfBirth || null,
+        gender: patientData.gender || null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: savedPatient, error: patientError } = await supabase
+        .from('patients')
+        .upsert(patientPayload, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (patientError) throw patientError;
+
+      const ensuredPatientId = profileRow?.patient_id || patientData.patientId || generatePatientId();
+      const profilePayload = {
+        user_id: user.id,
+        patient_id: ensuredPatientId,
+        name: canonicalName,
+        gender: patientData.gender || null,
+        age: patientData.age || calculateAge(patientData.dateOfBirth),
+        date_of_birth: patientData.dateOfBirth || null,
+        phone: patientData.phone || null,
+        address: patientData.address || null,
+        emergency_contact: patientData.emergencyContact || null,
+        medical_history: patientData.medicalHistory || null,
+        allergies: patientData.allergies || null,
+        medications: patientData.medications || null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (profileRow?.id) {
+        profilePayload.id = profileRow.id;
+      }
+
+      const { data: savedProfile, error: profileError } = await supabase
         .from('patient_profiles')
-        .update({
-          name: patientData.name,
-          gender: patientData.gender,
-          age: patientData.age,
-          date_of_birth: patientData.dateOfBirth,
-          phone: patientData.phone,
-          address: patientData.address,
-          emergency_contact: patientData.emergencyContact,
-          medical_history: patientData.medicalHistory,
-          allergies: patientData.allergies,
-          medications: patientData.medications
-        })
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
+        .upsert(profilePayload, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (profileError) throw profileError;
+
+      setPatientRow(savedPatient);
+      setProfileRow(savedProfile);
+      setPatientData(prev => ({
+        ...prev,
+        ...buildComponentState(savedPatient, savedProfile)
+      }));
       setEditing(false);
       if (onUpdateProfile) {
-        onUpdateProfile(patientData);
+        onUpdateProfile({ ...patientData, ...buildComponentState(savedPatient, savedProfile) });
       }
     } catch (err) {
       console.error('Error saving patient data:', err);
@@ -193,8 +231,10 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
 
   const handleCancel = () => {
     setEditing(false);
-    // Reload data to discard changes
-    window.location.reload();
+    setPatientData(prev => ({
+      ...prev,
+      ...buildComponentState(patientRow, profileRow)
+    }));
   };
 
   if (loading) {
