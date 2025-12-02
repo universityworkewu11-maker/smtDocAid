@@ -349,10 +349,6 @@ function AIQuestionnairesPage() {
       setIAnswer('');
       // reset any previous report
       // ensure previous transcript is cleared too (handled by setting turns: [])
-      // reset any ongoing questionnaire view when interview starts
-      setCurrentQuestionnaire(null);
-      setCurrentQuestionIndex(0);
-      setAnswers({});
       // Persist immediately
       try { window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done), report: '' })); } catch (_) {}
     } catch (e) {
