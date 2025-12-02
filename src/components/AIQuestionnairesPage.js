@@ -496,14 +496,14 @@ function AIQuestionnairesPage() {
             <div>
               <p className="aiq-eyebrow">Guided assessments</p>
               <h1 className="aiq-hero-title">AI Health Questionnaires</h1>
-              <p className="aiq-hero-subtitle">Adaptive interview, intelligent forms, and streamlined doctor hand-offs in one workspace.</p>
+              <p className="aiq-hero-subtitle">Adaptive interview and streamlined doctor hand-offs in one workspace.</p>
               <div className="aiq-pill-row">
                 <span className={`aiq-pill ${interview.sessionId ? 'aiq-pill-success' : ''}`}>
                   {interview.sessionId ? 'Interview active' : 'Interview idle'}
                 </span>
                 <span className="aiq-pill">Status: {interviewStatus}</span>
-                <span className="aiq-pill">{questionnaires.length} forms</span>
-                <span className="aiq-pill">{completedQuestionnaires.length} completed</span>
+                <span className="aiq-pill">Selected doctors: {selectedDoctors.length}</span>
+                <span className="aiq-pill">Turns captured: {interview.turns.length}</span>
                 {interview.report && (
                   <span className="aiq-pill aiq-pill-info">Report ready</span>
                 )}
@@ -519,9 +519,9 @@ function AIQuestionnairesPage() {
               </button>
               <button
                 className="btn btn-secondary btn-lg"
-                onClick={() => scrollToSection('aiq-questionnaires')}
+                onClick={() => scrollToSection('aiq-interview')}
               >
-                Browse Questionnaires
+                Go to Interview Workspace
               </button>
             </div>
           </div>
