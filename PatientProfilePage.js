@@ -135,31 +135,73 @@ function PatientProfilePage() {
     setSaving(true);
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const profileData = {
-        ...formData,
-        user_id: user?.id,
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) throw new Error('User not authenticated');
+
+      const nameFromFields = `${formData.first_name || ''} ${formData.last_name || ''}`.trim();
+      const canonicalName = nameFromFields || formData.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+
+      const patientPayload = {
+        user_id: user.id,
+        full_name: canonicalName,
+        name: canonicalName,
+        email: formData.email || user.email,
+        phone: formData.phone || null,
+        address: formData.address || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
         updated_at: new Date().toISOString()
       };
 
-      let error;
-      if (patientData) {
-        // Update existing profile
-        ({ error } = await supabase
-          .from('patient_profiles')
-          .update(profileData)
-          .eq('id', patientData.id));
-      } else {
-        // Insert new profile
-        ({ error } = await supabase
-          .from('patient_profiles')
-          .insert([profileData]));
+      const { data: savedPatient, error: patientError } = await supabase
+        .from('patients')
+        .upsert(patientPayload, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (patientError) throw patientError;
+
+      const profilePayload = {
+        user_id: user.id,
+        first_name: formData.first_name || null,
+        last_name: formData.last_name || null,
+        full_name: canonicalName || null,
+        date_of_birth: formData.date_of_birth || null,
+        gender: formData.gender || null,
+        phone: formData.phone || null,
+        address: formData.address || null,
+        emergency_contact: formData.emergency_contact || null,
+        blood_type: formData.blood_type || null,
+        height: toNumberOrNull(formData.height),
+        weight: toNumberOrNull(formData.weight),
+        allergies: formData.allergies || null,
+        chronic_conditions: formData.chronic_conditions || null,
+        medications: formData.medications || null,
+        family_history: formData.family_history || null,
+        insurance_info: formData.insurance_info || null,
+        primary_care_physician: formData.primary_care_physician || null,
+        additional_notes: formData.additional_notes || null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (profileRow?.id) {
+        profilePayload.id = profileRow.id;
       }
 
-      if (error) throw error;
+      const { data: savedProfile, error: profileError } = await supabase
+        .from('patient_profiles')
+        .upsert(profilePayload, { onConflict: 'user_id' })
+        .select()
+        .single();
 
-      setPatientData(profileData);
+      if (profileError) throw profileError;
+
+      const merged = mergePatientRecords(savedPatient, savedProfile, user);
+      setPatientRow(savedPatient);
+      setProfileRow(savedProfile);
+      setPatientData(merged);
+      setFormData(merged);
       setEditing(false);
       alert('Profile updated successfully!');
     } catch (err) {
