@@ -119,7 +119,7 @@ const UploadDocumentsPage = () => {
             .insert([{
               user_id: user.id,
               storage_bucket: bucket,
-              storage_path,
+              storage_path: storagePath,
               file_name: fileName,
               original_name: file.name,
               mime_type: file.type,
