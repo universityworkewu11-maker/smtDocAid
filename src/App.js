@@ -25,6 +25,39 @@ import AIQuestionnairesPage from './components/AIQuestionnairesPage';
 import ScrollToTop from './components/ScrollToTop';
 import DoctorNotificationsPage from './components/DoctorNotificationsPage';
 // Interview flow is integrated into QuestionnairePage; no separate page import
+
+// Config
+const SERVER_BASE = (() => {
+  const env = (process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
+  if (env) return env;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:5001';
+  }
+  return '';
+})();
+
+const TBL_REPORT = process.env.REACT_APP_TBL_REPORT || 'diagnoses';
+const TBL_QR = process.env.REACT_APP_TBL_QR || 'questionnaire_responses';
+
+async function openaiChat(messages) {
+  const res = await fetch(`${SERVER_BASE}/api/v1/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages })
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(text ? (JSON.parseSafe?.(text)?.error || text) : 'Server AI error');
+  }
+  try {
+    const j = JSON.parse(text);
+    return j?.text || '';
+  } catch {
+    return text;
+  }
+}
+
 // Medical AI helper class
 class MedicalAI {
   static async analyzePatientData(patientData, context = {}) {
