@@ -411,7 +411,7 @@ const UploadDocumentsPage = () => {
         {/* Previously Uploaded from Supabase */}
         <div className="uploaded-files reveal">
           <h3>Previously Uploaded (from your account)</h3>
-          {previousUploads.length === 0 ? (
+          {previousUploadsLoading ? (
             <div className="files-grid" style={{ marginTop: 8 }}>
               {Array.from({ length: 4 }).map((_,i) => (
                 <div key={i} className="file-card" style={{ padding:'12px' }}>
@@ -421,21 +421,27 @@ const UploadDocumentsPage = () => {
                 </div>
               ))}
             </div>
+          ) : previousUploads.length === 0 ? (
+            <div className="empty-state" style={{ marginTop: 8 }}>
+              <p>No uploaded documents found yet.</p>
+            </div>
           ) : (
             <div className="files-grid">
-              {previousUploads.map((it) => (
-                <div key={it.path} className="file-card">
+              {previousUploads.map((doc) => (
+                <div key={doc.id || doc.path} className="file-card">
                   <div className="file-header">
-                    <div className="file-icon">{it.name.toLowerCase().endsWith('.pdf') ? '📄' : '🖼️'}</div>
+                    <div className="file-icon">
+                      {doc.type?.includes('pdf') ? '📄' : doc.type?.includes('image') ? '🖼️' : '📎'}
+                    </div>
                     <div className="file-info">
-                      <div className="file-name" title={it.name}>{it.name}</div>
+                      <div className="file-name" title={doc.name}>{doc.name}</div>
                       <div className="file-meta">
-                        {(it.size ? `${(it.size/1024/1024).toFixed(2)} MB` : '')}
-                        {it.lastModified ? ` • ${new Date(it.lastModified).toLocaleString()}` : ''}
+                        {doc.size ? `${(doc.size/1024/1024).toFixed(2)} MB` : ''}
+                        {doc.lastModified ? ` • ${new Date(doc.lastModified).toLocaleString()}` : ''}
                       </div>
                     </div>
-                    {it.url && (
-                      <a className="btn btn-outline btn-sm" href={it.url} target="_blank" rel="noreferrer">Open</a>
+                    {doc.url && (
+                      <a className="btn btn-outline btn-sm" href={doc.url} target="_blank" rel="noreferrer">Open</a>
                     )}
                   </div>
                 </div>
