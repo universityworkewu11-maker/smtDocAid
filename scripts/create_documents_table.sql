@@ -15,6 +15,11 @@ create table if not exists public.documents (
   public_url text,
   checksum text,
   metadata jsonb default '{}'::jsonb,
+    extraction_status text not null default 'pending',
+    extracted_text text,
+    extraction_summary text,
+    extraction_error text,
+    last_extracted_at timestamptz,
   uploaded_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
