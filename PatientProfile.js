@@ -25,6 +25,13 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
   const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  const derivePatientName = () => {
+    if (patientData.name) return patientData.name;
+    if (user?.user_metadata?.full_name) return user.user_metadata.full_name;
+    if (user?.email) return user.email.split('@')[0];
+    return '';
+  };
+
   // Generate auto patient ID
   const generatePatientId = () => {
     const timestamp = Date.now().toString(36);
