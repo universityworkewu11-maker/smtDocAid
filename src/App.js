@@ -855,6 +855,50 @@ function LoginPage() {
         </p>
       </div>
     </main>
+      {feedbackTarget && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+            padding: '16px'
+          }}
+        >
+          <div className="card" style={{ maxWidth: 520, width: '100%', padding: 24, position: 'relative' }}>
+            <h3 className="card-title" style={{ marginBottom: 4 }}>Send Feedback</h3>
+            <p className="muted" style={{ marginBottom: 12 }}>Patient: {feedbackTarget.name}</p>
+            {feedbackStatus && (
+              <div className={`alert ${feedbackStatus.type === 'error' ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: 12 }}>
+                {feedbackStatus.message}
+              </div>
+            )}
+            <form onSubmit={submitFeedback}>
+              <textarea
+                className="form-input"
+                rows={5}
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+                placeholder="Share clinical notes, next steps, or recommendations"
+                style={{ width: '100%', minHeight: 140, resize: 'vertical', marginBottom: 16 }}
+                disabled={feedbackSaving}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <button type="button" className="btn btn-light" onClick={closeFeedbackForm} disabled={feedbackSaving}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={feedbackSaving}>
+                  {feedbackSaving ? 'Sending…' : 'Send Feedback'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
   );
 }
 
