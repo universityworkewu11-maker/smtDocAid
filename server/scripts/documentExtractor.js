@@ -118,7 +118,6 @@ async function summarizeText(content, title) {
 }
 
 async function processDocument(doc) {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docx-'));
   try {
     await supabase
       .from('documents')
@@ -160,8 +159,6 @@ async function processDocument(doc) {
       .eq('id', doc.id);
     // eslint-disable-next-line no-console
     console.error(`[doc-extractor] Failed ${doc.id}:`, err.message);
-  } finally {
-    await fs.rm(tmpDir, { recursive: true, force: true });
   }
 }
 
