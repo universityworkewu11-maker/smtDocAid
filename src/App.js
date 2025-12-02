@@ -62,54 +62,9 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       }
 
       return response;
-    } catch (error) {
-      console.error('AI Analysis Error:', error);
-      return this._getFallbackAnalysis(patientData);
-    }
-  }
-
-  static _getFallbackAnalysis(patientData) {
-    return `Demo Analysis (AI Unavailable)
-    
-**Differential Diagnosis**:
-1. Viral Upper Respiratory Infection (40%)
-2. Dehydration (30%)
-3. Anxiety Disorder (20%)
-4. Other (10%)
-
-**Recommended Tests**:
-- Complete Blood Count (CBC)
-- Comprehensive Metabolic Panel (CMP)
-- COVID-19 test if febrile
-
-**Treatment Options**:
-- Rest and hydration
-- Antipyretics if fever > 101 F
-- Follow-up in 3 days if symptoms persist
-
-**Risk Assessment**: Low
-**Follow-up Plan**: Telehealth visit in 3 days
-
-Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
-  }
-
-  static async diagnose(patientData) {
-    return this.analyzePatientData(patientData);
-  }
-
-  static async generateQuestionnaire(patientContext) {
-    try {
-      const contextSummary = JSON.stringify(patientContext || {});
-      const systemPrompt = `You are a medical questionnaire generator. Using the provided patient context, generate a thorough clinical questionnaire designed to capture symptoms, vitals, relevant history, and document-relevant questions.\n\nSTRICT OUTPUT FORMAT (CRITICAL):\n- Return ONLY valid JSON.\n- Output must be ONLY a valid JSON array (no prose, no markdown, no backticks, no code fences).\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Each item MUST include exactly these fields: id (number), text (string), type (one of: "radio", "checkbox", "range", "text", "scale"), required (boolean).\n- Include an "options" (array of strings) ONLY when type is "radio" or "checkbox".\n- For type "range" or "scale", include numeric min and max fields.\n- Keep wording concise and clinically relevant.\n- Use the patient context to tailor a subset of questions.\n\nEXAMPLE (FORMAT ONLY, NOT CONTENT):\n[\n  {"id": 1, "text": "Chief complaint?", "type": "text", "required": true},\n  {"id": 2, "text": "Do you have a fever?", "type": "radio", "required": true, "options": ["Yes", "No"]}\n]\n\nReturn ONLY the JSON array. Do not include any text before or after.\n\nPatient context: ${contextSummary}`;
-
-      const response = await this._callAI([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: 'Return ONLY valid JSON. Output only the JSON array of questions as described. No commentary. No markdown or code fences.' }
-      ]);
-      try {
-        return this._parseQuestionnaire(response);
-      } catch (parseErr) {
-        // One-shot repair: ask the AI to convert to strict JSON array
+      </div>
+    </main>
+  );
   const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):\n- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Include options only for radio/checkbox.\n- Include min and max only for range/scale.`;
         const repaired = await this._callAI([
           { role: 'system', content: repairInstr },
