@@ -43,6 +43,11 @@ const getInitialServerBase = () => {
   return '';
 };
 
+const truncate = (str = '', len = 240) => {
+  if (!str) return '';
+  return str.length > len ? `${str.slice(0, len)}…` : str;
+};
+
 const formatContextSummary = (ctx) => {
   if (!ctx) return '';
   const lines = [];
@@ -64,11 +69,14 @@ const formatContextSummary = (ctx) => {
     lines.push(`Recent vitals: ${vitalsLine}`);
   }
   if (Array.isArray(ctx.uploads) && ctx.uploads.length > 0) {
-    const uploadsLine = ctx.uploads
-      .slice(0, 5)
-      .map((u) => u.name || u.title || 'Document')
-      .join(', ');
-    lines.push(`Recent documents: ${uploadsLine}`);
+    const uploadSnippets = ctx.uploads
+      .slice(0, 3)
+      .map((doc) => {
+        const label = doc.name || doc.title || 'Document';
+        const summary = truncate(doc.summary || doc.extractedText || '', 140);
+        return summary ? `${label}: ${summary}` : label;
+      });
+    lines.push(`Recent documents: ${uploadSnippets.join(' | ')}`);
   }
   return lines.join('\n');
 };
@@ -242,7 +250,10 @@ function AIQuestionnairesPage() {
               type: doc.mime_type || '',
               size: doc.size_bytes || null,
               url: doc.public_url || null,
-              uploadedAt: doc.uploaded_at || null
+              uploadedAt: doc.uploaded_at || null,
+              status: doc.extraction_status || 'pending',
+              summary: doc.extraction_summary || null,
+              extractedText: doc.extracted_text || null
             }));
           }
         } catch (documentsError) {
