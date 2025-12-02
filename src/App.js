@@ -2584,14 +2584,14 @@ function DoctorPortal() {
   const openFeedbackForm = (patient) => {
     setFeedbackTarget(patient);
     setFeedbackMessage('');
-    setFeedbackStatus('');
+    setFeedbackStatus(null);
   };
 
   const closeFeedbackForm = () => {
     if (feedbackSaving) return;
     setFeedbackTarget(null);
     setFeedbackMessage('');
-    setFeedbackStatus('');
+    setFeedbackStatus(null);
   };
 
   const submitFeedback = async (event) => {
@@ -2599,11 +2599,11 @@ function DoctorPortal() {
     if (!feedbackTarget) return;
     const trimmed = feedbackMessage.trim();
     if (!trimmed) {
-      setFeedbackStatus('Please enter feedback before sending.');
+      setFeedbackStatus({ type: 'error', message: 'Please enter feedback before sending.' });
       return;
     }
     setFeedbackSaving(true);
-    setFeedbackStatus('');
+    setFeedbackStatus(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
@@ -2616,13 +2616,13 @@ function DoctorPortal() {
       };
       const { error: insertError } = await supabase.from('notifications').insert(payload);
       if (insertError) throw insertError;
-      setFeedbackStatus('Feedback sent to patient.');
+      setFeedbackStatus({ type: 'success', message: 'Feedback sent to patient.' });
       setFeedbackMessage('');
       setTimeout(() => {
         closeFeedbackForm();
       }, 800);
     } catch (feedbackError) {
-      setFeedbackStatus(feedbackError?.message || String(feedbackError));
+      setFeedbackStatus({ type: 'error', message: feedbackError?.message || String(feedbackError) });
     } finally {
       setFeedbackSaving(false);
     }
