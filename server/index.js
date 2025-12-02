@@ -10,7 +10,6 @@ const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetc
 
 const app = express();
 
-<<<<<<< HEAD
 // CORS helper function (supports local dev + production)
 function setCorsHeaders(req, res) {
 	const defaults = [
@@ -32,19 +31,6 @@ function setCorsHeaders(req, res) {
 	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 	res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 	res.setHeader('Access-Control-Allow-Credentials', 'true');
-=======
-// CORS helper function for Vercel serverless functions
-function setCorsHeaders(res) {
-   // For development, allow all origins; for production, restrict to Vercel
-   if (process.env.NODE_ENV !== 'production') {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-   } else {
-      res.setHeader('Access-Control-Allow-Origin', 'https://smt-doc-aid.vercel.app');
-   }
-   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-   res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-   res.setHeader('Access-Control-Allow-Credentials', 'true');
->>>>>>> 77cd9b8 (Add Start Over, Generate Report, and Share with Doctor buttons to AI Questionnaires page completion screen)
 }
 
 // Handle all OPTIONS requests globally
