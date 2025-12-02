@@ -164,31 +164,19 @@ function AIQuestionnairesPage() {
   );
 
   const fetchDoctors = useCallback(async () => {
-    let data = [];
     try {
-      const primary = await supabase
+      const { data, error } = await supabase
         .from('doctors')
-        .select('id, user_id, full_name, name, email, specialist, specialty, specialities, updated_at')
+        .select('id, user_id, name, email, specialist, specialty, specialities, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
-      if (primary.error) throw primary.error;
-      data = primary.data || [];
-    } catch (primaryError) {
-      try {
-        const fallback = await supabase
-          .from('doctor_profiles')
-          .select('id, user_id, full_name, name, email, specialty, specialities, specialist, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (fallback.error) throw fallback.error;
-        data = fallback.data || [];
-      } catch (fallbackError) {
-        console.error('Failed to fetch doctors', fallbackError);
-        setError('Unable to load doctors right now. Please refresh later.');
-        return;
-      }
+      if (error) throw error;
+      setDoctors(data || []);
+      setError('');
+    } catch (fetchError) {
+      console.error('Failed to fetch doctors', fetchError);
+      setError('Unable to load doctors right now. Please refresh later.');
     }
-    setDoctors(data);
   }, []);
 
   const buildInterviewContext = useCallback(async () => {
