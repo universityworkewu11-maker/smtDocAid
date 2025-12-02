@@ -57,77 +57,89 @@ const UploadDocumentsPage = () => {
     })();
   }, []);
 
-
-  // Mock file upload with progress simulation
-  const mockFileUpload = useCallback((file, fileId, fileName) => {
-    return new Promise((resolve, reject) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 30;
-        setUploadProgress(prev => ({ ...prev, [fileId]: Math.min(progress, 90) }));
-
-        if (progress >= 90) {
-          clearInterval(interval);
-          // Simulate completion
-          setTimeout(() => {
-            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-            resolve({ success: true });
-          }, 500);
-        }
-      }, 200);
-
-      // Simulate occasional errors
-      if (Math.random() < 0.1) {
-        setTimeout(() => {
-          clearInterval(interval);
-          reject(new Error('Upload failed'));
-        }, 1000);
-      }
-    });
-  }, [setUploadProgress]);
-
   // Upload files to Supabase (or mock)
   const uploadFiles = useCallback(async (files) => {
+    if (!files?.length) return;
     setIsUploading(true);
+    setError('');
     const newFiles = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const fileName = `${fileId}-${file.name}`;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setError('You must be signed in to upload documents.');
+        return;
+      }
 
-      try {
-        // Simulate upload progress
+      const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const sanitizedOriginalName = file.name.replace(/\s+/g, '_');
+        const fileName = `${fileId}-${sanitizedOriginalName}`;
+        const storagePath = `${user.id}/${fileName}`;
+
         setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
 
-        // Mock upload process
-        await mockFileUpload(file, fileId, fileName);
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(storagePath, file, {
+            upsert: true,
+            contentType: file.type || 'application/octet-stream'
+          });
+
+        if (uploadError) {
+          console.error('Upload failed:', uploadError);
+          setUploadProgress(prev => ({ ...prev, [fileId]: 'error' }));
+          setError(uploadError.message || 'Failed to upload file.');
+          continue;
+        }
+
+        let publicUrl = null;
+        const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+        publicUrl = publicData?.publicUrl || null;
+
+        if (!publicUrl) {
+          try {
+            const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(storagePath, 3600);
+            publicUrl = signed?.signedUrl || null;
+          } catch (signedError) {
+            console.warn('Signed URL error:', signedError);
+          }
+        }
 
         const uploadedFile = {
           id: fileId,
           name: file.name,
           fileName,
+          storagePath,
           size: file.size,
           type: file.type,
-          url: `https://example.com/uploads/${fileName}`, // Mock URL
+          url: publicUrl,
           uploadedAt: new Date().toISOString(),
           status: 'completed'
         };
 
         newFiles.push(uploadedFile);
-
-        // Update progress
         setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-
-      } catch (err) {
-        console.error('Upload failed:', err);
-        setUploadProgress(prev => ({ ...prev, [fileId]: 'error' }));
       }
-    }
 
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-    setIsUploading(false);
-  }, [mockFileUpload]);
+      if (newFiles.length) {
+        setUploadedFiles(prev => [...prev, ...newFiles]);
+        // Optimistically append to history list so it shows immediately
+        setPreviousUploads(prev => [...newFiles.map(f => ({
+          name: f.name,
+          path: f.storagePath,
+          url: f.url,
+          size: f.size,
+          lastModified: f.uploadedAt
+        })), ...prev]);
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }, []);
 
   // Process selected files
   const handleFiles = useCallback(async (files) => {
