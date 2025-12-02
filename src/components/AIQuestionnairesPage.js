@@ -17,13 +17,7 @@ const SERVER_BASE = (() => {
 function AIQuestionnairesPage() {
   const navigate = useNavigate();
 
-  const [questionnaires, setQuestionnaires] = useState([]);
-  const [currentQuestionnaire, setCurrentQuestionnaire] = useState(null);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [completedQuestionnaires, setCompletedQuestionnaires] = useState([]);
   // Interview mode state (one-by-one questions)
   const [interview, setInterview] = useState({ sessionId: null, question: '', turns: [], done: false, report: '' });
   const [iAnswer, setIAnswer] = useState('');
@@ -32,14 +26,9 @@ function AIQuestionnairesPage() {
   const [serverBase, setServerBase] = useState(SERVER_BASE);
   const [selectedDoctors, setSelectedDoctors] = useState([]);
   const [doctors, setDoctors] = useState([]);
-  const [completedQuestionnaire, setCompletedQuestionnaire] = useState(null);
-  const [questionnaireReport, setQuestionnaireReport] = useState('');
-  const [generatingReport, setGeneratingReport] = useState(false);
-  const [sharingReport, setSharingReport] = useState(false);
   const LS_KEYS = {
     interview: 'interview_state_v1',
     base: 'api_server_base_v1',
-    questionnaire: 'questionnaire_progress_v1',
     selectedDoctors: 'selected_doctors_v1'
   };
 
