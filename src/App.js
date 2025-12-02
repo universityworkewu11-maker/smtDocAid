@@ -36,52 +36,6 @@ const SERVER_BASE = (() => {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:5001';
-  }
-  return '';
-})();
-
-// Supabase table config (allow overriding via .env)
-const TBL_REPORT = process.env.REACT_APP_TBL_REPORT || 'diagnoses';
-const TBL_QR = process.env.REACT_APP_TBL_QR || 'questionnaire_responses';
-
-async function openaiChat(messages) {
-  // Always call backend server to keep API key private
-  const res = await fetch(`${SERVER_BASE}/api/v1/ai/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages })
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    // Backend already masks invalid key messages
-    throw new Error(text ? (JSON.parseSafe?.(text)?.error || text) : 'Server AI error');
-  }
-  try {
-    const j = JSON.parse(text);
-    return j?.text || '';
-  } catch {
-    return text;
-  }
-}
-
-// Medical AI helper class
-class MedicalAI {
-  static async analyzePatientData(patientData, context = {}) {
-    const systemPrompt = `You are a medical diagnosis assistant analyzing:
-- Patient: ${patientData.age || 'unknown'}yo ${patientData.gender || ''}
-- Symptoms: ${JSON.stringify(patientData.symptoms || {})}
-- Vitals: ${JSON.stringify(patientData.vitals || {})}
-- History: ${patientData.history || 'none'}
-- Medications: ${patientData.medications || 'none'}
-- Context: ${JSON.stringify(context || {})}
-
-Provide structured analysis with:
-1. Differential Diagnosis (ranked)
-2. Recommended Tests
-3. Treatment Options
-4. Risk Assessment
-5. Follow-up Plan
-
 Use medical terminology but explain complex terms. Format as markdown.`;
 
     try {
