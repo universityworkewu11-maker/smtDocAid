@@ -1130,6 +1130,38 @@ function PatientPortal() {
     checkDevice();
   }, []);
 
+  const fetchDoctorFeedback = useCallback(async () => {
+    if (!patientId) return;
+    setFeedbackLoading(true);
+    setFeedbackError('');
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id,message,created_at,is_read')
+        .eq('patient_id', patientId)
+        .eq('type', 'doctor_feedback')
+        .order('created_at', { ascending: false })
+        .limit(15);
+      if (error) throw error;
+      const rows = data || [];
+      setFeedbackNotes(rows.map(row => ({ ...row, is_read: true })));
+      const unreadIds = rows.filter(row => !row.is_read).map(row => row.id);
+      if (unreadIds.length) {
+        try {
+          await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
+        } catch (_) {}
+      }
+    } catch (err) {
+      setFeedbackError(err?.message || String(err));
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [patientId]);
+
+  useEffect(() => {
+    fetchDoctorFeedback();
+  }, [fetchDoctorFeedback]);
+
   // Removed inline health report generation from dashboard in favor of guided flow
 
   return (
