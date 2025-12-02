@@ -1483,14 +1483,19 @@ function QuestionnairePage() {
       } catch (_) { vitals = []; }
 
       try {
-        // attempt to list uploads from Supabase if auth available
         const uid = auth?.session?.user?.id;
         if (uid) {
-          const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-          const { data } = await supabase.storage.from(bucket).list(uid, { limit: 50 });
-          uploads = (data || []).map(i => i.name);
+          const { data } = await supabase
+            .from('documents')
+            .select('original_name,file_name')
+            .eq('user_id', uid)
+            .order('uploaded_at', { ascending: false })
+            .limit(50);
+          uploads = (data || []).map(i => i.original_name || i.file_name || 'Document');
         }
-      } catch (_) { uploads = []; }
+      } catch (_) {
+        uploads = [];
+      }
 
       try {
         const questions = await MedicalAI.generateQuestionnaire({ vitals, uploads });
