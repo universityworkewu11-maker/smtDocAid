@@ -154,20 +154,6 @@ function AIQuestionnairesPage() {
     }
   };
 
-  const fetchQuestionnaires = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('ai_questionnaires')
-        .select('*')
-        .eq('is_active', true);
-
-      if (error) throw error;
-      setQuestionnaires(data || []);
-    } catch (err) {
-      console.error('Error fetching questionnaires:', err);
-    }
-  };
-
   const fetchDoctors = async () => {
     try {
       console.log('Fetching doctors...');
