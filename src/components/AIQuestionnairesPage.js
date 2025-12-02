@@ -464,7 +464,7 @@ function AIQuestionnairesPage() {
   const matchingDoctors = normalizedQuery
     ? doctors.filter((doc) => {
         const name = String(doc?.full_name || doc?.name || '').toLowerCase();
-        const specialty = String(doc?.specialist || doc?.specialty || doc?.specialities || '').toLowerCase();
+        const specialty = String(doc?.specialist || doc?.bio || '').toLowerCase();
         return name.includes(normalizedQuery) || specialty.includes(normalizedQuery);
       })
     : doctors;
@@ -680,7 +680,7 @@ function AIQuestionnairesPage() {
                         />
                         <div>
                           <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
-                          <div className="muted">{doctor.specialist || doctor.specialty || doctor.specialities || 'General practice'}</div>
+                          <div className="muted">{doctor.specialist || doctor.bio || 'General practice'}</div>
                         </div>
                       </label>
                     );
