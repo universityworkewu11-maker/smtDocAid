@@ -72,8 +72,6 @@ function AIQuestionnairesPage() {
 
   useEffect(() => {
     // Initial data fetch
-    fetchQuestionnaires();
-    fetchCompletedQuestionnaires();
     fetchDoctors();
     // Restore persisted server base and interview state
     try {
