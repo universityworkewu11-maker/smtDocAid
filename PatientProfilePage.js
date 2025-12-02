@@ -66,20 +66,56 @@ function PatientProfilePage() {
 
   const fetchPatientData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { data, error } = await supabase
-        .from('patient_profiles')
-        .select('*')
-        .eq('user_id', user?.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        throw error;
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) {
+        throw new Error('User not authenticated');
       }
 
-      setPatientData(data);
-      setFormData(data || {});
+      const [patientResponse, profileResponse] = await Promise.all([
+        supabase
+          .from('patients')
+          .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,updated_at,created_at')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('patient_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+      ]);
+
+      if (patientResponse.error && patientResponse.error.code !== 'PGRST116') {
+        throw patientResponse.error;
+      }
+      if (profileResponse.error && profileResponse.error.code !== 'PGRST116') {
+        throw profileResponse.error;
+      }
+
+      let resolvedPatient = patientResponse.data || null;
+      if (!resolvedPatient) {
+        const fallbackName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+        const basePayload = {
+          user_id: user.id,
+          full_name: fallbackName,
+          name: fallbackName,
+          email: user.email
+        };
+        const { data: insertedPatient, error: insertError } = await supabase
+          .from('patients')
+          .upsert(basePayload, { onConflict: 'user_id' })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        resolvedPatient = insertedPatient;
+      }
+
+      const resolvedProfile = profileResponse.data || null;
+      const merged = mergePatientRecords(resolvedPatient, resolvedProfile, user);
+      setPatientRow(resolvedPatient);
+      setProfileRow(resolvedProfile);
+      setPatientData(merged);
+      setFormData(merged);
     } catch (err) {
       console.error('Error fetching patient data:', err);
     } finally {
