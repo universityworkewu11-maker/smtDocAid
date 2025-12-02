@@ -56,6 +56,29 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
     return age.toString();
   };
 
+  const buildComponentState = (patientRecord, profileRecord) => {
+    const canonicalName = patientRecord?.full_name || patientRecord?.name || profileRecord?.name || derivePatientName();
+    const dob = patientRecord?.date_of_birth || profileRecord?.date_of_birth || '';
+    const gender = profileRecord?.gender || patientRecord?.gender || '';
+    const phone = patientRecord?.phone || profileRecord?.phone || '';
+    const address = profileRecord?.address || patientRecord?.address || '';
+    const patientId = profileRecord?.patient_id || patientRecord?.id || patientData.patientId;
+
+    return {
+      patientId: patientId || '',
+      name: canonicalName || '',
+      gender,
+      age: calculateAge(dob),
+      dateOfBirth: dob || '',
+      phone,
+      address,
+      emergencyContact: profileRecord?.emergency_contact || '',
+      medicalHistory: profileRecord?.medical_history || '',
+      allergies: profileRecord?.allergies || '',
+      medications: profileRecord?.medications || ''
+    };
+  };
+
   // Load patient data from Supabase
   useEffect(() => {
     const loadPatientData = async () => {
