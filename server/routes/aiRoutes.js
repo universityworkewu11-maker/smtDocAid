@@ -8,14 +8,18 @@ const router = express.Router();
 // In-memory session store: sessionId -> { history: [], turns: 0, createdAt, meta }
 const sessions = new Map();
 
-function buildSystemPrompt() {
-  return (
+function buildSystemPrompt(language = 'en') {
+  const base = (
     'You are a clinical intake assistant. Goal: ask 10–15 focused, medically relevant questions, one at a time, to gather sufficient info for a doctor.\n' +
     '- Always return ONLY valid JSON with keys: {"question":"...","done":false}.\n' +
     '- If you have enough info, return {"question":"","done":true}.\n' +
     '- Keep each question short, clear, and clinically meaningful.\n' +
     '- Avoid greetings or explanations. No markdown, no code fences.'
   );
+  const languageInstruction = language === 'bn'
+    ? '\n- All patient-facing text (questions, clarifications) must be written in Bangla (বাংলা).'
+    : '\n- Use English for all patient-facing text.';
+  return base + languageInstruction;
 }
 
 function parseJSON(str, fallback = null) {
@@ -42,10 +46,11 @@ No markdown, no code fences, no extra text. Use double quotes.`;
 
 router.post('/chat/start', async (req, res) => {
   try {
-    const { symptom, vitals, documents, userId } = req.body || {};
+    const { symptom, vitals, documents, userId, language } = req.body || {};
+    const normalizedLanguage = language === 'bn' ? 'bn' : 'en';
     const sessionId = randomUUID();
     const history = [
-      { role: 'system', content: buildSystemPrompt() },
+      { role: 'system', content: buildSystemPrompt(normalizedLanguage) },
       { role: 'user', content: JSON.stringify({ symptom: symptom || '', vitals: vitals || {}, documents: documents || [] }) }
     ];
 
@@ -62,7 +67,7 @@ router.post('/chat/start', async (req, res) => {
       history.push({ role: 'assistant', content: JSON.stringify({ question: '', done: true }) });
     }
 
-    sessions.set(sessionId, { history, turns: 1, createdAt: Date.now(), meta: { userId, vitals: vitals || {}, documents: documents || [] } });
+    sessions.set(sessionId, { history, turns: 1, createdAt: Date.now(), meta: { userId, vitals: vitals || {}, documents: documents || [], language: normalizedLanguage } });
     await saveConversation(sessionId, userId, history, { phase: 'start' });
 
     return res.json({ sessionId, question, done: Boolean(done) });
@@ -73,9 +78,13 @@ router.post('/chat/start', async (req, res) => {
 
 router.post('/chat/next', async (req, res) => {
   try {
-    const { sessionId, answer } = req.body || {};
+    const { sessionId, answer, language } = req.body || {};
     const sess = sessions.get(sessionId);
     if (!sess) return res.status(400).json({ error: 'invalid sessionId' });
+
+    if (language && (language === 'bn' || language === 'en') && sess.meta) {
+      sess.meta.language = language;
+    }
 
     // Append last answer
     sess.history.push({ role: 'user', content: String(answer || '').trim() });
@@ -103,11 +112,16 @@ router.post('/chat/next', async (req, res) => {
 
 router.post('/chat/report', async (req, res) => {
   try {
-    const { sessionId } = req.body || {};
+    const { sessionId, language } = req.body || {};
     const sess = sessions.get(sessionId);
     if (!sess) return res.status(400).json({ error: 'invalid sessionId' });
 
-    const system = 'Return ONLY valid JSON with a single key: {"report":"<markdown>"}. Produce a concise, structured clinical report with headings exactly: Chief Complaint, History of Present Illness, Vitals, Probable Diagnosis, Recommendations.';
+    if (language && (language === 'bn' || language === 'en') && sess.meta) {
+      sess.meta.language = language;
+    }
+
+    const reportLanguage = sess.meta?.language === 'bn' ? 'Bangla (বাংলা)' : 'English';
+    const system = `Return ONLY valid JSON with a single key: {"report":"<markdown>"}. Produce a concise, structured clinical report with headings exactly: Chief Complaint, History of Present Illness, Vitals, Probable Diagnosis, Recommendations. Write the patient-facing text in ${reportLanguage}.`;
     const history = [
       { role: 'system', content: system },
       ...sess.history,
