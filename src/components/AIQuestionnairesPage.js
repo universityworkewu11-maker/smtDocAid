@@ -2,6 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
+// Version stamp to help verify which build is running in the browser
+try {
+  // eslint-disable-next-line no-console
+  console.log('AIQuestionnairesPage loaded - buildStamp:', '%s', new Date().toISOString());
+} catch (_) {}
+
 const MAX_VISIBLE_DOCTORS = 6;
 
 const LS_KEYS = {
