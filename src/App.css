@@ -2342,6 +2342,12 @@ main {
     }
   }
 
+  @media (max-width: 600px) {
+    .aiq-share-status {
+      flex-direction: column;
+    }
+  }
+
 @media (max-width: 480px) {
   .logo {
     font-size: var(--font-size-xl);
