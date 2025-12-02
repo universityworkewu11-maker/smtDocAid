@@ -177,6 +177,22 @@ const VitalsPage = () => {
     }));
   };
 
+  const skipCurrentVital = () => {
+    setVitalsData(prev => ({
+      ...prev,
+      [currentVital.key]: {
+        value: null,
+        status: 'skipped',
+        timestamp: new Date().toISOString(),
+        confirmed: true
+      }
+    }));
+
+    if (currentStep < vitalsConfig.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'confirmed':
