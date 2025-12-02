@@ -2705,7 +2705,7 @@ function DoctorPortal() {
                     >
                       View Details
                     </Link>
-                    <button className="btn btn-success ml-2">
+                    <button className="btn btn-success ml-2" onClick={() => openFeedbackForm(patient)}>
                       Add Feedback
                     </button>
                   </td>
