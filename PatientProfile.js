@@ -20,10 +20,19 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [patientRow, setPatientRow] = useState(null);
+  const [profileRow, setProfileRow] = useState(null);
   
   const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
   const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const derivePatientName = () => {
+    if (patientData.name) return patientData.name;
+    if (user?.user_metadata?.full_name) return user.user_metadata.full_name;
+    if (user?.email) return user.email.split('@')[0];
+    return '';
+  };
 
   // Generate auto patient ID
   const generatePatientId = () => {
@@ -47,64 +56,83 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
     return age.toString();
   };
 
+  const buildComponentState = (patientRecord, profileRecord) => {
+    const canonicalName = patientRecord?.full_name || patientRecord?.name || profileRecord?.name || derivePatientName();
+    const dob = patientRecord?.date_of_birth || profileRecord?.date_of_birth || '';
+    const gender = profileRecord?.gender || patientRecord?.gender || '';
+    const phone = patientRecord?.phone || profileRecord?.phone || '';
+    const address = profileRecord?.address || patientRecord?.address || '';
+    const patientId = profileRecord?.patient_id || patientRecord?.id || patientData.patientId;
+
+    return {
+      patientId: patientId || '',
+      name: canonicalName || '',
+      gender,
+      age: calculateAge(dob),
+      dateOfBirth: dob || '',
+      phone,
+      address,
+      emergencyContact: profileRecord?.emergency_contact || '',
+      medicalHistory: profileRecord?.medical_history || '',
+      allergies: profileRecord?.allergies || '',
+      medications: profileRecord?.medications || ''
+    };
+  };
+
   // Load patient data from Supabase
   useEffect(() => {
     const loadPatientData = async () => {
-      if (!user) return;
-      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const { data, error } = await supabase
-          .from('patient_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found
-          throw error;
-        }
-        
-        if (data) {
-          setPatientData({
-            patientId: data.patient_id,
-            name: data.name || '',
-            gender: data.gender || '',
-            age: data.age || '',
-            dateOfBirth: data.date_of_birth || '',
-            phone: data.phone || '',
-            address: data.address || '',
-            emergencyContact: data.emergency_contact || '',
-            medicalHistory: data.medical_history || '',
-            allergies: data.allergies || '',
-            medications: data.medications || ''
-          });
-        } else {
-          // Create new patient profile
-          const newPatientId = generatePatientId();
-          setPatientData(prev => ({
-            ...prev,
-            patientId: newPatientId
-          }));
-          
-          // Save new profile to database
-          const { error: insertError } = await supabase
+        const [patientResponse, profileResponse] = await Promise.all([
+          supabase
+            .from('patients')
+            .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,created_at,updated_at')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
             .from('patient_profiles')
-            .insert([{
-              user_id: user.id,
-              patient_id: newPatientId,
-              name: '',
-              gender: '',
-              age: '',
-              date_of_birth: '',
-              phone: '',
-              address: '',
-              emergency_contact: '',
-              medical_history: '',
-              allergies: '',
-              medications: ''
-            }]);
-          
-          if (insertError) throw insertError;
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle()
+        ]);
+
+        if (patientResponse.error && patientResponse.error.code !== 'PGRST116') {
+          throw patientResponse.error;
         }
+        if (profileResponse.error && profileResponse.error.code !== 'PGRST116') {
+          throw profileResponse.error;
+        }
+
+        let resolvedPatient = patientResponse.data || null;
+        if (!resolvedPatient) {
+          const fallbackName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+          const basePayload = {
+            user_id: user.id,
+            full_name: fallbackName,
+            name: fallbackName,
+            email: user.email
+          };
+          const { data: insertedPatient, error: insertError } = await supabase
+            .from('patients')
+            .upsert(basePayload, { onConflict: 'user_id' })
+            .select()
+            .single();
+          if (insertError) throw insertError;
+          resolvedPatient = insertedPatient;
+        }
+
+        const resolvedProfile = profileResponse.data || null;
+        setPatientRow(resolvedPatient);
+        setProfileRow(resolvedProfile);
+        setPatientData(prev => ({
+          ...prev,
+          ...buildComponentState(resolvedPatient, resolvedProfile)
+        }));
       } catch (err) {
         console.error('Error loading patient data:', err);
         setError('Failed to load patient profile');
@@ -112,7 +140,7 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
         setLoading(false);
       }
     };
-    
+
     loadPatientData();
   }, [user, supabase]);
 
@@ -133,27 +161,65 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
     setError('');
     
     try {
-      const { error } = await supabase
+      const canonicalName = (patientData.name || '').trim() || derivePatientName();
+      const patientPayload = {
+        user_id: user.id,
+        full_name: canonicalName,
+        name: canonicalName,
+        email: user.email,
+        phone: patientData.phone || null,
+        address: patientData.address || null,
+        date_of_birth: patientData.dateOfBirth || null,
+        gender: patientData.gender || null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: savedPatient, error: patientError } = await supabase
+        .from('patients')
+        .upsert(patientPayload, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (patientError) throw patientError;
+
+      const ensuredPatientId = profileRow?.patient_id || patientData.patientId || generatePatientId();
+      const profilePayload = {
+        user_id: user.id,
+        patient_id: ensuredPatientId,
+        name: canonicalName,
+        gender: patientData.gender || null,
+        age: patientData.age || calculateAge(patientData.dateOfBirth),
+        date_of_birth: patientData.dateOfBirth || null,
+        phone: patientData.phone || null,
+        address: patientData.address || null,
+        emergency_contact: patientData.emergencyContact || null,
+        medical_history: patientData.medicalHistory || null,
+        allergies: patientData.allergies || null,
+        medications: patientData.medications || null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (profileRow?.id) {
+        profilePayload.id = profileRow.id;
+      }
+
+      const { data: savedProfile, error: profileError } = await supabase
         .from('patient_profiles')
-        .update({
-          name: patientData.name,
-          gender: patientData.gender,
-          age: patientData.age,
-          date_of_birth: patientData.dateOfBirth,
-          phone: patientData.phone,
-          address: patientData.address,
-          emergency_contact: patientData.emergencyContact,
-          medical_history: patientData.medicalHistory,
-          allergies: patientData.allergies,
-          medications: patientData.medications
-        })
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
+        .upsert(profilePayload, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (profileError) throw profileError;
+
+      setPatientRow(savedPatient);
+      setProfileRow(savedProfile);
+      setPatientData(prev => ({
+        ...prev,
+        ...buildComponentState(savedPatient, savedProfile)
+      }));
       setEditing(false);
       if (onUpdateProfile) {
-        onUpdateProfile(patientData);
+        onUpdateProfile({ ...patientData, ...buildComponentState(savedPatient, savedProfile) });
       }
     } catch (err) {
       console.error('Error saving patient data:', err);
@@ -165,8 +231,10 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
 
   const handleCancel = () => {
     setEditing(false);
-    // Reload data to discard changes
-    window.location.reload();
+    setPatientData(prev => ({
+      ...prev,
+      ...buildComponentState(patientRow, profileRow)
+    }));
   };
 
   if (loading) {

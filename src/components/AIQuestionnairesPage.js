@@ -1,1259 +1,828 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
-// Supabase client imported from centralized module
-const SERVER_BASE = (() => {
-  const env = (process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
+// Version stamp to help verify which build is running in the browser
+try {
+  // eslint-disable-next-line no-console
+  console.log('AIQuestionnairesPage loaded - buildStamp:', '%s', new Date().toISOString());
+} catch (_) {}
+
+const MAX_VISIBLE_DOCTORS = 6;
+
+const LS_KEYS = {
+  interview: 'aiq_interview_state_v2',
+  selectedDoctors: 'aiq_selected_doctors_v2',
+  context: 'aiq_context_snapshot_v1',
+  base: 'aiq_server_base_v1',
+  language: 'aiq_interview_language_v1'
+};
+
+const initialInterviewState = { sessionId: null, question: '', turns: [], done: false, report: '' };
+const initialContextState = { patient: {}, vitals: [], uploads: [] };
+
+const sanitizeBase = (base) => (base || '').replace(/\/$/, '');
+
+const getStoredJSON = (key, fallback) => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (_) {
+    return fallback;
+  }
+};
+
+const getInitialServerBase = () => {
+  const env = sanitizeBase(process.env.REACT_APP_SERVER_BASE || '');
   if (env) return env;
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:5001';
+    const stored = window.localStorage.getItem(LS_KEYS.base);
+    if (stored) return sanitizeBase(stored);
   }
   return '';
-})();
+};
+
+const truncate = (str = '', len = 240) => {
+  if (!str) return '';
+  return str.length > len ? `${str.slice(0, len)}…` : str;
+};
+
+const formatContextSummary = (ctx) => {
+  if (!ctx) return '';
+  const lines = [];
+  if (ctx.patient && (ctx.patient.name || ctx.patient.age || ctx.patient.gender)) {
+    lines.push(
+      `Patient: ${ctx.patient.name || 'Unknown'} | Age: ${ctx.patient.age ?? 'n/a'} | Gender: ${ctx.patient.gender || 'n/a'}`
+    );
+  }
+  if (Array.isArray(ctx.vitals) && ctx.vitals.length > 0) {
+    const vitalsLine = ctx.vitals
+      .slice(0, 5)
+      .map((v) => {
+        const label = v.type || v.label || 'Vital';
+        const value = v.value ?? 'n/a';
+        const unit = v.unit ? ` ${v.unit}` : '';
+        return `${label}: ${value}${unit}`;
+      })
+      .join('; ');
+    lines.push(`Recent vitals: ${vitalsLine}`);
+  }
+  if (Array.isArray(ctx.uploads) && ctx.uploads.length > 0) {
+    const uploadSnippets = ctx.uploads
+      .slice(0, 3)
+      .map((doc) => {
+        const label = doc.name || doc.title || 'Document';
+        const summary = truncate(doc.summary || doc.extractedText || '', 140);
+        return summary ? `${label}: ${summary}` : label;
+      });
+    lines.push(`Recent documents: ${uploadSnippets.join(' | ')}`);
+  }
+  return lines.join('\n');
+};
+
+const loadInitialInterview = () => {
+  const cached = getStoredJSON(LS_KEYS.interview, null);
+  if (!cached || typeof cached !== 'object') return initialInterviewState;
+  return {
+    sessionId: cached.sessionId || null,
+    question: cached.question || '',
+    turns: Array.isArray(cached.turns) ? cached.turns : [],
+    done: Boolean(cached.done),
+    report: cached.report ? String(cached.report) : ''
+  };
+};
+
+const loadInitialContext = () => {
+  const cached = getStoredJSON(LS_KEYS.context, null);
+  if (!cached || typeof cached !== 'object') return initialContextState;
+  return {
+    patient: cached.patient || initialContextState.patient,
+    vitals: Array.isArray(cached.vitals) ? cached.vitals : initialContextState.vitals,
+    uploads: Array.isArray(cached.uploads) ? cached.uploads : initialContextState.uploads
+  };
+};
+
+const loadInitialSelectedDoctors = () => {
+  const cached = getStoredJSON(LS_KEYS.selectedDoctors, []);
+  return Array.isArray(cached) ? cached : [];
+};
 
 function AIQuestionnairesPage() {
   const navigate = useNavigate();
-
-  const [questionnaires, setQuestionnaires] = useState([]);
-  const [currentQuestionnaire, setCurrentQuestionnaire] = useState(null);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [completedQuestionnaires, setCompletedQuestionnaires] = useState([]);
-  // Interview mode state (one-by-one questions)
-  const [interview, setInterview] = useState({ sessionId: null, question: '', turns: [], done: false, report: '' });
+  const [serverBase, setServerBase] = useState(getInitialServerBase);
+  const [interview, setInterview] = useState(loadInitialInterview);
   const [iAnswer, setIAnswer] = useState('');
   const [iLoading, setILoading] = useState({ start: false, next: false, report: false });
-  const [health, setHealth] = useState({ checked: false, ok: false, detail: '' });
-  const [serverBase, setServerBase] = useState(SERVER_BASE);
-  const [selectedDoctors, setSelectedDoctors] = useState([]);
   const [doctors, setDoctors] = useState([]);
-  const [completedQuestionnaire, setCompletedQuestionnaire] = useState(null);
-  const [questionnaireReport, setQuestionnaireReport] = useState('');
-  const [generatingReport, setGeneratingReport] = useState(false);
-  const [sharingReport, setSharingReport] = useState(false);
-  const LS_KEYS = {
-    interview: 'interview_state_v1',
-    base: 'api_server_base_v1',
-    questionnaire: 'questionnaire_progress_v1',
-    selectedDoctors: 'selected_doctors_v1'
-  };
+  const [doctorSearch, setDoctorSearch] = useState('');
+  const [selectedDoctors, setSelectedDoctors] = useState(loadInitialSelectedDoctors);
+  const [contextData, setContextData] = useState(loadInitialContext);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [interviewLanguage, setInterviewLanguage] = useState(() => {
+    if (typeof window === 'undefined') return 'en';
+    const stored = window.localStorage.getItem(LS_KEYS.language);
+    return stored === 'bn' ? 'bn' : 'en';
+  });
 
-  // Generic POST helper with fallback to localhost:5001 if relative path fails
-  const apiPostJSON = async (path, body) => {
-    const attempt = async (base) => {
-      const url = `${base || ''}${path}`;
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body || {})
-      });
-      const raw = await resp.text();
-      let j; try { j = JSON.parse(raw); } catch {
-        throw new Error(`Backend did not return JSON (status ${resp.status}). Is the server running?`);
-      }
-      if (!resp.ok) throw new Error(j?.error || `HTTP ${resp.status}`);
-      return j;
-    };
-
-    // 1) try current base (env/dev or relative)
+  const persistInterview = useCallback((next) => {
     try {
-      const j = await attempt(serverBase);
-      return j;
-    } catch (e1) {
-      // 2) if not already using localhost:5001, try fallback
-      if (serverBase !== 'http://localhost:5001') {
+      window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(next));
+    } catch (_) {}
+  }, []);
+
+  const persistContext = useCallback((next) => {
+    try {
+      window.localStorage.setItem(LS_KEYS.context, JSON.stringify(next));
+    } catch (_) {}
+  }, []);
+
+  const apiPostJSON = useCallback(
+    async (path, body = {}) => {
+      const attempt = async (base) => {
+        const prefix = sanitizeBase(base);
+        const url = `${prefix}${path}`;
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const raw = await resp.text();
+        let json;
         try {
-          const j2 = await attempt('http://localhost:5001');
-          // update base to working fallback
-          setServerBase('http://localhost:5001');
-          return j2;
-        } catch (e2) {
-          throw e1; // surface original error
+          json = JSON.parse(raw);
+        } catch (_) {
+          throw new Error(`Backend did not return JSON (status ${resp.status}).`);
         }
-      }
-      throw e1;
-    }
-  };
-
-  useEffect(() => {
-    // Initial data fetch
-    fetchQuestionnaires();
-    fetchCompletedQuestionnaires();
-    fetchDoctors();
-    // Restore persisted server base and interview state
-    try {
-      const savedBase = window.localStorage.getItem(LS_KEYS.base);
-      if (savedBase) setServerBase(savedBase);
-    } catch (_) {}
-    try {
-      const raw = window.localStorage.getItem(LS_KEYS.interview);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && (parsed.sessionId || parsed.turns)) {
-          setInterview({
-            sessionId: parsed.sessionId || null,
-            question: parsed.question || '',
-            turns: Array.isArray(parsed.turns) ? parsed.turns : [],
-            done: Boolean(parsed.done),
-            report: parsed.report || ''
-          });
-        }
-      }
-    } catch (_) {}
-    try {
-      const savedDoctors = window.localStorage.getItem(LS_KEYS.selectedDoctors);
-      if (savedDoctors) {
-        const parsed = JSON.parse(savedDoctors);
-        if (Array.isArray(parsed)) setSelectedDoctors(parsed);
-      }
-    } catch (_) {}
-  }, []);
-
-  // Persist interview and base whenever they change (simple durability against tab minimize/reload)
-  useEffect(() => {
-    try { window.localStorage.setItem(LS_KEYS.base, serverBase || ''); } catch (_) {}
-  }, [serverBase]);
-  useEffect(() => {
-    try { window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(interview)); } catch (_) {}
-  }, [interview]);
-  useEffect(() => {
-    try { window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors)); } catch (_) {}
-  }, [selectedDoctors]);
-
-  useEffect(() => {
-    if (!Array.isArray(doctors) || !doctors.length) return;
-    setSelectedDoctors(prev => {
-      if (!Array.isArray(prev) || !prev.length) return prev;
-      let changed = false;
-      const mapped = prev.map(id => {
-        const match = doctors.find(doc => doc?.user_id === id || doc?.id === id);
-        const normalized = match?.user_id || match?.id || id;
-        if (normalized !== id) changed = true;
-        return normalized;
-      });
-      if (!changed) return prev;
-      return Array.from(new Set(mapped));
-    });
-  }, [doctors]);
-
-  // Patient/context data for the right-side context panel (vitals, uploads, demographics)
-  const [contextData, setContextData] = useState({ vitals: [], uploads: [], patient: {} });
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
+        if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
+        if (json && json.ok === false) throw new Error(json?.error || 'Request failed');
+        return json;
+      };
       try {
-        const ctx = await buildInterviewContext();
-        if (mounted && ctx) setContextData(ctx);
-      } catch (e) {
-        console.error('Failed to load patient context:', e);
+        return await attempt(serverBase || '');
+      } catch (primaryError) {
+        if (!serverBase || serverBase !== 'http://localhost:5001') {
+          const fallbackBase = 'http://localhost:5001';
+          const json = await attempt(fallbackBase);
+          setServerBase(fallbackBase);
+          try {
+            window.localStorage.setItem(LS_KEYS.base, fallbackBase);
+          } catch (_) {}
+          return json;
+        }
+        throw primaryError;
       }
-    })();
-    return () => { mounted = false; };
-  }, []);
+    },
+    [serverBase]
+  );
 
-  const refreshContext = async () => {
-    try {
-      const ctx = await buildInterviewContext();
-      setContextData(ctx);
-    } catch (e) {
-      console.error('refreshContext error', e);
-    }
-  };
-
-  const fetchQuestionnaires = async () => {
+  const fetchDoctors = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from('ai_questionnaires')
-        .select('*')
-        .eq('is_active', true);
-
+        .from('doctors')
+        .select('id, user_id, name, email, specialist, bio, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(100);
       if (error) throw error;
-      setQuestionnaires(data || []);
-    } catch (err) {
-      console.error('Error fetching questionnaires:', err);
+      setDoctors(data || []);
+      setError('');
+    } catch (fetchError) {
+      console.error('Failed to fetch doctors', fetchError);
+      setError('Unable to load doctors right now. Please refresh later.');
     }
-  };
+  }, []);
 
-  const fetchDoctors = async () => {
-    try {
-      console.log('Fetching doctors...');
-      // Prefer the `doctors` table if present; fall back to `doctor_profiles` for backward compatibility
-      let data = [];
-      let err = null;
+  const buildInterviewContext = useCallback(async () => {
+    const snapshot = { patient: {}, vitals: [], uploads: [] };
+    if (typeof window !== 'undefined') {
       try {
-        console.log('Trying doctors table...');
-        const res = await supabase
-          .from('doctors')
-          .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res.error) {
-          console.log('Doctors table error:', res.error);
-          throw res.error;
+        const vitalsRaw = window.localStorage.getItem('vitals_data');
+        if (vitalsRaw) {
+          const parsed = JSON.parse(vitalsRaw);
+          if (Array.isArray(parsed)) snapshot.vitals = parsed;
         }
-        data = res.data || [];
-        console.log('Doctors table data:', data);
-      } catch (e) {
-        err = e;
-        console.log('Doctors table failed, trying doctor_profiles...');
-      }
-
-      if (!data || data.length === 0) {
-        console.log('No data from doctors table, trying doctor_profiles...');
-        const res2 = await supabase
-          .from('doctor_profiles')
-          .select('id, user_id, full_name, email, specialty, location, city, bio, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res2.error && !data?.length) {
-          console.log('Doctor_profiles error:', res2.error);
-          throw (err || res2.error);
-        }
-        data = res2.data || data || [];
-        console.log('Doctor_profiles data:', data);
-      }
-
-      console.log('Final doctors data:', data);
-      setDoctors(data);
-    } catch (err) {
-      console.error('Error fetching doctors:', err);
-      setError(`Failed to load doctors: ${err.message}`);
-    }
-  };
-
-  
-
-  // Legacy batch generator removed to avoid confusion with adaptive flow
-
-  // ---------- Interview mode helpers ----------
-  const buildInterviewContext = async () => {
-    let vitals = [];
-    let uploads = [];
-    let patient = {};
-    try {
-      // Fetch latest vitals from server
-      const vitalsResponse = await fetch(`${serverBase}/api/vitals`);
-      if (vitalsResponse.ok) {
-        const latestVitals = await vitalsResponse.json();
-        if (latestVitals && typeof latestVitals === 'object') {
-          const t = latestVitals.temperature ?? null;
-          const h = latestVitals.heartRate ?? null;
-          const s = latestVitals.spo2 ?? null;
-          const ts = latestVitals.timestamp || null;
-          vitals = [
-            { type: 'temperature', value: t, unit: '°F' },
-            { type: 'heartRate', value: h, unit: 'bpm' },
-            { type: 'spo2', value: s, unit: '%' }
-          ];
-          if (ts) vitals.timestamp = ts;
-        }
-      } else {
-        // Fallback to localStorage if server fetch fails
-        let raw = null;
-        if (typeof window !== 'undefined') {
-          raw = window.localStorage.getItem('vitalsData') || window.localStorage.getItem('vitals_data');
-        }
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed && typeof parsed === 'object') {
-          const t = parsed.temperature?.value ?? null;
-          const h = parsed.heartRate?.value ?? null;
-          const s = parsed.spo2?.value ?? null;
-          const ts = parsed.temperature?.timestamp || parsed.heartRate?.timestamp || parsed.spo2?.timestamp || null;
-          vitals = [
-            { type: 'temperature', value: t, unit: '°F' },
-            { type: 'heartRate', value: h, unit: 'bpm' },
-            { type: 'spo2', value: s, unit: '%' }
-          ];
-          if (ts) vitals.timestamp = ts;
-        }
-      }
-    } catch (_) {}
-    // Patient profile (name, age, gender, phone)
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const uid = user?.id;
-      if (uid) {
-        // Prefer patient_profiles table if present
-        try {
-          const { data, error } = await supabase
-            .from('patient_profiles')
-            .select('patient_id,name,gender,age,phone')
-            .eq('user_id', uid)
-            .single();
-          if (!error && data) {
-            patient = {
-              id: data.patient_id || null,
-              name: data.name || null,
-              gender: data.gender || null,
-              age: data.age || null,
-              phone: data.phone || null
+      } catch (_) {}
+      try {
+        const patientRaw = window.localStorage.getItem('patient_profile');
+        if (patientRaw) {
+          const parsed = JSON.parse(patientRaw);
+          if (parsed && typeof parsed === 'object') {
+            snapshot.patient = {
+              id: parsed.patientId || parsed.id || snapshot.patient.id || null,
+              name: parsed.name || parsed.full_name || snapshot.patient.name || null,
+              gender: parsed.gender || snapshot.patient.gender || null,
+              age: parsed.age ?? snapshot.patient.age ?? null,
+              phone: parsed.phone || snapshot.patient.phone || null,
+              email: parsed.email || snapshot.patient.email || null
             };
           }
-        } catch (_) {}
-        // Fallback to profiles table basic fields if patient_profiles missing
-        if (!patient.name) {
-          try {
-            const { data: prof, error: pErr } = await supabase
-              .from('profiles')
-              .select('full_name,phone,gender')
-              .eq('id', uid)
-              .single();
-            if (!pErr && prof) {
-              patient = {
-                ...patient,
-                name: patient.name || prof.full_name || null,
-                phone: patient.phone || prof.phone || null,
-                gender: patient.gender || prof.gender || null
-              };
-            }
-          } catch (_) {}
         }
-        // Last resort: localStorage snapshot, if any custom key exists
-        if (!patient.name && typeof window !== 'undefined') {
-          try {
-            const ls = JSON.parse(window.localStorage.getItem('patient_profile') || 'null');
-            if (ls && typeof ls === 'object') {
-              patient = {
-                id: ls.patientId || patient.id || null,
-                name: ls.name || patient.name || null,
-                gender: ls.gender || patient.gender || null,
-                age: ls.age || patient.age || null,
-                phone: ls.phone || patient.phone || null
-              };
-            }
-          } catch (_) {}
+      } catch (_) {}
+      try {
+        const uploadsRaw = window.localStorage.getItem('uploadedDocuments');
+        if (uploadsRaw) {
+          const parsed = JSON.parse(uploadsRaw);
+          if (Array.isArray(parsed)) {
+            snapshot.uploads = snapshot.uploads.concat(
+              parsed.map((file) => ({ name: file.name, size: file.size, type: file.type }))
+            );
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     try {
-      // Include any locally added uploads (not yet in storage)
-      if (typeof window !== 'undefined') {
-        const local = window.localStorage.getItem('uploadedDocuments');
-        if (local) {
-          try {
-            const arr = JSON.parse(local);
-            if (Array.isArray(arr)) {
-              uploads = uploads.concat(arr.map(f => ({ name: f.name, size: f.size, type: f.type })));
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const uid = user?.id;
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
       if (uid) {
-        const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-        const { data } = await supabase.storage.from(bucket).list(uid, { limit: 50 });
-        // Append Supabase storage files (names only)
-        uploads = uploads.concat((data || []).map(i => ({ name: i.name, size: i?.metadata?.size || null })));
+        try {
+          const { data: docs, error: docsError } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('user_id', uid)
+            .order('uploaded_at', { ascending: false })
+            .limit(25);
+          if (docsError) throw docsError;
+          if (Array.isArray(docs) && docs.length) {
+            snapshot.uploads = docs.map((doc) => ({
+              id: doc.id,
+              name: doc.original_name || doc.file_name || 'Document',
+              type: doc.mime_type || '',
+              size: doc.size_bytes || null,
+              url: doc.public_url || null,
+              uploadedAt: doc.uploaded_at || null,
+              status: doc.extraction_status || 'pending',
+              summary: doc.extraction_summary || null,
+              extractedText: doc.extracted_text || null
+            }));
+          }
+        } catch (documentsError) {
+          console.warn('Failed to fetch document metadata from table:', documentsError);
+          if (snapshot.uploads.length === 0) {
+            const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
+            try {
+              const { data } = await supabase.storage.from(bucket).list(uid, { limit: 25 });
+              if (Array.isArray(data)) {
+                snapshot.uploads = data.map((item) => ({
+                  name: item.name,
+                  size: item?.metadata?.size || null,
+                  type: item?.metadata?.mimetype || item?.metadata?.type || null
+                }));
+              }
+            } catch (storageError) {
+              console.warn('Storage listing fallback failed:', storageError);
+            }
+          }
+        }
+
+        snapshot.patient = {
+          ...snapshot.patient,
+          id: snapshot.patient.id || uid,
+          email: snapshot.patient.email || authData.user.email
+        };
       }
-    } catch (_) {}
-    return { vitals, uploads, patient };
+    } catch (ctxErr) {
+      console.warn('Failed to extend context from Supabase', ctxErr);
+    }
+    return snapshot;
+  }, []);
+
+  const refreshContext = useCallback(async () => {
+    setContextLoading(true);
+    try {
+      const next = await buildInterviewContext();
+      setContextData(next);
+      persistContext(next);
+    } catch (ctxErr) {
+      console.error('Failed to refresh context', ctxErr);
+    } finally {
+      setContextLoading(false);
+    }
+  }, [buildInterviewContext, persistContext]);
+
+  const scrollToSection = (id) => {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const startInterview = async () => {
-    setILoading(prev => ({ ...prev, start: true }));
+    setILoading((prev) => ({ ...prev, start: true }));
     setError('');
     try {
       const ctx = await buildInterviewContext();
-      const j = await apiPostJSON('/api/v1/ai/interview/start', { context: ctx });
-      if (!j.ok) throw new Error(j?.error || 'Interview start failed');
-      setInterview({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done), report: '' });
+      setContextData(ctx);
+      persistContext(ctx);
+      const response = await apiPostJSON('/api/v1/ai/interview/start', {
+        context: ctx,
+        language: interviewLanguage
+      });
+      const nextState = { sessionId: response.sessionId, question: response.question || '', turns: [], done: Boolean(response.done), report: '' };
+      setInterview(nextState);
+      persistInterview(nextState);
       setIAnswer('');
-      // reset any previous report
-      // ensure previous transcript is cleared too (handled by setting turns: [])
-      // reset any ongoing questionnaire view when interview starts
-      setCurrentQuestionnaire(null);
-      setCurrentQuestionIndex(0);
-      setAnswers({});
-      // Persist immediately
-      try { window.localStorage.setItem(LS_KEYS.interview, JSON.stringify({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done), report: '' })); } catch (_) {}
-    } catch (e) {
-      setError(e?.message || String(e));
+    } catch (startError) {
+      setError(startError.message || String(startError));
     } finally {
-      setILoading(prev => ({ ...prev, start: false }));
+      setILoading((prev) => ({ ...prev, start: false }));
     }
   };
 
   const sendInterviewAnswer = async () => {
     if (!interview.sessionId) return;
-    const a = String(iAnswer || '').trim();
-    if (!a) return;
-    setILoading(prev => ({ ...prev, next: true }));
+    const trimmed = iAnswer.trim();
+    if (!trimmed) return;
+    setILoading((prev) => ({ ...prev, next: true }));
     setError('');
     try {
-      const j = await apiPostJSON('/api/v1/ai/interview/next', { sessionId: interview.sessionId, answer: a });
-      if (!j.ok) throw new Error(j?.error || 'Interview next failed');
-      setInterview(prev => ({
-        ...prev,
-        question: j.done ? '' : (j.question || ''),
-        turns: [...prev.turns, { q: prev.question, a }],
-        done: Boolean(j.done),
-        report: j.done ? prev.report : ''
-      }));
-      setIAnswer('');
-      // Persist update
-      try {
+      const response = await apiPostJSON('/api/v1/ai/interview/next', {
+        sessionId: interview.sessionId,
+        answer: trimmed,
+        language: interviewLanguage
+      });
+      setInterview((prev) => {
+        const nextTurns = [...prev.turns, { q: prev.question, a: trimmed }];
         const nextState = {
-          sessionId: interview.sessionId,
-          question: j.done ? '' : (j.question || ''),
-          turns: [...interview.turns, { q: interview.question, a }],
-          done: Boolean(j.done),
-          report: j.done ? interview.report : ''
+          sessionId: prev.sessionId,
+          question: response.done ? '' : response.question || '',
+          turns: nextTurns,
+          done: Boolean(response.done),
+          report: response.done ? prev.report : ''
         };
-        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(nextState));
-      } catch (_) {}
-    } catch (e) {
-      setError(e?.message || String(e));
+        persistInterview(nextState);
+        return nextState;
+      });
+      setIAnswer('');
+    } catch (answerError) {
+      setError(answerError.message || String(answerError));
     } finally {
-      setILoading(prev => ({ ...prev, next: false }));
+      setILoading((prev) => ({ ...prev, next: false }));
     }
   };
 
-  const generateInterviewReport = async () => {
-    if (!interview.sessionId) return;
-    setILoading(prev => ({ ...prev, report: true }));
-    setError('');
-    try {
-      const j = await apiPostJSON('/api/v1/ai/interview/report', { sessionId: interview.sessionId });
-      if (!j.ok) throw new Error(j?.error || 'Report failed');
-      const reportContent = String(j.report || '');
-      setInterview(prev => ({ ...prev, report: reportContent }));
-      try {
-        const raw = window.localStorage.getItem(LS_KEYS.interview);
-        const parsed = raw ? JSON.parse(raw) : {};
-        parsed.report = reportContent;
-        window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(parsed));
-      } catch (_) {}
-
-      // Save report to diagnoses table and notify selected doctors
-      if (selectedDoctors.length > 0) {
-        await saveReportAndNotify(reportContent, { from: 'interview', turns: interview.turns });
-      }
-    } catch (e) {
-      setError(e?.message || String(e));
-    } finally {
-      setILoading(prev => ({ ...prev, report: false }));
-    }
-  };
-
-  const restartInterview = async () => {
-    // Reset interview state
-    setInterview({ sessionId: null, question: '', turns: [], done: false, report: '' });
+  const restartInterview = () => {
+    setInterview(initialInterviewState);
     setIAnswer('');
     setError('');
-    // Clear localStorage
     try {
       window.localStorage.removeItem(LS_KEYS.interview);
     } catch (_) {}
-    // Reset any ongoing questionnaire view
-    setCurrentQuestionnaire(null);
-    setCurrentQuestionIndex(0);
-    setAnswers({});
   };
 
-  const saveReportAndNotify = async (reportContent, metadata = {}) => {
-    if (!reportContent || !String(reportContent).trim()) {
-      alert('Please generate a report before sharing it with doctors.');
-      return;
-    }
-    if (!selectedDoctors.length) {
-      alert('Please select at least one doctor before sharing the report.');
-      return;
-    }
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      // Save to diagnoses table
-      const { data: diagData, error: diagError } = await supabase
-        .from('diagnoses')
-        .insert([{
+  const saveReportAndNotify = useCallback(
+    async (reportContent, metadata = {}) => {
+      if (!reportContent || !String(reportContent).trim()) {
+        alert('Please generate a report before sharing it with doctors.');
+        return;
+      }
+      if (!selectedDoctors.length) {
+        alert('Please select at least one doctor before sharing the report.');
+        return;
+      }
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+        if (!user) throw new Error('User not authenticated');
+        const { data: diagData, error: diagError } = await supabase
+          .from('diagnoses')
+          .insert([
+            {
+              patient_id: user.id,
+              content: reportContent,
+              severity: 'medium',
+              ai_generated: true,
+              metadata: { ...metadata, created_via: 'AIQuestionnairesPage', language: interviewLanguage }
+            }
+          ])
+          .select('id')
+          .single();
+        if (diagError) throw diagError;
+        const notifications = selectedDoctors.map((doctorId) => ({
+          doctor_id: doctorId,
           patient_id: user.id,
-          content: reportContent,
-          severity: 'medium', // Default, can be analyzed
-          ai_generated: true,
-          metadata: { ...metadata, created_via: 'AIQuestionnairesPage' }
-        }])
-        .select('id')
-        .single();
-
-      if (diagError) throw diagError;
-
-      // Create notifications for selected doctors
-      const notifications = selectedDoctors.map(doctorId => ({
-        doctor_id: doctorId,
-        patient_id: user.id,
-        diagnosis_id: diagData.id,
-        message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
-        type: 'report_shared',
-        is_read: false
-      }));
-
-      const { error: notifError } = await supabase
-        .from('notifications')
-        .insert(notifications);
-
-      if (notifError) {
-        console.warn('Failed to create notifications:', notifError);
-        // Don't throw, as report is saved
+          diagnosis_id: diagData.id,
+          message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
+          type: 'report_shared',
+          is_read: false
+        }));
+        const { error: notifError } = await supabase.from('notifications').insert(notifications);
+        if (notifError) console.warn('Failed to create notifications:', notifError);
+        alert(`Report saved and shared with ${selectedDoctors.length} doctor(s)!`);
+      } catch (shareError) {
+        console.error('Error saving report and notifying doctors:', shareError);
+        alert('Report generated but failed to save/share. Please try again.');
       }
+    },
+    [selectedDoctors, interviewLanguage]
+  );
 
-      alert(`Report saved and shared with ${selectedDoctors.length} doctor(s)!`);
-    } catch (e) {
-      console.error('Error saving report and notifying doctors:', e);
-      alert('Report generated but failed to save/share. Please try again.');
-    }
-  };
-
-  const fetchCompletedQuestionnaires = async () => {
+  const generateInterviewReport = async () => {
+    if (!interview.sessionId) return;
+    setILoading((prev) => ({ ...prev, report: true }));
+    setError('');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const { data, error } = await supabase
-        .from('patient_questionnaire_responses')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('completed_at', { ascending: false });
-
-      if (error) throw error;
-      setCompletedQuestionnaires(data || []);
-    } catch (err) {
-      console.error('Error fetching completed questionnaires:', err);
-    }
-  };
-
-  // runHealthCheck removed from UI helpers
-
-  const startQuestionnaire = (questionnaire) => {
-    setCurrentQuestionnaire(questionnaire);
-    setCurrentQuestionIndex(0);
-    setAnswers({});
-  };
-
-  const handleAnswerChange = (questionId, answer) => {
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: answer
-    }));
-  };
-
-  const nextQuestion = () => {
-    if (currentQuestionIndex < currentQuestionnaire.questions.length - 1) {
-      setCurrentQuestionIndex(prev => prev + 1);
-    }
-  };
-
-  const previousQuestion = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(prev => prev - 1);
-    }
-  };
-
-  const submitQuestionnaire = async () => {
-    setSubmitting(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const { error } = await supabase
-        .from('patient_questionnaire_responses')
-        .insert([{
-          user_id: user?.id,
-          questionnaire_id: currentQuestionnaire.id,
-          questionnaire_title: currentQuestionnaire.title,
-          answers: answers,
-          completed_at: new Date().toISOString()
-        }]);
-
-      if (error) throw error;
-
-      // Set completed questionnaire for showing completion screen
-      setCompletedQuestionnaire({ questionnaire: currentQuestionnaire, answers });
-
-      // Refresh completed questionnaires
-      await fetchCompletedQuestionnaires();
-
-    } catch (err) {
-      console.error('Error submitting questionnaire:', err);
-      alert('Failed to submit questionnaire. Please try again.');
+      const response = await apiPostJSON('/api/v1/ai/interview/report', {
+        sessionId: interview.sessionId,
+        language: interviewLanguage
+      });
+      const reportContent = String(response.report || '');
+      const summary = formatContextSummary(contextData);
+      const enrichedReport = summary ? `${reportContent}\n\n---\n${summary}` : reportContent;
+      setInterview((prev) => {
+        const nextState = { ...prev, report: enrichedReport };
+        persistInterview(nextState);
+        return nextState;
+      });
+      if (selectedDoctors.length > 0) {
+        await saveReportAndNotify(enrichedReport, { from: 'interview', turns: interview.turns, context: contextData });
+      }
+    } catch (reportError) {
+      setError(reportError.message || String(reportError));
     } finally {
-      setSubmitting(false);
+      setILoading((prev) => ({ ...prev, report: false }));
     }
   };
 
-  const isQuestionAnswered = (question) => {
-    return answers[question.id] !== undefined && answers[question.id] !== '';
-  };
+  useEffect(() => {
+    fetchDoctors();
+  }, [fetchDoctors]);
 
-  const isQuestionnaireComplete = () => {
-    if (!currentQuestionnaire) return false;
-    return currentQuestionnaire.questions.every(question => isQuestionAnswered(question));
-  };
+  useEffect(() => {
+    refreshContext();
+  }, [refreshContext]);
 
-  const getAssessmentResult = (questionnaire, userAnswers) => {
-    // Simple scoring algorithm - can be enhanced based on specific questionnaire needs
-    let score = 0;
-    let maxScore = 0;
-    
-    questionnaire.questions.forEach(question => {
-      maxScore += question.max_score || 1;
-      const answer = userAnswers[question.id];
-      
-      if (question.type === 'multiple_choice' && question.options) {
-        const selectedOption = question.options.find(opt => opt.value === answer);
-        if (selectedOption) {
-          score += selectedOption.score || 1;
-        }
-      } else if (question.type === 'scale' && answer) {
-        score += parseInt(answer);
-      } else if (answer) {
-        score += 1;
-      }
-    });
-
-    const percentage = (score / maxScore) * 100;
-    
-    if (percentage >= 80) return { level: 'Low Risk', color: '#28a745', advice: 'Continue maintaining your current health status.' };
-    if (percentage >= 60) return { level: 'Moderate Risk', color: '#ffc107', advice: 'Consider consulting with a healthcare provider for further evaluation.' };
-    return { level: 'High Risk', color: '#dc3545', advice: 'Please seek medical attention promptly.' };
-  };
-
-  const renderQuestion = (question) => {
-    const currentAnswer = answers[question.id];
-
-    switch (question.type) {
-      case 'multiple_choice':
-        return (
-          <div className="question-options">
-            {question.options.map((option, index) => (
-              <label key={index} className="option-label">
-                <input
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={option.value}
-                  checked={currentAnswer === option.value}
-                  onChange={() => handleAnswerChange(question.id, option.value)}
-                />
-                {option.label}
-              </label>
-            ))}
-          </div>
-        );
-
-      case 'scale':
-        return (
-          <div className="scale-question">
-            <div className="scale-range">
-              <span>{question.scale_min || 0}</span>
-              <input
-                type="range"
-                min={question.scale_min || 0}
-                max={question.scale_max || 10}
-                value={currentAnswer || (question.scale_min || 0)}
-                onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-              />
-              <span>{question.scale_max || 10}</span>
-            </div>
-            <div className="scale-value">
-              Current value: {currentAnswer || (question.scale_min || 0)}
-            </div>
-          </div>
-        );
-
-      case 'text':
-        return (
-          <textarea
-            value={currentAnswer || ''}
-            onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-            placeholder="Please provide your answer..."
-            rows={4}
-          />
-        );
-
-      case 'yes_no':
-        return (
-          <div className="yes-no-options">
-            <label className="option-label">
-              <input
-                type="radio"
-                name={`question-${question.id}`}
-                value="yes"
-                checked={currentAnswer === 'yes'}
-                onChange={() => handleAnswerChange(question.id, 'yes')}
-              />
-              Yes
-            </label>
-            <label className="option-label">
-              <input
-                type="radio"
-                name={`question-${question.id}`}
-                value="no"
-                checked={currentAnswer === 'no'}
-                onChange={() => handleAnswerChange(question.id, 'no')}
-              />
-              No
-            </label>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  if (currentQuestionnaire) {
-    const currentQuestion = currentQuestionnaire.questions[currentQuestionIndex];
-    const progress = ((currentQuestionIndex + 1) / currentQuestionnaire.questions.length) * 100;
-
+  useEffect(() => {
     try {
-    return (
-      <div className="questionnaire-container">
-        <div className="questionnaire-content">
-          <div className="questionnaire-header">
-            <h2>{currentQuestionnaire.title}</h2>
-            <p>{currentQuestionnaire.description}</p>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+      window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors));
+    } catch (_) {}
+  }, [selectedDoctors]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LS_KEYS.language, interviewLanguage);
+    } catch (_) {}
+  }, [interviewLanguage]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LS_KEYS.base, serverBase || '');
+    } catch (_) {}
+  }, [serverBase]);
+
+  const interviewStatus = interview.done ? 'Completed' : interview.sessionId ? 'In Progress' : 'Idle';
+  const languageLabel = interviewLanguage === 'bn' ? 'Bangla' : 'English';
+  const normalizedQuery = doctorSearch.trim().toLowerCase();
+  const matchingDoctors = normalizedQuery
+    ? doctors.filter((doc) => {
+        const name = String(doc?.full_name || doc?.name || '').toLowerCase();
+        const specialty = String(doc?.specialist || doc?.bio || '').toLowerCase();
+        return name.includes(normalizedQuery) || specialty.includes(normalizedQuery);
+      })
+    : doctors;
+  const initialDoctorList = normalizedQuery ? matchingDoctors : doctors.slice(0, MAX_VISIBLE_DOCTORS);
+  const selectedSupplements = !normalizedQuery
+    ? doctors.filter((doc) => {
+        const key = doc?.user_id || doc?.id;
+        if (!key) return false;
+        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => (d?.user_id || d?.id) === key);
+      })
+    : [];
+  const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
+  const noDoctorMatches = normalizedQuery && displayedDoctors.length === 0;
+  const shareDisabled = !interview.report || !selectedDoctors.length;
+
+  return (
+    <div className="aiq-page">
+      <section className="card aiq-hero animate-fade-up">
+        <div className="aiq-hero-grid">
+          <div>
+            <p className="aiq-eyebrow">Guided assessments</p>
+            <h1 className="aiq-hero-title">AI Health Questionnaires</h1>
+            <p className="aiq-hero-subtitle">Adaptive interview and streamlined doctor hand-offs in one workspace.</p>
+            <div className="aiq-pill-row">
+              <span className={`aiq-pill ${interview.sessionId ? 'aiq-pill-success' : ''}`}>
+                {interview.sessionId ? 'Interview active' : 'Interview idle'}
+              </span>
+              <span className="aiq-pill">Status: {interviewStatus}</span>
+              <span className="aiq-pill">Selected doctors: {selectedDoctors.length}</span>
+              <span className="aiq-pill">Turns captured: {interview.turns.length}</span>
+              <span className="aiq-pill">Language: {languageLabel}</span>
+              {interview.report && <span className="aiq-pill aiq-pill-info">Report ready</span>}
             </div>
-            <p className="progress-text">
-              Question {currentQuestionIndex + 1} of {currentQuestionnaire.questions.length}
-            </p>
           </div>
-
-          <div className="question-section">
-            <h3>{currentQuestion.text}</h3>
-            {currentQuestion.subtext && (
-              <p className="question-subtext">{currentQuestion.subtext}</p>
-            )}
-            {renderQuestion(currentQuestion)}
-          </div>
-
-          <div className="question-navigation">
-            <button
-              className="btn-secondary"
-              onClick={previousQuestion}
-              disabled={currentQuestionIndex === 0}
-            >
-              Previous
+          <div className="aiq-hero-actions">
+            <button className="btn btn-primary btn-lg" onClick={startInterview} disabled={iLoading.start}>
+              {interview.sessionId ? 'Resume Interview' : 'Start Interview'}
             </button>
-
-            {currentQuestionIndex < currentQuestionnaire.questions.length - 1 ? (
-              <button
-                className="btn-primary"
-                onClick={nextQuestion}
-                disabled={!isQuestionAnswered(currentQuestion)}
-              >
-                Next
-              </button>
-            ) : (
-              <button
-                className="btn-primary"
-                onClick={submitQuestionnaire}
-                disabled={!isQuestionnaireComplete() || submitting}
-              >
-                {submitting ? 'Submitting...' : 'Complete Questionnaire'}
-              </button>
-            )}
-
-            <button
-              className="btn-secondary"
-              onClick={() => setCurrentQuestionnaire(null)}
-            >
-              Cancel
+            <button className="btn btn-secondary btn-lg" onClick={() => scrollToSection('aiq-interview')}>
+              Go to Interview Workspace
             </button>
-          </div>
-        </div>
-      </div>
-    );
-    } catch (error) {
-      console.error('AIQuestionnairesPage: ERROR in questionnaire render:', error);
-      return (
-        <div style={{ padding: '20px', background: 'red', color: 'white', fontSize: '18px' }}>
-          🚨 QUESTIONNAIRE RENDER ERROR: {error.message}
-          <br />
-          <pre>{error.stack}</pre>
-        </div>
-      );
-    }
-  }
-
-  if (completedQuestionnaire) {
-    const { questionnaire, answers } = completedQuestionnaire;
-    const result = getAssessmentResult(questionnaire, answers);
-
-    return (
-      <div className="questionnaire-container">
-        <div className="questionnaire-content">
-          <div className="questionnaire-header">
-            <h2>{questionnaire.title} - Completed</h2>
-            <p>Assessment Result</p>
-          </div>
-
-          <div className="assessment-result" style={{ backgroundColor: result.color, padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
-            <h3>{result.level}</h3>
-            <p>{result.advice}</p>
-          </div>
-
-          {questionnaireReport && (
-            <div className="card" style={{ marginBottom: '20px' }}>
-              <h3 className="card-title">AI Generated Report</h3>
-              <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
-                {questionnaireReport}
-              </pre>
+            <div className="aiq-language-switch">
+              <label htmlFor="interview-language" className="aiq-label" style={{ marginBottom: 4 }}>
+                Interview language
+              </label>
+              <select
+                id="interview-language"
+                className="form-input"
+                value={interviewLanguage}
+                onChange={(e) => setInterviewLanguage(e.target.value === 'bn' ? 'bn' : 'en')}
+              >
+                <option value="en">English</option>
+                <option value="bn">Bangla</option>
+              </select>
             </div>
-          )}
-
-          <div className="completion-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                setCompletedQuestionnaire(null);
-                setQuestionnaireReport('');
-                startQuestionnaire(questionnaire);
-              }}
-            >
-              Start Over
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={async () => {
-                setGeneratingReport(true);
-                try {
-                  // Generate report using interview API with questionnaire context
-                  const ctx = await buildInterviewContext();
-                  const questionnaireContext = {
-                    ...ctx,
-                    questionnaire: { title: questionnaire.title, answers }
-                  };
-                  const j = await apiPostJSON('/api/v1/ai/interview/report', { context: questionnaireContext, type: 'questionnaire' });
-                  if (!j.ok) throw new Error(j?.error || 'Report generation failed');
-                  setQuestionnaireReport(j.report || 'Report generated successfully.');
-                } catch (e) {
-                  setError(e?.message || String(e));
-                  alert('Failed to generate report.');
-                } finally {
-                  setGeneratingReport(false);
-                }
-              }}
-              disabled={generatingReport}
-            >
-              {generatingReport ? 'Generating...' : 'Generate Report'}
-            </button>
-            {questionnaireReport && selectedDoctors.length > 0 && (
-              <button
-                className="btn btn-secondary"
-                onClick={async () => {
-                  setSharingReport(true);
-                  try {
-                    await saveReportAndNotify(questionnaireReport, { from: 'questionnaire', questionnaire: questionnaire.title, answers });
-                  } catch (e) {
-                    alert('Failed to share report.');
-                  } finally {
-                    setSharingReport(false);
-                  }
-                }}
-                disabled={sharingReport}
-              >
-                {sharingReport ? 'Sharing...' : 'Share with Doctor'}
-              </button>
-            )}
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                setCompletedQuestionnaire(null);
-                setQuestionnaireReport('');
-              }}
-            >
-              Back to Questionnaires
-            </button>
           </div>
         </div>
-      </div>
-    );
-  }
+      </section>
 
-  
+      {error && (
+        <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
+          {error}
+        </div>
+      )}
 
-  try {
-    return (
-      <div className="ai-questionnaires-container">
-        <section className="hero animate-fade-up">
-          <h1 className="hero-title">AI Health Questionnaires</h1>
-          <p className="hero-subtitle">Adaptive interview and intelligent forms to tailor insights to your condition.</p>
-          <div className="hero-cta" style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-primary btn-lg"
-              onClick={startInterview}
-              disabled={iLoading.start}
-              title="Start Interview"
-              style={{ padding: '12px 28px' }}
-            >
-              {iLoading.start ? 'Starting…' : 'Start Interview'}
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={restartInterview}
-              disabled={iLoading.next || iLoading.report}
-              style={{ padding: '12px 28px' }}
-            >
-              Start Over
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={generateInterviewReport}
-              disabled={iLoading.report || !!interview.report}
-              title={interview.report ? 'Report already generated' : 'Generate a report from the current interview'}
-              style={{ padding: '12px 28px' }}
-            >
-              {iLoading.report ? 'Generating…' : interview.report ? 'Report Ready' : 'Generate Report'}
-            </button>
-            {interview.report && selectedDoctors.length > 0 && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns })}
-                style={{ padding: '12px 28px' }}
-              >
-                Share with Doctor
-              </button>
-            )}
-          </div>
-        </section>
-
-        <div className="ai-questionnaires-content">
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', maxWidth: 1200, margin: '0 auto', padding: 20, flexWrap: 'wrap' }}>
-
-            {/* Left/main column */}
-            <main style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ maxWidth: 980, margin: '0', paddingRight: 12 }}>
-
-                <p>Complete intelligent health assessments to get personalized insights about your well‑being.</p>
-
-                {/* Doctor Selection Section */}
-                <div className="card" style={{ marginBottom: 20 }}>
-                  <h3 className="card-title">Select Doctors to Share Report With</h3>
-                  <p className="muted">Choose which doctors should receive your AI-generated health report after the assessment.</p>
-                  {doctors.length > 0 ? (
-                    <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px', marginTop: '12px' }}>
-                      {doctors.map(doctor => {
-                        const doctorKey = doctor?.user_id || doctor?.id;
-                        return (
-                        <label key={doctorKey || (doctor?.email ?? Math.random())} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: doctorKey && selectedDoctors.includes(doctorKey) ? '#f0f8ff' : 'transparent' }}>
-                          <input
-                            type="checkbox"
-                            checked={doctorKey ? selectedDoctors.includes(doctorKey) : false}
-                            onChange={(e) => {
-                              const doctorId = doctor?.user_id || doctor?.id;
-                              if (!doctorId) return;
-                              if (e.target.checked) {
-                                setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
-                              } else {
-                                setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
-                              }
-                            }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: '500' }}>{doctor.full_name || doctor.name || 'Doctor'}</div>
-                            <div className="muted" style={{ fontSize: '12px' }}>{doctor.specialist || doctor.specialty || doctor.specialities || 'General'}</div>
-                          </div>
-                        </label>
-                      );})}
-                    </div>
-                  ) : (
-                    <p className="muted">No doctors available at the moment.</p>
-                  )}
-                  {selectedDoctors.length > 0 && (
-                    <div style={{ marginTop: '12px', fontSize: '14px' }}>
-                      <strong>Selected: {selectedDoctors.length} doctor(s)</strong>
-                    </div>
-                  )}
+      <div className="aiq-layout">
+        <main className="aiq-main-grid">
+          <div className="aiq-primary-stack">
+            <section className="card aiq-interview-card" id="aiq-interview">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Live conversation</p>
+                  <h2>Adaptive Interview Workspace</h2>
                 </div>
+                <span className={`aiq-status-dot ${interview.sessionId ? 'active' : ''}`}>
+                  {interview.sessionId ? 'Active' : 'Idle'}
+                </span>
+              </header>
 
-                <div className="questionnaires-section">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: 12, flexWrap: 'wrap' }}>
-                    <h2>Available Questionnaires</h2>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        className="btn btn-primary"
-                        onClick={startInterview}
-                        disabled={iLoading.start}
-                        title="Start Interview"
-                      >
-                        {iLoading.start ? 'Starting…' : 'Start Interview'}
-                      </button>
-                    </div>
+              {!interview.sessionId ? (
+                <div className="aiq-empty-state">
+                  <p>Start the guided interview to receive tailored dynamic questions.</p>
+                  <button className="btn btn-primary" onClick={startInterview} disabled={iLoading.start}>
+                    {iLoading.start ? 'Starting…' : 'Launch Interview'}
+                  </button>
+                </div>
+              ) : !interview.done ? (
+                <>
+                  <div className="aiq-question-block">
+                    <p className="aiq-label">Current question</p>
+                    <h3>{interview.question || 'Waiting for next prompt…'}</h3>
+                    <input
+                      className="form-input"
+                      value={iAnswer}
+                      onChange={(e) => setIAnswer(e.target.value)}
+                      placeholder="Type your answer"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') sendInterviewAnswer();
+                      }}
+                    />
                   </div>
-                  {error && <div className="alert alert-danger" style={{ marginBottom: '20px' }}>{error}</div>}
+                  <div className="aiq-button-row">
+                    <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
+                      {iLoading.next ? 'Sending…' : 'Send Answer'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
+                      Reset Interview
+                    </button>
+                    <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report}>
+                      {iLoading.report ? 'Generating…' : 'Generate Report'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="aiq-empty-state">
+                  <p>Interview complete. You can restart any time to capture new insights.</p>
+                  <div className="aiq-button-row">
+                    <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
+                      Start Over
+                    </button>
+                    <button className="btn btn-primary" onClick={generateInterviewReport} disabled={iLoading.report || !!interview.report}>
+                      {iLoading.report ? 'Generating…' : interview.report ? 'Report Ready' : 'Generate Report'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                  <div className="card" style={{ marginBottom: 20 }}>
-                    {!interview.sessionId ? (
-                      <>
-                        <h3 className="card-title">Interview</h3>
-                        <p className="muted">Click "Start Interview" to begin. The controls appear here.</p>
-                        <div className="form-group">
-                          <input
-                            className="form-input"
-                            value={iAnswer}
-                            onChange={e => setIAnswer(e.target.value)}
-                            placeholder="Type your answer"
-                            disabled
-                          />
+              {interview.turns.length > 0 && (
+                <div className="aiq-subcard">
+                  <div className="aiq-section-header compact">
+                    <h3>Transcript</h3>
+                    <span className="aiq-pill">{interview.turns.length} turns</span>
+                  </div>
+                  <div className="transcript">
+                    {interview.turns.map((turn, idx) => (
+                      <div key={idx} className="aiq-transcript-row">
+                        <div>
+                          <strong>Q{idx + 1}:</strong> {turn.q}
                         </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-primary" disabled>
-                            Send Answer
-                          </button>
-                          <button className="btn btn-secondary" disabled>
-                            Start Over
-                          </button>
-                          <button className="btn btn-secondary" disabled title="Generate a report after completing interview">
-                            Generate Report
-                          </button>
+                        <div>
+                          <strong>A{idx + 1}:</strong> {turn.a}
                         </div>
-                      </>
-                    ) : (!interview.done ? (
-                      <>
-                        <h3 className="card-title">Interview</h3>
-                        <p style={{ fontSize: 18 }}>{interview.question || '…'}</p>
-                        <div className="form-group">
-                          <input
-                            className="form-input"
-                            value={iAnswer}
-                            onChange={e => setIAnswer(e.target.value)}
-                            placeholder="Type your answer"
-                            onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
-                          />
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
-                            {iLoading.next ? 'Sending…' : 'Send Answer'}
-                          </button>
-                          <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
-                            Start Over
-                          </button>
-                          <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
-                            {iLoading.report ? 'Generating…' : 'Generate Report'}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <h3 className="card-title">Interview Complete</h3>
-                        <p className="muted">You can switch to other sections now.</p>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
-                            Start Over
-                          </button>
-                          <button className="btn btn-primary" onClick={generateInterviewReport} disabled={iLoading.report || !!interview.report}>
-                            {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
-                          </button>
-                        </div>
-                      </>
+                      </div>
                     ))}
-                    {interview.turns.length > 0 && (
-                      <div className="card" style={{ marginTop: 16 }}>
-                        <h3 className="card-title">Transcript</h3>
-                        <div className="transcript">
-                          {interview.turns.map((t, idx) => (
-                            <div key={idx} style={{ marginBottom: 8 }}>
-                              <div><strong>Q{idx + 1}:</strong> {t.q}</div>
-                              <div><strong>A{idx + 1}:</strong> {t.a}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div className="card" style={{ marginTop: 16 }}>
-                      <h3 className="card-title">Interview Report</h3>
-                      {interview.report ? (
-                        <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
-                          {interview.report}
-                        </pre>
-                      ) : (
-                        <p className="muted">
-                          Generate a report to review findings and share it with your care team.
-                        </p>
-                      )}
-                      <div style={{ marginTop: 12 }}>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => saveReportAndNotify(interview.report)}
-                          disabled={!interview.report || !selectedDoctors.length}
-                        >
-                          {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
-                        </button>
-                        {!interview.report && (
-                          <p className="muted" style={{ marginTop: 8 }}>
-                            Generate a report first to enable sharing.
-                          </p>
-                        )}
-                        {interview.report && !selectedDoctors.length && (
-                          <p className="muted" style={{ marginTop: 8 }}>
-                            Select at least one doctor above to send notifications with this report.
-                          </p>
-                        )}
-                      </div>
-                    </div>
                   </div>
-
-                  {questionnaires.length > 0 ? (
-                    <div className="questionnaires-grid">
-                      {questionnaires.map((questionnaire) => (
-                        <div key={questionnaire.id} className="questionnaire-card">
-                          <div className="questionnaire-info">
-                            <h3>{questionnaire.title}</h3>
-                            <p>{questionnaire.description}</p>
-                            <div className="questionnaire-meta">
-                              <span className="question-count">
-                                {questionnaire.questions?.length || 0} questions
-                              </span>
-                              <span className="estimated-time">
-                                ~{questionnaire.estimated_duration || 5} min
-                              </span>
-                            </div>
-                          </div>
-                          <div className="questionnaire-actions">
-                            <button
-                              className="btn btn-primary"
-                              onClick={() => startQuestionnaire(questionnaire)}
-                            >
-                              Start Questionnaire
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="no-data">No questionnaires available at the moment. Click "Generate New Questionnaire" to create one with AI.</p>
-                  )}
-
                 </div>
+              )}
 
-                <div className="completed-section">
-                  <h2>Completed Assessments</h2>
-                  {completedQuestionnaires.length > 0 ? (
-                    <div className="completed-grid">
-                      {completedQuestionnaires.map((response) => {
-                        const result = getAssessmentResult(
-                          { questions: [] }, // In real app, fetch full questionnaire
-                          response.answers
-                        );
-                        
-                        return (
-                          <div key={response.id} className="completed-card">
-                            <div className="completed-info">
-                              <h3>{response.questionnaire_title}</h3>
-                              <p className="completion-date">
-                                Completed: {new Date(response.completed_at).toLocaleDateString()}
-                              </p>
-                              <div className="assessment-result" style={{ backgroundColor: result.color }}>
-                                <span className="result-level">{result.level}</span>
-                              </div>
-                              <p className="result-advice">{result.advice}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="no-data">No completed questionnaires yet.</p>
-                  )}
+              <div className="aiq-subcard aiq-report-card">
+                <div className="aiq-section-header compact">
+                  <h3>Interview report</h3>
+                  {interview.report && <span className="aiq-pill aiq-pill-success">Ready</span>}
                 </div>
-
-                <div className="back-actions">
-                  <button
-                    className="btn-secondary"
-                    onClick={() => navigate('/assessment/vitals')}
-                  >
-                    Back
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={() => navigate('/assessment/documents')}
-                  >
-                    Next
-                  </button>
-                </div>
-
+                {interview.report ? (
+                  <>
+                    <pre className="aiq-report-preview">{interview.report}</pre>
+                    <p className="muted">Use the Share panel to send this report (with context) to your doctors.</p>
+                  </>
+                ) : (
+                  <p className="muted">Generate a report once the interview wraps up to archive the summary here.</p>
+                )}
               </div>
-            </main>
-
-            {/* Right/context column */}
-            <aside style={{ width: 320, flexShrink: 0 }} aria-label="Patient context panel">
-              <div className="card" style={{ position: 'sticky', top: 20 }}>
-                <h3 className="card-title">Patient Context</h3>
-                <p className="muted" style={{ marginBottom: 12 }}>Quick view: demographics, recent vitals, and uploads will be included in AI context.</p>
-
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Demographics</strong>
-                  <div style={{ marginTop: 8 }}>
-                    <div><strong>Name:</strong> {contextData.patient?.name || '—'}</div>
-                    <div><strong>Age:</strong> {contextData.patient?.age ?? '—'}</div>
-                    <div><strong>Gender:</strong> {contextData.patient?.gender || '—'}</div>
-                    <div><strong>Contact:</strong> {contextData.patient?.phone || contextData.patient?.email || '—'}</div>
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Latest Vitals</strong>
-                  <div style={{ marginTop: 8 }}>
-                    {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
-                      contextData.vitals.map((v, idx) => (
-                        <div key={idx} style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 13 }}><strong>{v.type}</strong>: {v.value ?? '—'} {v.unit || ''}</div>
-                          {v.timestamp && <div style={{ fontSize: 11, color: '#666' }}>{new Date(v.timestamp).toLocaleString()}</div>}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="muted">No recent vitals</div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Uploaded Documents</strong>
-                  <div style={{ marginTop: 8 }}>
-                    {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
-                      <ul style={{ paddingLeft: 16, margin: 0 }}>
-                        {contextData.uploads.map((u, i) => (
-                          <li key={i} style={{ fontSize: 13, marginBottom: 6 }}>{u.name || u}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="muted">No uploads</div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-light" onClick={refreshContext}>Refresh</button>
-                  <button className="btn btn-outline" onClick={() => alert('This context will be included in AI prompts.')}>How it’s used</button>
-                </div>
-              </div>
-            </aside>
-
+            </section>
           </div>
-        </div>
+
+          <div className="aiq-support-stack">
+            <section className="card aiq-doctor-card">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Care team</p>
+                  <h2>Select doctors to notify</h2>
+                </div>
+                <span className="aiq-pill">{selectedDoctors.length} selected</span>
+              </header>
+              <div className="aiq-doctor-toolbar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <input
+                  className="form-input"
+                  style={{ flex: '1 1 240px', minWidth: '240px' }}
+                  placeholder="Search by name or specialty"
+                  value={doctorSearch}
+                  onChange={(e) => setDoctorSearch(e.target.value)}
+                />
+                <small className="muted" style={{ alignSelf: 'center' }}>
+                  {normalizedQuery
+                    ? noDoctorMatches
+                      ? 'No matches'
+                      : `${displayedDoctors.length} match${displayedDoctors.length === 1 ? '' : 'es'}`
+                    : `Showing ${Math.min(displayedDoctors.length, doctors.length)} of ${doctors.length}`}
+                </small>
+              </div>
+              <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+              {noDoctorMatches ? (
+                <div className="aiq-empty-state">No doctors match that search.</div>
+              ) : displayedDoctors.length > 0 ? (
+                <div className="aiq-doctor-grid">
+                  {displayedDoctors.map((doctor) => {
+                    const doctorKey = doctor?.user_id || doctor?.id;
+                    const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
+                    return (
+                      <label key={doctorKey || doctor?.email || Math.random()} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const doctorId = doctor?.user_id || doctor?.id;
+                            if (!doctorId) return;
+                            if (e.target.checked) {
+                              setSelectedDoctors((prev) => Array.from(new Set([...prev, doctorId])));
+                            } else {
+                              setSelectedDoctors((prev) => prev.filter((id) => id !== doctorId));
+                            }
+                          }}
+                        />
+                        <div>
+                          <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
+                          <div className="muted">{doctor.specialist || doctor.bio || 'General practice'}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="aiq-empty-state">No doctors available right now.</div>
+              )}
+            </section>
+
+            <section className="card aiq-share-card">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Share summary</p>
+                  <h2>Notify your care team</h2>
+                </div>
+                <span className={`aiq-pill ${interview.report ? 'aiq-pill-success' : ''}`}>
+                  {interview.report ? 'Report ready' : 'Report pending'}
+                </span>
+              </header>
+              <p className="muted">Generated reports automatically include the patient context shown on the right.</p>
+              <div className="aiq-share-status">
+                <div>
+                  <strong>Language</strong>
+                  <span>{languageLabel}</span>
+                </div>
+                <div>
+                  <strong>Doctors selected</strong>
+                  <span>{selectedDoctors.length}</span>
+                </div>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
+                disabled={shareDisabled}
+              >
+                Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
+              </button>
+              <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
+            </section>
+
+            <section className="card aiq-nav-card">
+              <div className="aiq-nav">
+                <button className="btn btn-secondary" onClick={() => navigate('/assessment/vitals')}>
+                  Back
+                </button>
+                <button className="btn btn-primary" onClick={() => navigate('/assessment/documents')}>
+                  Next
+                </button>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        <aside className="aiq-aside" aria-label="Patient context panel">
+          <div className="card aiq-context-card">
+            <h3 className="card-title">Patient Context</h3>
+            <p className="muted">Demographics, vitals, and uploads feed the AI prompts.</p>
+            <small className="muted" style={{ display: 'block', marginBottom: '12px' }}>
+              This panel refreshes automatically from your profile, vitals, and documents—no manual entry needed.
+            </small>
+
+            <div className="aiq-context-group">
+              <strong>Demographics</strong>
+              <div className="aiq-context-list">
+                <div>
+                  <span>Name</span>
+                  <span>{contextData.patient?.name || '—'}</span>
+                </div>
+                <div>
+                  <span>Age</span>
+                  <span>{contextData.patient?.age ?? '—'}</span>
+                </div>
+                <div>
+                  <span>Gender</span>
+                  <span>{contextData.patient?.gender || '—'}</span>
+                </div>
+                <div>
+                  <span>Contact</span>
+                  <span>{contextData.patient?.phone || contextData.patient?.email || '—'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="aiq-context-group">
+              <strong>Latest Vitals</strong>
+              <div className="aiq-context-list">
+                {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
+                  contextData.vitals.map((vital, index) => (
+                    <div key={`${vital.type || 'vital'}-${index}`}>
+                      <span>{vital.type || vital.label || 'Metric'}</span>
+                      <span>
+                        {vital.value ?? '—'} {vital.unit || ''}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="muted">No recent vitals</div>
+                )}
+              </div>
+            </div>
+
+            <div className="aiq-context-group">
+              <strong>Uploaded Documents</strong>
+              {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
+                <ul className="aiq-upload-list">
+                  {contextData.uploads.map((upload, index) => (
+                    <li key={`${upload.name || 'upload'}-${index}`}>
+                      <div><strong>{upload.name || upload}</strong> {upload.status && <span className="muted">({upload.status})</span>}</div>
+                      {upload.summary && <small className="muted">{upload.summary}</small>}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="muted">No uploads</div>
+              )}
+            </div>
+
+            <div className="aiq-button-row">
+              <button className="btn btn-light" onClick={refreshContext} disabled={contextLoading}>
+                {contextLoading ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <button className="btn btn-outline" onClick={() => alert('This context will be included in AI prompts.')}>
+                How it’s used
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
-    );
-  } catch (error) {
-    console.error('AIQuestionnairesPage: ERROR in main render:', error);
-    return (
-      <div style={{ padding: '20px', background: 'red', color: 'white', fontSize: '18px' }}>
-        🚨 MAIN RENDER ERROR: {error.message}
-        <br />
-        <pre>{error.stack}</pre>
-      </div>
-    );
-  }
+    </div>
+  );
 }
 
 export default AIQuestionnairesPage;

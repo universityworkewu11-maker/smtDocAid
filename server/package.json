@@ -6,13 +6,16 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "node index.js",
-		"dev": "node index.js"
+		"dev": "node index.js",
+		"extract-documents": "node scripts/documentExtractor.js"
 	},
 	"dependencies": {
+		"@supabase/supabase-js": "^2.55.0",
 		"cors": "^2.8.5",
-		"express": "^4.19.2",
 		"cross-fetch": "^4.0.0",
-		"dotenv": "^16.4.5"
+		"dotenv": "^16.4.5",
+		"express": "^4.19.2",
+		"pdf-parse": "^1.1.1"
 	}
 }
  
