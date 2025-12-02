@@ -11,6 +11,16 @@ const ALLOWED_UPLOAD_TYPES = [
   'application/pdf'
 ];
 
+const mapDocumentRow = (row) => ({
+  id: row?.id || row?.storage_path || row?.file_name,
+  name: row?.original_name || row?.file_name || 'Document',
+  path: row?.storage_path || row?.file_name || '',
+  url: row?.public_url || null,
+  size: row?.size_bytes || null,
+  lastModified: row?.uploaded_at || row?.updated_at || null,
+  type: row?.mime_type || 'application/octet-stream'
+});
+
 const UploadDocumentsPage = () => {
   const navigate = useNavigate();
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -20,6 +30,7 @@ const UploadDocumentsPage = () => {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
   const [previousUploads, setPreviousUploads] = useState([]);
+  const [previousUploadsLoading, setPreviousUploadsLoading] = useState(true);
 
   // Fetch previously uploaded files from Supabase Storage (bucket per user folder)
   useEffect(() => {
