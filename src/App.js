@@ -1747,7 +1747,8 @@ function QuestionnairePage() {
   };
 
   return (
-    <main>
+    <>
+      <main>
         <div className="card questionnaire-container route-screen">
           <div style={{ maxWidth: 980, margin: '0 auto', padding: 20 }}>
         <div className="questionnaire-header">
