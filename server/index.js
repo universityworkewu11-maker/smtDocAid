@@ -225,9 +225,13 @@ function parseJSON(s, fallback = null) {
 	try { return JSON.parse(String(s)); } catch { return fallback; }
 }
 
-function buildInterviewSystemPrompt() {
+function buildInterviewSystemPrompt(language = 'en') {
+	const lang = language === 'bn' ? 'bn' : 'en';
+	const languageDirective = lang === 'bn'
+		? 'All patient-facing wording must be in Bangla (বাংলা). Keep your tone respectful, clear, and confident.'
+		: 'Use clear, plain English that a patient can understand.';
 	return (
-		'You are a clinical intake assistant. Ask one question at a time to collect relevant information for a doctor.\n' +
+		`You are a clinical intake assistant. Ask one question at a time to collect relevant information for a doctor. ${languageDirective}\n` +
 		'- Always return ONLY valid JSON with keys: {"question":"<string>","done":false}.\n' +
 		'- If you have enough information, return {"question":"","done":true}.\n' +
 		'- Keep questions short, clear, and medically relevant.\n' +
@@ -235,15 +239,30 @@ function buildInterviewSystemPrompt() {
 	);
 }
 
+function buildReportSystemPrompt(language = 'en') {
+	const lang = language === 'bn' ? 'bn' : 'en';
+	const languageDirective = lang === 'bn'
+		? 'All narrative sentences must be written in Bangla (বাংলা). Keep the headings in English as requested.'
+		: 'Write the entire report in English.';
+	return (
+		'Return ONLY valid JSON with a single key: {"report":"<markdown>"}. ' +
+		'At the very top of the markdown (before any headings), include four lines in this exact format using available context (or N/A if unknown):\n' +
+		'Name: <name>\nAge: <age>\nGender: <gender>\nContact: <phone>.\n' +
+		'After those lines, produce a concise, structured clinical report with headings exactly: Chief Complaint, History of Present Illness, Vitals, Probable Diagnosis, Recommendations. ' +
+		languageDirective
+	);
+}
+
 // Start interview
-// body: { context?: any }
+// body: { context?: any, language?: 'en' | 'bn' }
 app.post('/api/v1/ai/interview/start', async (req, res) => {
 	setCorsHeaders(req, res);
 	try {
-		const { context } = req.body || {};
+		const { context, language } = req.body || {};
+		const lang = language === 'bn' ? 'bn' : 'en';
 		const sessionId = uuid();
 		const history = [
-			{ role: 'system', content: buildInterviewSystemPrompt() },
+			{ role: 'system', content: buildInterviewSystemPrompt(lang) },
 			{ role: 'user', content: JSON.stringify({ context: context || {}, instruction: 'Begin interview now.' }) }
 		];
 		const content = await openaiChat(history, { temperature: 0.4, max_tokens: 200 });
@@ -255,7 +274,7 @@ app.post('/api/v1/ai/interview/start', async (req, res) => {
 		} else {
 			history.push({ role: 'assistant', content: JSON.stringify({ question: '', done: true }) });
 		}
-		sessions.set(sessionId, { history, turns: 1, createdAt: Date.now() });
+		sessions.set(sessionId, { history, turns: 1, createdAt: Date.now(), language: lang });
 		return res.json({ ok: true, sessionId, question, done });
 	} catch (e) {
 		return res.status(500).json({ ok: false, error: e?.message || String(e) });
@@ -267,9 +286,17 @@ app.post('/api/v1/ai/interview/start', async (req, res) => {
 app.post('/api/v1/ai/interview/next', async (req, res) => {
 	setCorsHeaders(req, res);
 	try {
-		const { sessionId, answer } = req.body || {};
+		const { sessionId, answer, language } = req.body || {};
 		const sess = sessions.get(sessionId);
 		if (!sess) return res.status(400).json({ ok: false, error: 'invalid sessionId' });
+		const lang = language === 'bn' ? 'bn' : sess.language || 'en';
+		if (lang !== sess.language) {
+			sess.language = lang;
+			// Refresh system directive so future turns stay in the updated language
+			if (Array.isArray(sess.history) && sess.history.length > 0 && sess.history[0]?.role === 'system') {
+				sess.history[0].content = buildInterviewSystemPrompt(lang);
+			}
+		}
 		sess.history.push({ role: 'user', content: String(answer || '').trim() });
 		sess.turns = (sess.turns || 0) + 1;
 		const limitReached = sess.turns >= 15;
@@ -294,10 +321,11 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 app.post('/api/v1/ai/interview/report', async (req, res) => {
 	setCorsHeaders(req, res);
 	try {
-		const { sessionId } = req.body || {};
+		const { sessionId, language } = req.body || {};
 		const sess = sessions.get(sessionId);
 		if (!sess) return res.status(400).json({ ok: false, error: 'invalid sessionId' });
-		const system = 'Return ONLY valid JSON with a single key: {"report":"<markdown>"}. At the very top of the markdown (before any headings), include four lines in this exact format using available context (or N/A if unknown):\nName: <name>\nAge: <age>\nGender: <gender>\nContact: <phone>. After those lines, produce a concise, structured clinical report with headings exactly: Chief Complaint, History of Present Illness, Vitals, Probable Diagnosis, Recommendations.';
+		const lang = language === 'bn' ? 'bn' : sess.language || 'en';
+		const system = buildReportSystemPrompt(lang);
 		const history = [
 			{ role: 'system', content: system },
 			...sess.history,
