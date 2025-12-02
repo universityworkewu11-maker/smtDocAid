@@ -173,7 +173,7 @@ function AIQuestionnairesPage() {
     try {
       const { data, error } = await supabase
         .from('doctors')
-        .select('id, user_id, name, email, specialist, specialty, specialities, updated_at')
+        .select('id, user_id, name, email, specialist, bio, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -230,7 +230,7 @@ function AIQuestionnairesPage() {
         try {
           const { data: docs, error: docsError } = await supabase
             .from('documents')
-            .select('id, original_name, file_name, mime_type, size_bytes, public_url, uploaded_at')
+            .select('*')
             .eq('user_id', uid)
             .order('uploaded_at', { ascending: false })
             .limit(25);
