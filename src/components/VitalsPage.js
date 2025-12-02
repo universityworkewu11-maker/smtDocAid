@@ -1,11 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
 // Supabase client imported from centralized module
 
+const stripTrailingSlash = (url = '') => url.replace(/\/$/, '');
+
 const VitalsPage = () => {
   const navigate = useNavigate();
+  const serverBase = useMemo(() => {
+    const envBase = stripTrailingSlash(process.env.REACT_APP_SERVER_BASE || process.env.REACT_APP_SERVER_URL || '');
+    if (envBase) return envBase;
+    if (typeof window !== 'undefined') return stripTrailingSlash(window.location.origin);
+    return '';
+  }, []);
   const [currentStep, setCurrentStep] = useState(0);
   const [vitalsData, setVitalsData] = useState({
     temperature: { value: null, status: 'pending', timestamp: null, confirmed: false },
@@ -93,32 +101,25 @@ const VitalsPage = () => {
   }, []);
 
   // Raspberry Pi API integration
-  const takeVitalReading = async (vitalType, pinNumber) => {
+  const takeVitalReading = async (vitalType) => {
     setIsLoading(true);
     setError('');
 
     try {
-      // Fetch specific vital from Raspberry Pi API
-      const endpointMap = {
-        temperature: `/api/read/temperature?pin=${pinNumber}`,
-        heartRate: `/api/read/heartRate?pin=${pinNumber}`,
-        spo2: `/api/read/spo2?pin=${pinNumber}`
-      };
-      const response = await fetch(`http://10.60.194.209:7000${endpointMap[vitalType]}`);
+      const url = `${serverBase || ''}/api/vitals`;
+      const response = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
       if (!response.ok) {
-        throw new Error('Failed to fetch vitals from Raspberry Pi server');
+        throw new Error('Failed to fetch vitals from ingestion server');
       }
       const data = await response.json();
 
-      // Extract value based on vitalType
-      let value = null;
-      if (vitalType === 'temperature') {
-        value = data.object_temp_C;
-      } else if (vitalType === 'heartRate') {
-        value = data.heart_rate_bpm;
-      } else if (vitalType === 'spo2') {
-        value = data.spo2_percent;
-      }
+      // Server stores latest Raspi payload; map to UI keys
+      const valueMap = {
+        temperature: data.temperature ?? data.object_temp_C ?? null,
+        heartRate: data.heartRate ?? data.heart_rate ?? data.heart_rate_bpm ?? null,
+        spo2: data.spo2 ?? data.spo2_percent ?? null
+      };
+      const value = valueMap[vitalType];
 
       if (value !== null && value !== undefined) {
         const timestamp = new Date().toISOString();
@@ -132,7 +133,7 @@ const VitalsPage = () => {
           }
         }));
       } else {
-        throw new Error(`No ${vitalType} reading available`);
+        throw new Error(`No ${vitalType} reading available yet. Ensure your Raspberry Pi is posting data.`);
       }
     } catch (err) {
       setError(err.message);
@@ -322,7 +323,7 @@ const VitalsPage = () => {
             <div className="vital-actions">
               <button
                 className="btn btn-primary"
-                onClick={() => takeVitalReading(currentVital.key, currentVital.pin)}
+                onClick={() => takeVitalReading(currentVital.key)}
                 disabled={isLoading}
               >
                 {isLoading ? (
