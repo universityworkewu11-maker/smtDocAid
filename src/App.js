@@ -1004,7 +1004,6 @@ function SignupPage() {
   }
 
   return (
-    <>
       <main>
       <div className="card form-container">
         <h2 className="card-title">Sign Up</h2>
