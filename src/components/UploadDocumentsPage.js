@@ -18,7 +18,10 @@ const mapDocumentRow = (row) => ({
   url: row?.public_url || null,
   size: row?.size_bytes || null,
   lastModified: row?.uploaded_at || row?.updated_at || null,
-  type: row?.mime_type || 'application/octet-stream'
+  type: row?.mime_type || 'application/octet-stream',
+  status: row?.extraction_status || 'pending',
+  summary: row?.extraction_summary || null,
+  extractedText: row?.extracted_text || null
 });
 
 const UploadDocumentsPage = () => {
@@ -125,6 +128,7 @@ const UploadDocumentsPage = () => {
               mime_type: file.type,
               size_bytes: file.size,
               public_url: publicUrl,
+              extraction_status: 'pending',
               metadata: { source: 'UploadDocumentsPage' }
             }])
             .select('*')
