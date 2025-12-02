@@ -1598,18 +1598,49 @@ function QuestionnairePage() {
     (async () => {
       try {
         // Enforce at least one input across the flow (vitals, uploads, or questionnaire answers)
-        const any = (() => {
+        const hasVitals = (() => {
           try {
             const vd = JSON.parse(window.localStorage.getItem('vitalsData') || window.localStorage.getItem('vitals_data') || 'null');
-            const anyVital = vd && ((vd.temperature && vd.temperature.value != null) || (vd.heartRate && vd.heartRate.value != null) || (vd.spo2 && vd.spo2.value != null));
-            const uploads = JSON.parse(window.localStorage.getItem('uploadedDocuments') || '[]');
-            const anyUpload = Array.isArray(uploads) && uploads.length > 0;
-            const ans = JSON.parse(window.localStorage.getItem('questionnaireAnswers') || '{}') || {};
-            const anyAnswer = Object.values(ans).some(v => Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''));
-            return Boolean(anyVital || anyUpload || anyAnswer);
-          } catch (_) { return false; }
+            return Boolean(vd && ((vd.temperature && vd.temperature.value != null) || (vd.heartRate && vd.heartRate.value != null) || (vd.spo2 && vd.spo2.value != null)));
+          } catch (_) {
+            return false;
+          }
         })();
-        if (!any) {
+
+        let hasUploads = false;
+        try {
+          const cachedUploads = JSON.parse(window.localStorage.getItem('uploadedDocuments') || '[]');
+          hasUploads = Array.isArray(cachedUploads) && cachedUploads.length > 0;
+        } catch (_) {
+          hasUploads = false;
+        }
+
+        if (!hasUploads) {
+          try {
+            const uid = auth?.session?.user?.id;
+            if (uid) {
+              const { data: docProbe } = await supabase
+                .from('documents')
+                .select('id')
+                .eq('user_id', uid)
+                .limit(1);
+              hasUploads = Array.isArray(docProbe) && docProbe.length > 0;
+            }
+          } catch (_) {
+            hasUploads = false;
+          }
+        }
+
+        const hasAnswers = (() => {
+          try {
+            const ans = JSON.parse(window.localStorage.getItem('questionnaireAnswers') || '{}') || {};
+            return Object.values(ans).some(v => Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''));
+          } catch (_) {
+            return false;
+          }
+        })();
+
+        if (!(hasVitals || hasUploads || hasAnswers)) {
           alert('Please provide at least one input (a vital, an upload, or an answer) before submitting.');
           return;
         }
