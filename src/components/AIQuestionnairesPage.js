@@ -27,10 +27,12 @@ function AIQuestionnairesPage() {
   const [selectedDoctors, setSelectedDoctors] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [doctorSearch, setDoctorSearch] = useState('');
+  const [interviewLanguage, setInterviewLanguage] = useState('en');
   const LS_KEYS = {
     interview: 'interview_state_v1',
     base: 'api_server_base_v1',
-    selectedDoctors: 'selected_doctors_v1'
+    selectedDoctors: 'selected_doctors_v1',
+    interviewLanguage: 'interview_language_v1'
   };
 
   // Generic POST helper with fallback to localhost:5001 if relative path fails
@@ -101,6 +103,10 @@ function AIQuestionnairesPage() {
         if (Array.isArray(parsed)) setSelectedDoctors(parsed);
       }
     } catch (_) {}
+    try {
+      const savedLang = window.localStorage.getItem(LS_KEYS.interviewLanguage);
+      if (savedLang === 'en' || savedLang === 'bn') setInterviewLanguage(savedLang);
+    } catch (_) {}
   }, []);
 
   // Persist interview and base whenever they change (simple durability against tab minimize/reload)
@@ -113,6 +119,9 @@ function AIQuestionnairesPage() {
   useEffect(() => {
     try { window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors)); } catch (_) {}
   }, [selectedDoctors]);
+  useEffect(() => {
+    try { window.localStorage.setItem(LS_KEYS.interviewLanguage, interviewLanguage); } catch (_) {}
+  }, [interviewLanguage]);
 
   useEffect(() => {
     if (!Array.isArray(doctors) || !doctors.length) return;
@@ -344,7 +353,7 @@ function AIQuestionnairesPage() {
     setError('');
     try {
       const ctx = await buildInterviewContext();
-      const j = await apiPostJSON('/api/v1/ai/interview/start', { context: ctx });
+      const j = await apiPostJSON('/api/v1/ai/interview/start', { context: ctx, language: interviewLanguage });
       if (!j.ok) throw new Error(j?.error || 'Interview start failed');
       setInterview({ sessionId: j.sessionId, question: j.question || '', turns: [], done: Boolean(j.done), report: '' });
       setIAnswer('');
@@ -366,7 +375,7 @@ function AIQuestionnairesPage() {
     setILoading(prev => ({ ...prev, next: true }));
     setError('');
     try {
-      const j = await apiPostJSON('/api/v1/ai/interview/next', { sessionId: interview.sessionId, answer: a });
+      const j = await apiPostJSON('/api/v1/ai/interview/next', { sessionId: interview.sessionId, answer: a, language: interviewLanguage });
       if (!j.ok) throw new Error(j?.error || 'Interview next failed');
       setInterview(prev => ({
         ...prev,
@@ -399,7 +408,7 @@ function AIQuestionnairesPage() {
     setILoading(prev => ({ ...prev, report: true }));
     setError('');
     try {
-      const j = await apiPostJSON('/api/v1/ai/interview/report', { sessionId: interview.sessionId });
+      const j = await apiPostJSON('/api/v1/ai/interview/report', { sessionId: interview.sessionId, language: interviewLanguage });
       if (!j.ok) throw new Error(j?.error || 'Report failed');
       const reportContent = String(j.report || '');
       setInterview(prev => ({ ...prev, report: reportContent }));
@@ -542,6 +551,18 @@ function AIQuestionnairesPage() {
               >
                 Go to Interview Workspace
               </button>
+              <div className="aiq-language-switch">
+                <label htmlFor="interview-language" className="aiq-label" style={{ marginBottom: 4 }}>Interview language</label>
+                <select
+                  id="interview-language"
+                  className="form-input"
+                  value={interviewLanguage}
+                  onChange={(e) => setInterviewLanguage(e.target.value === 'bn' ? 'bn' : 'en')}
+                >
+                  <option value="en">English</option>
+                  <option value="bn">Bangla</option>
+                </select>
+              </div>
             </div>
           </div>
         </section>
@@ -717,6 +738,7 @@ function AIQuestionnairesPage() {
             <div className="card aiq-context-card">
               <h3 className="card-title">Patient Context</h3>
               <p className="muted">Demographics, vitals, and uploads feed the AI prompts.</p>
+              <small className="muted" style={{ display: 'block', marginBottom: '12px' }}>This panel refreshes automatically from your profile, vitals, and documents—no manual entry needed.</small>
 
               <div className="aiq-context-group">
                 <strong>Demographics</strong>
