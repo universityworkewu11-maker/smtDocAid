@@ -1004,7 +1004,8 @@ function SignupPage() {
   }
 
   return (
-    <main>
+    <>
+      <main>
       <div className="card form-container">
         <h2 className="card-title">Sign Up</h2>
         {error && <div className="alert alert-danger">{error}</div>}
