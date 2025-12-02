@@ -32,41 +32,34 @@ const UploadDocumentsPage = () => {
   const [previousUploads, setPreviousUploads] = useState([]);
   const [previousUploadsLoading, setPreviousUploadsLoading] = useState(true);
 
-  // Fetch previously uploaded files from Supabase Storage (bucket per user folder)
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const uid = user?.id;
-        if (!uid) return;
-        const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-        const { data, error } = await supabase.storage.from(bucket).list(uid, { limit: 100, sortBy: { column: 'name', order: 'asc' } });
-        if (!error && Array.isArray(data)) {
-          // Attempt to construct public URLs if bucket is public; fallback to just names
-          const items = await Promise.all(data.map(async (it) => {
-            const key = `${uid}/${it.name}`;
-            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(key);
-            let url = urlData?.publicUrl || null;
-            // If not public, try a short-lived signed URL
-            if (!url) {
-              try {
-                const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
-                url = signed?.signedUrl || null;
-              } catch (_) {}
-            }
-            return {
-              name: it.name,
-              path: key,
-              url,
-              size: it.metadata?.size || null,
-              lastModified: it.updated_at || it.created_at || null
-            };
-          }));
-          setPreviousUploads(items);
-        }
-      } catch (_) {}
-    })();
+  const loadPersistedDocuments = useCallback(async () => {
+    setPreviousUploadsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        setPreviousUploads([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('documents')
+        .select('id, original_name, file_name, storage_path, public_url, mime_type, size_bytes, uploaded_at')
+        .eq('user_id', uid)
+        .order('uploaded_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setPreviousUploads((data || []).map(mapDocumentRow));
+    } catch (docError) {
+      console.warn('Failed to load document metadata:', docError);
+      setPreviousUploads([]);
+    } finally {
+      setPreviousUploadsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPersistedDocuments();
+  }, [loadPersistedDocuments]);
 
   // Upload files to Supabase (or mock)
   const uploadFiles = useCallback(async (files) => {
