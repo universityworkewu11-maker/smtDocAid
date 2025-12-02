@@ -529,65 +529,6 @@ function AIQuestionnairesPage() {
 
         <div className="aiq-layout">
           <main className="aiq-main">
-            <section className="aiq-action-grid">
-              <div className="card aiq-action-card">
-                <span className="aiq-step-tag">Step 1</span>
-                <h3>Adaptive Interview</h3>
-                <p>Kick off or resume the conversational intake to surface relevant clinical questions.</p>
-                <div className="aiq-action-buttons">
-                  <button
-                    className="btn btn-primary"
-                    onClick={startInterview}
-                    disabled={iLoading.start}
-                  >
-                    {interview.sessionId ? 'Resume Session' : 'Start Interview'}
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={restartInterview}
-                    disabled={!interview.sessionId}
-                  >
-                    Reset Session
-                  </button>
-                </div>
-                <small className="aiq-hint">{interview.sessionId ? `Session ID: ${interview.sessionId.slice(0, 8)}…` : 'No active session'}</small>
-              </div>
-
-              <div className="card aiq-action-card">
-                <span className="aiq-step-tag">Step 2</span>
-                <h3>Generate Insights</h3>
-                <p>Summarize the conversation into a structured clinical briefing for quick review.</p>
-                <div className="aiq-action-buttons">
-                  <button
-                    className="btn btn-primary"
-                    onClick={generateInterviewReport}
-                    disabled={iLoading.report || !!interview.report || !interview.sessionId}
-                  >
-                    {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
-                  </button>
-                </div>
-                <small className="aiq-hint">{interview.report ? 'Report saved locally' : 'Finish the interview to unlock report generation.'}</small>
-              </div>
-
-              <div className="card aiq-action-card">
-                <span className="aiq-step-tag">Step 3</span>
-                <h3>Share Securely</h3>
-                <p>Select your care team and notify them once a report is ready.</p>
-                <div className="aiq-action-buttons">
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns })}
-                    disabled={!interview.report || !selectedDoctors.length}
-                  >
-                    Share with Doctor{selectedDoctors.length > 1 ? 's' : ''}
-                  </button>
-                </div>
-                <small className="aiq-hint">
-                  {!selectedDoctors.length ? 'Pick doctors below to enable sharing.' : `${selectedDoctors.length} doctor(s) selected.`}
-                </small>
-              </div>
-            </section>
-
             <section className="card aiq-doctor-card">
               <header className="aiq-section-header">
                 <div>
