@@ -1967,6 +1967,7 @@ function QuestionnairePage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 
