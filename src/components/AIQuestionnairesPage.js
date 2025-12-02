@@ -604,56 +604,10 @@ function AIQuestionnairesPage() {
         <div className="aiq-layout">
           <main className="aiq-main">
             <section className="card aiq-doctor-card">
-              <header className="aiq-section-header">
-                <div>
-                  <p className="aiq-eyebrow">Care team</p>
-                  <h2>Select doctors to notify</h2>
-                </div>
-                <span className="aiq-pill">{selectedDoctors.length} selected</span>
-              </header>
-              <div className="aiq-doctor-toolbar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                <input
-                  className="form-input"
-                  style={{ flex: '1 1 240px', minWidth: '240px' }}
-                  placeholder="Search by name or specialty"
-                  value={doctorSearch}
-                  onChange={(e) => setDoctorSearch(e.target.value)}
-                />
-                <small className="muted" style={{ alignSelf: 'center' }}>
-                  {normalizedQuery
-                    ? (noDoctorMatches ? 'No matches' : `${displayedDoctors.length} match${displayedDoctors.length === 1 ? '' : 'es'}`)
-                    : `Showing ${Math.min(displayedDoctors.length, doctors.length)} of ${doctors.length}`}
-                </small>
-              </div>
-              <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
-              {error && (
-                <div className="alert alert-danger" style={{ margin: '12px 0' }}>{error}</div>
-              )}
-              {noDoctorMatches ? (
-                <div className="aiq-empty-state">No doctors match that search.</div>
-              ) : displayedDoctors.length > 0 ? (
-                <div className="aiq-doctor-grid">
-                  {displayedDoctors.map((doctor) => {
-                    const doctorKey = doctor?.user_id || doctor?.id;
-                    const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
-                    return (
-                      <label key={doctorKey || (doctor?.email ?? Math.random())} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            const doctorId = doctor?.user_id || doctor?.id;
-                            if (!doctorId) return;
-                            if (e.target.checked) {
-                              setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
-                            } else {
-                              setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
-                            }
-                          }}
-                        />
-                        <div>
-                          <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
-                          <div className="muted">{doctor.specialist || doctor.specialty || doctor.specialities || 'General practice'}</div>
+              <div className="aiq-layout">
+                <main className="aiq-main-grid">
+                  <div className="aiq-primary-stack">
+                    <section className="card aiq-interview-card" id="aiq-interview">
                         </div>
                       </label>
                     );
@@ -743,54 +697,150 @@ function AIQuestionnairesPage() {
                   <h3>Interview report</h3>
                   {interview.report && <span className="aiq-pill aiq-pill-success">Ready</span>}
                 </div>
-                {interview.report ? (
-                  <pre className="aiq-report-preview">{interview.report}</pre>
-                ) : (
-                  <p className="muted">Generate a report once the interview wraps up to archive the summary here.</p>
-                )}
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
-                  disabled={!interview.report || !selectedDoctors.length}
-                >
-                  {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
-                </button>
-              </div>
-            </section>
+                <div className="aiq-split-grid">
+                  {interview.turns.length > 0 && (
+                    <div className="aiq-subcard">
+                      <div className="aiq-section-header compact">
+                        <h3>Transcript</h3>
+                        <span className="aiq-pill">{interview.turns.length} turns</span>
+                      </div>
+                      <div className="transcript">
+                        {interview.turns.map((t, idx) => (
+                          <div key={idx} className="aiq-transcript-row">
+                            <div><strong>Q{idx + 1}:</strong> {t.q}</div>
+                            <div><strong>A{idx + 1}:</strong> {t.a}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-            <div className="aiq-nav">
-              <button className="btn btn-secondary" onClick={() => navigate('/assessment/vitals')}>
-                Back
-              </button>
-              <button className="btn btn-primary" onClick={() => navigate('/assessment/documents')}>
-                Next
-              </button>
-            </div>
-          </main>
-
-          <aside className="aiq-aside" aria-label="Patient context panel">
-            <div className="card aiq-context-card">
-              <h3 className="card-title">Patient Context</h3>
-              <p className="muted">Demographics, vitals, and uploads feed the AI prompts.</p>
-              <small className="muted" style={{ display: 'block', marginBottom: '12px' }}>This panel refreshes automatically from your profile, vitals, and documents—no manual entry needed.</small>
-
-              <div className="aiq-context-group">
-                <strong>Demographics</strong>
-                <div className="aiq-context-list">
-                  <div><span>Name</span><span>{contextData.patient?.name || '—'}</span></div>
-                  <div><span>Age</span><span>{contextData.patient?.age ?? '—'}</span></div>
-                  <div><span>Gender</span><span>{contextData.patient?.gender || '—'}</span></div>
-                  <div><span>Contact</span><span>{contextData.patient?.phone || contextData.patient?.email || '—'}</span></div>
+                  <div className="aiq-subcard aiq-report-card">
+                    <div className="aiq-section-header compact">
+                      <h3>Interview report</h3>
+                      {interview.report && <span className="aiq-pill aiq-pill-success">Ready</span>}
+                    </div>
+                    {interview.report ? (
+                      <>
+                        <pre className="aiq-report-preview">{interview.report}</pre>
+                        <p className="muted">Use the Share panel to send this report (with context) to your doctors.</p>
+                      </>
+                    ) : (
+                      <p className="muted">Generate a report once the interview wraps up to archive the summary here.</p>
+                    )}
+                  </div>
                 </div>
+              </section>
               </div>
 
-              <div className="aiq-context-group">
-                <strong>Latest Vitals</strong>
-                <div className="aiq-context-list">
-                  {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
-                    contextData.vitals.map((v, idx) => (
-                      <div key={idx}>
-                        <span>{v.type}</span>
+              <div className="aiq-support-stack">
+                <section className="card aiq-doctor-card">
+                  <header className="aiq-section-header">
+                    <div>
+                      <p className="aiq-eyebrow">Care team</p>
+                      <h2>Select doctors to notify</h2>
+                    </div>
+                    <span className="aiq-pill">{selectedDoctors.length} selected</span>
+                  </header>
+                  <div className="aiq-doctor-toolbar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    <input
+                      className="form-input"
+                      style={{ flex: '1 1 240px', minWidth: '240px' }}
+                      placeholder="Search by name or specialty"
+                      value={doctorSearch}
+                      onChange={(e) => setDoctorSearch(e.target.value)}
+                    />
+                    <small className="muted" style={{ alignSelf: 'center' }}>
+                      {normalizedQuery
+                        ? (noDoctorMatches ? 'No matches' : `${displayedDoctors.length} match${displayedDoctors.length === 1 ? '' : 'es'}`)
+                        : `Showing ${Math.min(displayedDoctors.length, doctors.length)} of ${doctors.length}`}
+                    </small>
+                  </div>
+                  <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+                  {error && (
+                    <div className="alert alert-danger" style={{ margin: '12px 0' }}>{error}</div>
+                  )}
+                  {noDoctorMatches ? (
+                    <div className="aiq-empty-state">No doctors match that search.</div>
+                  ) : displayedDoctors.length > 0 ? (
+                    <div className="aiq-doctor-grid">
+                      {displayedDoctors.map((doctor) => {
+                        const doctorKey = doctor?.user_id || doctor?.id;
+                        const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
+                        return (
+                          <label key={doctorKey || (doctor?.email ?? Math.random())} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const doctorId = doctor?.user_id || doctor?.id;
+                                if (!doctorId) return;
+                                if (e.target.checked) {
+                                  setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
+                                } else {
+                                  setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                                }
+                              }}
+                            />
+                            <div>
+                              <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
+                              <div className="muted">{doctor.specialist || doctor.specialty || doctor.specialities || 'General practice'}</div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="aiq-empty-state">No doctors available right now.</div>
+                  )}
+                </section>
+
+                <section className="card aiq-share-card">
+                  <header className="aiq-section-header">
+                    <div>
+                      <p className="aiq-eyebrow">Share summary</p>
+                      <h2>Notify your care team</h2>
+                    </div>
+                    <span className={`aiq-pill ${interview.report ? 'aiq-pill-success' : ''}`}>
+                      {interview.report ? 'Report ready' : 'Report pending'}
+                    </span>
+                  </header>
+                  <p className="muted">Generated reports automatically include the patient context shown on the right.</p>
+                  <div className="aiq-share-status">
+                    <div>
+                      <strong>Language</strong>
+                      <span>{languageLabel}</span>
+                    </div>
+                    <div>
+                      <strong>Doctors selected</strong>
+                      <span>{selectedDoctors.length}</span>
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
+                    disabled={!interview.report || !selectedDoctors.length}
+                  >
+                    Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
+                  </button>
+                  <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
+                </section>
+
+                <section className="card aiq-nav-card">
+                  <div className="aiq-nav">
+                    <button className="btn btn-secondary" onClick={() => navigate('/assessment/vitals')}>
+                      Back
+                    </button>
+                    <button className="btn btn-primary" onClick={() => navigate('/assessment/documents')}>
+                      Next
+                    </button
+                    >
+                  </div>
+                </section>
+              </div>
+            </main>
+
+            <aside className="aiq-aside" aria-label="Patient context panel">
                         <span>{v.value ?? '—'} {v.unit || ''}</span>
                       </div>
                     ))
