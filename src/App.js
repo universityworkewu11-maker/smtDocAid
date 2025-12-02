@@ -1143,9 +1143,9 @@ function PatientPortal() {
         .order('created_at', { ascending: false })
         .limit(15);
       if (error) throw error;
-      const rows = data || [];
-      setFeedbackNotes(rows.map(row => ({ ...row, is_read: true })));
-      const unreadIds = rows.filter(row => !row.is_read).map(row => row.id);
+      const rows = (data || []).map(row => ({ ...row, wasUnread: !row.is_read }));
+      setFeedbackNotes(rows);
+      const unreadIds = rows.filter(row => row.wasUnread).map(row => row.id);
       if (unreadIds.length) {
         try {
           await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
