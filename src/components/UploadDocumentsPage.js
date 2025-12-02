@@ -459,7 +459,7 @@ const UploadDocumentsPage = () => {
           <button
             className="btn btn-primary"
             onClick={handleNext}
-            disabled={uploadedFiles.length === 0 || isUploading}
+            disabled={isUploading || (uploadedFiles.length === 0 && previousUploads.length === 0)}
           >
             {isUploading ? 'Uploading...' : 'Generate AI Questionnaire →'}
           </button>
