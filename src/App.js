@@ -2422,7 +2422,7 @@ function DoctorPortal() {
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [feedbackSaving, setFeedbackSaving] = useState(false);
-  const [feedbackStatus, setFeedbackStatus] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
 
   const doctorDisplayName = auth?.profile?.full_name || auth?.session?.user?.user_metadata?.full_name || auth?.session?.user?.email || 'Doctor';
 
