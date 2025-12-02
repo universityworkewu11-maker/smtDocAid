@@ -62,9 +62,6 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       }
 
       return response;
-      </div>
-    </main>
-  );
   const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):\n- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Include options only for radio/checkbox.\n- Include min and max only for range/scale.`;
         const repaired = await this._callAI([
           { role: 'system', content: repairInstr },
