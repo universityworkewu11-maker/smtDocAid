@@ -905,7 +905,7 @@ function ResetPasswordPage() {
 
   return (
     <>
-    <main>
+      <main>
       <div className="card form-container">
         <h2 className="card-title">Reset Password</h2>
         {error && <div className="alert alert-danger">{error}</div>}
@@ -2722,7 +2722,7 @@ function DoctorPortal() {
           </table>
         </div>
       </div>
-    </main>
+      </main>
       {feedbackTarget && (
         <div
           className="modal-backdrop"
