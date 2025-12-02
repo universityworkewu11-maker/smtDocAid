@@ -218,7 +218,10 @@ function PatientProfilePage() {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString();
+    if (!dateString) return 'Not provided';
+    const parsed = new Date(dateString);
+    if (Number.isNaN(parsed.getTime())) return 'Not provided';
+    return parsed.toLocaleDateString();
   };
 
   const calculateBMI = (weight, height) => {
