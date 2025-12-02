@@ -53,6 +53,8 @@ const toNumberOrNull = (value) => {
 function PatientProfilePage() {
   const navigate = useNavigate();
   const [patientData, setPatientData] = useState(null);
+  const [patientRow, setPatientRow] = useState(null);
+  const [profileRow, setProfileRow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({});
