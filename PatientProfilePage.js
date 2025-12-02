@@ -6,6 +6,50 @@ const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const splitFullName = (fullName = '') => {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { firstName: '', lastName: '' };
+  const firstName = parts.shift() || '';
+  const lastName = parts.length ? parts.join(' ') : '';
+  return { firstName, lastName };
+};
+
+const mergePatientRecords = (patientRow, profileRow, user) => {
+  const fallbackName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || '';
+  const canonicalFullName = patientRow?.full_name || patientRow?.name || profileRow?.full_name || fallbackName;
+  const { firstName, lastName } = splitFullName(canonicalFullName);
+
+  return {
+    patient_table_id: patientRow?.id || null,
+    profile_table_id: profileRow?.id || null,
+    first_name: profileRow?.first_name ?? firstName,
+    last_name: profileRow?.last_name ?? lastName,
+    full_name: canonicalFullName,
+    date_of_birth: patientRow?.date_of_birth || profileRow?.date_of_birth || '',
+    gender: profileRow?.gender || patientRow?.gender || '',
+    phone: patientRow?.phone || profileRow?.phone || '',
+    email: patientRow?.email || user?.email || '',
+    address: profileRow?.address || patientRow?.address || '',
+    emergency_contact: profileRow?.emergency_contact || '',
+    blood_type: profileRow?.blood_type || '',
+    height: profileRow?.height || '',
+    weight: profileRow?.weight || '',
+    allergies: profileRow?.allergies || '',
+    chronic_conditions: profileRow?.chronic_conditions || '',
+    medications: profileRow?.medications || '',
+    family_history: profileRow?.family_history || '',
+    insurance_info: profileRow?.insurance_info || '',
+    primary_care_physician: profileRow?.primary_care_physician || '',
+    additional_notes: profileRow?.additional_notes || ''
+  };
+};
+
+const toNumberOrNull = (value) => {
+  if (value === '' || value === null || value === undefined) return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
 function PatientProfilePage() {
   const navigate = useNavigate();
   const [patientData, setPatientData] = useState(null);
