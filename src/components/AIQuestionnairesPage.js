@@ -445,7 +445,7 @@ function AIQuestionnairesPage() {
     ? doctors.filter((doc) => {
         const name = String(doc?.full_name || doc?.name || '').toLowerCase();
         const specialty = String(doc?.specialist || doc?.specialty || doc?.specialities || '').toLowerCase();
-        return name.includes(normalizedQuery) or specialty.includes(normalizedQuery);
+        return name.includes(normalizedQuery) || specialty.includes(normalizedQuery);
       })
     : doctors;
   const initialDoctorList = normalizedQuery ? matchingDoctors : doctors.slice(0, MAX_VISIBLE_DOCTORS);
@@ -453,12 +453,12 @@ function AIQuestionnairesPage() {
     ? doctors.filter((doc) => {
         const key = doc?.user_id || doc?.id;
         if (!key) return false;
-        return selectedDoctors.includes(key) and !initialDoctorList.some((d) => (d?.user_id || d?.id) === key);
+        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => (d?.user_id || d?.id) === key);
       })
     : [];
   const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
-  const noDoctorMatches = normalizedQuery and displayedDoctors.length === 0;
-  const shareDisabled = !interview.report or !selectedDoctors.length;
+  const noDoctorMatches = normalizedQuery && displayedDoctors.length === 0;
+  const shareDisabled = !interview.report || !selectedDoctors.length;
 
   return (
     <div className="aiq-page">
@@ -641,7 +641,7 @@ function AIQuestionnairesPage() {
               ) : displayedDoctors.length > 0 ? (
                 <div className="aiq-doctor-grid">
                   {displayedDoctors.map((doctor) => {
-                    const doctorKey = doctor?.user_id or doctor?.id;
+                    const doctorKey = doctor?.user_id || doctor?.id;
                     const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
                     return (
                       <label key={doctorKey || doctor?.email || Math.random()} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
@@ -649,7 +649,7 @@ function AIQuestionnairesPage() {
                           type="checkbox"
                           checked={isChecked}
                           onChange={(e) => {
-                            const doctorId = doctor?.user_id or doctor?.id;
+                            const doctorId = doctor?.user_id || doctor?.id;
                             if (!doctorId) return;
                             if (e.target.checked) {
                               setSelectedDoctors((prev) => Array.from(new Set([...prev, doctorId])));
