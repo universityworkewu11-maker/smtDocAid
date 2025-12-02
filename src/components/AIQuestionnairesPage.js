@@ -221,17 +221,43 @@ function AIQuestionnairesPage() {
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData?.user?.id;
       if (uid) {
-        const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-        const { data, error } = await supabase.storage.from(bucket).list(uid, { limit: 50 });
-        if (!error && Array.isArray(data)) {
-          snapshot.uploads = snapshot.uploads.concat(
-            data.map((item) => ({
-              name: item.name,
-              size: item?.metadata?.size || null,
-              type: item?.metadata?.mimetype || item?.metadata?.type || null
-            }))
-          );
+        try {
+          const { data: docs, error: docsError } = await supabase
+            .from('documents')
+            .select('id, original_name, file_name, mime_type, size_bytes, public_url, uploaded_at')
+            .eq('user_id', uid)
+            .order('uploaded_at', { ascending: false })
+            .limit(25);
+          if (docsError) throw docsError;
+          if (Array.isArray(docs) && docs.length) {
+            snapshot.uploads = docs.map((doc) => ({
+              id: doc.id,
+              name: doc.original_name || doc.file_name || 'Document',
+              type: doc.mime_type || '',
+              size: doc.size_bytes || null,
+              url: doc.public_url || null,
+              uploadedAt: doc.uploaded_at || null
+            }));
+          }
+        } catch (documentsError) {
+          console.warn('Failed to fetch document metadata from table:', documentsError);
+          if (snapshot.uploads.length === 0) {
+            const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
+            try {
+              const { data } = await supabase.storage.from(bucket).list(uid, { limit: 25 });
+              if (Array.isArray(data)) {
+                snapshot.uploads = data.map((item) => ({
+                  name: item.name,
+                  size: item?.metadata?.size || null,
+                  type: item?.metadata?.mimetype || item?.metadata?.type || null
+                }));
+              }
+            } catch (storageError) {
+              console.warn('Storage listing fallback failed:', storageError);
+            }
+          }
         }
+
         snapshot.patient = {
           ...snapshot.patient,
           id: snapshot.patient.id || uid,
