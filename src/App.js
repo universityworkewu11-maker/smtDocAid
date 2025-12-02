@@ -2581,6 +2581,53 @@ function DoctorPortal() {
     return acc;
   }, { low: 0, medium: 0, high: 0 });
 
+  const openFeedbackForm = (patient) => {
+    setFeedbackTarget(patient);
+    setFeedbackMessage('');
+    setFeedbackStatus('');
+  };
+
+  const closeFeedbackForm = () => {
+    if (feedbackSaving) return;
+    setFeedbackTarget(null);
+    setFeedbackMessage('');
+    setFeedbackStatus('');
+  };
+
+  const submitFeedback = async (event) => {
+    event?.preventDefault?.();
+    if (!feedbackTarget) return;
+    const trimmed = feedbackMessage.trim();
+    if (!trimmed) {
+      setFeedbackStatus('Please enter feedback before sending.');
+      return;
+    }
+    setFeedbackSaving(true);
+    setFeedbackStatus('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const payload = {
+        doctor_id: user.id,
+        patient_id: feedbackTarget.user_id,
+        type: 'doctor_feedback',
+        message: `Feedback from ${doctorDisplayName}: ${trimmed}`,
+        is_read: false
+      };
+      const { error: insertError } = await supabase.from('notifications').insert(payload);
+      if (insertError) throw insertError;
+      setFeedbackStatus('Feedback sent to patient.');
+      setFeedbackMessage('');
+      setTimeout(() => {
+        closeFeedbackForm();
+      }, 800);
+    } catch (feedbackError) {
+      setFeedbackStatus(feedbackError?.message || String(feedbackError));
+    } finally {
+      setFeedbackSaving(false);
+    }
+  };
+
   return (
     <main>
       <section className="hero">
