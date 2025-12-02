@@ -244,19 +244,15 @@ const UploadDocumentsPage = () => {
 
   // Handle next step
   const handleNext = () => {
-    if (uploadedFiles.length === 0) {
+    if (uploadedFiles.length === 0 && previousUploads.length === 0) {
       setError('Please upload at least one document before proceeding.');
       return;
     }
-
-    // Store uploaded files data
-    localStorage.setItem('uploadedDocuments', JSON.stringify(uploadedFiles));
     navigate('/patient/questionnaire');
   };
 
   // Skip uploads and continue
   const handleSkip = () => {
-    try { localStorage.setItem('uploadedDocuments', JSON.stringify(uploadedFiles || [])); } catch (_) {}
     navigate('/patient/questionnaire');
   };
 
