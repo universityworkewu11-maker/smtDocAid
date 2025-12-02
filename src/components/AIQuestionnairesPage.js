@@ -597,6 +597,9 @@ function AIQuestionnairesPage() {
                 <span className="aiq-pill">{selectedDoctors.length} selected</span>
               </header>
               <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+              {error && (
+                <div className="alert alert-danger" style={{ margin: '12px 0' }}>{error}</div>
+              )}
               {doctors.length > 0 ? (
                 <div className="aiq-doctor-grid">
                   {doctors.map((doctor) => {
