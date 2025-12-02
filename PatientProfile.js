@@ -20,6 +20,8 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [patientRow, setPatientRow] = useState(null);
+  const [profileRow, setProfileRow] = useState(null);
   
   const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
   const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
