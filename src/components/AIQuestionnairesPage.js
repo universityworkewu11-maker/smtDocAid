@@ -675,7 +675,7 @@ function AIQuestionnairesPage() {
                 </>
               ) : (
                 <div className="aiq-empty-state">
-                  <p>Interview complete. You can restart or jump into questionnaires.</p>
+                  <p>Interview complete. You can restart any time to capture new insights.</p>
                   <div className="aiq-button-row">
                     <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
                       Start Over
