@@ -1955,6 +1955,382 @@ main {
   }
 }
 
+  /* AI Questionnaires layout */
+  .aiq-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-4);
+  }
+
+  .aiq-hero {
+    background: var(--primary-gradient);
+    color: var(--white);
+    border: none;
+    box-shadow: var(--shadow-2xl);
+  }
+
+  .aiq-hero-grid {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    flex-wrap: wrap;
+  }
+
+  .aiq-eyebrow {
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: var(--space-2);
+  }
+
+  .aiq-hero-title {
+    font-size: var(--font-size-4xl);
+    margin-bottom: var(--space-3);
+  }
+
+  .aiq-hero-subtitle {
+    font-size: var(--font-size-lg);
+    max-width: 720px;
+    margin-bottom: var(--space-4);
+  }
+
+  .aiq-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .aiq-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    font-size: var(--font-size-xs);
+    color: inherit;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .aiq-pill-success {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  .aiq-pill-info {
+    background: rgba(14, 165, 233, 0.15);
+    color: var(--info);
+    border-color: rgba(14, 165, 233, 0.4);
+  }
+
+  .aiq-hero-actions {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .aiq-layout {
+    display: flex;
+    gap: var(--space-6);
+    margin-top: var(--space-8);
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .aiq-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .aiq-aside {
+    width: 320px;
+    flex-shrink: 0;
+  }
+
+  .aiq-action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+  }
+
+  .aiq-action-card {
+    min-height: 220px;
+  }
+
+  .aiq-step-tag {
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--gray-500);
+  }
+
+  .aiq-action-buttons {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin: var(--space-4) 0;
+  }
+
+  .aiq-hint {
+    color: var(--gray-500);
+    font-size: var(--font-size-sm);
+  }
+
+  .aiq-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .aiq-section-header.compact {
+    margin-bottom: var(--space-2);
+  }
+
+  .aiq-doctor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+  }
+
+  .aiq-doctor-card-option {
+    border: 1px solid var(--gray-200);
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-3);
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    cursor: pointer;
+    transition: var(--transition-base);
+  }
+
+  .aiq-doctor-card-option input {
+    accent-color: var(--primary);
+  }
+
+  .aiq-doctor-card-option.selected {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.08);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .aiq-empty-state {
+    background: var(--gray-50);
+    border: 1px dashed var(--gray-300);
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-6);
+    text-align: center;
+    color: var(--gray-600);
+  }
+
+  .aiq-interview-card {
+    margin-top: var(--space-6);
+  }
+
+  .aiq-question-block {
+    background: var(--gray-50);
+    border-radius: var(--border-radius);
+    padding: var(--space-5);
+    border: 1px solid var(--gray-200);
+  }
+
+  .aiq-label {
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--gray-500);
+  }
+
+  .aiq-question-block input {
+    margin-top: var(--space-4);
+    width: 100%;
+    padding: var(--space-3);
+  }
+
+  .aiq-button-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    margin-top: var(--space-4);
+  }
+
+  .aiq-status-dot {
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    background: var(--gray-100);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .aiq-status-dot.active {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+  }
+
+  .aiq-subcard {
+    border: 1px dashed var(--gray-200);
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-4);
+    margin-top: var(--space-4);
+    background: var(--gray-50);
+  }
+
+  .aiq-report-preview {
+    white-space: pre-wrap;
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-4);
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: var(--space-4);
+  }
+
+  .aiq-transcript-row {
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-3);
+    border-bottom: 1px solid var(--gray-100);
+  }
+
+  .aiq-questionnaire-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-4);
+  }
+
+  .aiq-questionnaire-card {
+    border: 1px solid var(--gray-200);
+    border-radius: var(--border-radius);
+    padding: var(--space-4);
+    background: var(--white);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .aiq-questionnaire-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .aiq-questionnaire-meta {
+    display: flex;
+    gap: var(--space-3);
+    font-size: var(--font-size-sm);
+    color: var(--gray-500);
+  }
+
+  .aiq-completed-grid {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .aiq-completed-card-item {
+    border: 1px solid var(--gray-200);
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-4);
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .aiq-completed-status {
+    border-radius: var(--border-radius-sm);
+    padding: var(--space-3);
+    color: var(--white);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 200px;
+  }
+
+  .aiq-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: var(--space-6) 0;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .aiq-context-card {
+    position: sticky;
+    top: 20px;
+  }
+
+  .aiq-context-group {
+    margin-top: var(--space-4);
+  }
+
+  .aiq-context-list {
+    margin-top: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .aiq-context-list div {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--font-size-sm);
+    color: var(--gray-600);
+  }
+
+  .aiq-upload-list {
+    margin-top: var(--space-3);
+    padding-left: var(--space-5);
+    color: var(--gray-600);
+    font-size: var(--font-size-sm);
+  }
+
+  @media (max-width: 1024px) {
+    .aiq-aside {
+      width: 100%;
+      position: static;
+    }
+
+    .aiq-context-card {
+      position: static;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .aiq-hero-title {
+      font-size: var(--font-size-3xl);
+    }
+
+    .aiq-action-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .aiq-pill-row {
+      justify-content: flex-start;
+    }
+
+    .aiq-questionnaire-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .aiq-button-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .aiq-hero-actions {
+      flex-direction: column;
+    }
+  }
+
 @media (max-width: 480px) {
   .logo {
     font-size: var(--font-size-xl);
