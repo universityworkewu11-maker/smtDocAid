@@ -799,7 +799,10 @@ function AIQuestionnairesPage() {
               {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
                 <ul className="aiq-upload-list">
                   {contextData.uploads.map((upload, index) => (
-                    <li key={`${upload.name || 'upload'}-${index}`}>{upload.name || upload}</li>
+                    <li key={`${upload.name || 'upload'}-${index}`}>
+                      <div><strong>{upload.name || upload}</strong> {upload.status && <span className="muted">({upload.status})</span>}</div>
+                      {upload.summary && <small className="muted">{upload.summary}</small>}
+                    </li>
                   ))}
                 </ul>
               ) : (
