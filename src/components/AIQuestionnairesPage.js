@@ -26,6 +26,7 @@ function AIQuestionnairesPage() {
   const [serverBase, setServerBase] = useState(SERVER_BASE);
   const [selectedDoctors, setSelectedDoctors] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [doctorSearch, setDoctorSearch] = useState('');
   const LS_KEYS = {
     interview: 'interview_state_v1',
     base: 'api_server_base_v1',
@@ -488,6 +489,24 @@ function AIQuestionnairesPage() {
   
   try {
     const interviewStatus = interview.done ? 'Completed' : (interview.sessionId ? 'In Progress' : 'Idle');
+    const normalizedQuery = doctorSearch.trim().toLowerCase();
+    const matchingDoctors = normalizedQuery
+      ? doctors.filter(doc => {
+          const name = String(doc?.full_name || doc?.name || '').toLowerCase();
+          const specialty = String(doc?.specialist || doc?.specialty || doc?.specialities || '').toLowerCase();
+          return name.includes(normalizedQuery) || specialty.includes(normalizedQuery);
+        })
+      : doctors;
+    const initialDoctorList = normalizedQuery ? matchingDoctors : doctors.slice(0, 6);
+    const selectedSupplements = !normalizedQuery
+      ? doctors.filter(doc => {
+          const key = doc?.user_id || doc?.id;
+          if (!key) return false;
+          return selectedDoctors.includes(key) && !initialDoctorList.some(d => (d?.user_id || d?.id) === key);
+        })
+      : [];
+    const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
+    const noDoctorMatches = normalizedQuery && displayedDoctors.length === 0;
 
     return (
       <div className="aiq-page">
@@ -537,13 +556,29 @@ function AIQuestionnairesPage() {
                 </div>
                 <span className="aiq-pill">{selectedDoctors.length} selected</span>
               </header>
+              <div className="aiq-doctor-toolbar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <input
+                  className="form-input"
+                  style={{ flex: '1 1 240px', minWidth: '240px' }}
+                  placeholder="Search by name or specialty"
+                  value={doctorSearch}
+                  onChange={(e) => setDoctorSearch(e.target.value)}
+                />
+                <small className="muted" style={{ alignSelf: 'center' }}>
+                  {normalizedQuery
+                    ? (noDoctorMatches ? 'No matches' : `${displayedDoctors.length} match${displayedDoctors.length === 1 ? '' : 'es'}`)
+                    : `Showing ${Math.min(displayedDoctors.length, doctors.length)} of ${doctors.length}`}
+                </small>
+              </div>
               <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
               {error && (
                 <div className="alert alert-danger" style={{ margin: '12px 0' }}>{error}</div>
               )}
-              {doctors.length > 0 ? (
+              {noDoctorMatches ? (
+                <div className="aiq-empty-state">No doctors match that search.</div>
+              ) : displayedDoctors.length > 0 ? (
                 <div className="aiq-doctor-grid">
-                  {doctors.map((doctor) => {
+                  {displayedDoctors.map((doctor) => {
                     const doctorKey = doctor?.user_id || doctor?.id;
                     const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
                     return (
