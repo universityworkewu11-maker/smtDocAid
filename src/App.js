@@ -2637,7 +2637,8 @@ function DoctorPortal() {
   };
 
   return (
-    <main>
+    <>
+      <main>
       <section className="hero">
         <h1 className="hero-title">Doctor Dashboard</h1>
         <p className="hero-subtitle">Only patients who explicitly shared their records appear in your panel.</p>
