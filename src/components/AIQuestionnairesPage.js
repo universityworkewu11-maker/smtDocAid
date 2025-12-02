@@ -429,10 +429,6 @@ function AIQuestionnairesPage() {
     try {
       window.localStorage.removeItem(LS_KEYS.interview);
     } catch (_) {}
-    // Reset any ongoing questionnaire view
-    setCurrentQuestionnaire(null);
-    setCurrentQuestionIndex(0);
-    setAnswers({});
   };
 
   const saveReportAndNotify = async (reportContent, metadata = {}) => {
