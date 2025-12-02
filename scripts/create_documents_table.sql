@@ -47,6 +47,11 @@ execute function public.set_documents_updated_at();
 
 alter table public.documents enable row level security;
 
+drop policy if exists "documents_select_own" on public.documents;
+drop policy if exists "documents_insert_own" on public.documents;
+drop policy if exists "documents_update_own" on public.documents;
+drop policy if exists "documents_delete_own" on public.documents;
+
 create policy "documents_select_own" on public.documents
   for select
   using (auth.uid() = user_id);
