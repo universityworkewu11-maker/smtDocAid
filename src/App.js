@@ -1487,7 +1487,7 @@ function QuestionnairePage() {
         if (uid) {
           const { data } = await supabase
             .from('documents')
-            .select('original_name,file_name')
+            .select('*')
             .eq('user_id', uid)
             .order('uploaded_at', { ascending: false })
             .limit(50);
