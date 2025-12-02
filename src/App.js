@@ -215,53 +215,6 @@ Patient context: ${contextSummary}`;
     return 'low';
   }
 }
-        if (m) {
-          const cleaned = sanitize(m[0]);
-          arr = JSON.parse(cleaned);
-        } else {
-          throw new Error('No JSON array found');
-        }
-      }
-
-      if (!Array.isArray(arr)) throw new Error('Invalid questionnaire format');
-
-      return arr.map((q, i) => {
-        const type = ['radio','checkbox','range','text','scale'].includes(q.type) ? q.type : 'text';
-        const base = {
-          id: Number.isFinite(q.id) ? q.id : (parseInt(q.id, 10) || i + 1),
-          text: String(q.text || `Question ${i + 1}`),
-          type,
-          required: typeof q.required === 'boolean' ? q.required : Boolean(q.required)
-        };
-
-        if (type === 'radio' || type === 'checkbox') {
-          base.options = Array.isArray(q.options) ? q.options.map(String) : ['Yes', 'No'];
-        }
-        if (type === 'range' || type === 'scale') {
-          base.min = Number.isFinite(q.min) ? q.min : 1;
-          base.max = Number.isFinite(q.max) ? q.max : 10;
-        }
-        return base;
-      });
-    } catch (e) {
-      console.warn('Questionnaire parse failed:', e);
-      throw new Error('Failed to parse AI-generated questionnaire. Please try again.');
-    }
-  }
-
-
-  static async _callAI(messages) {
-    // Always route via backend
-    return openaiChat(messages);
-  }
-
-  static _determineSeverity(text) {
-    const lower = (text || '').toLowerCase();
-    if (lower.includes('emergency') || lower.includes('immediate')) return 'high';
-    if (lower.includes('urgent') || lower.includes('soon')) return 'medium';
-    return 'low';
-  }
-}
 
 // Auth context
 const AuthContext = createContext(null);
