@@ -205,8 +205,7 @@ const VitalsPage = () => {
 
     // Upload vitals to backend
     try {
-      const SERVER_BASE = process.env.REACT_APP_SERVER_BASE || '';
-      const uploadUrl = SERVER_BASE ? `${SERVER_BASE}/api/vitals` : '/api/vitals';
+      const uploadUrl = `${serverBase || ''}/api/vitals`;
       const vitalsToUpload = {
         temperature: vitalsData.temperature.value,
         heartRate: vitalsData.heartRate.value,
