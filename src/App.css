@@ -2008,9 +2008,15 @@ main {
     gap: 6px;
     padding: 0.35rem 0.85rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    border: 1px solid var(--gray-200);
     font-size: var(--font-size-xs);
-    color: inherit;
+    color: var(--gray-600);
+    background: var(--gray-100);
+  }
+
+  .aiq-hero .aiq-pill {
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: var(--white);
     background: rgba(255, 255, 255, 0.12);
   }
 
