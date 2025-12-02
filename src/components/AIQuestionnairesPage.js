@@ -156,6 +156,7 @@ const SERVER_BASE = (() => {
                       throw new Error(`Backend did not return JSON (status ${resp.status}).`);
                     }
                     if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
+                    if (json && json.ok === false) throw new Error(json?.error || 'Request failed');
                     return json;
                   };
                   try {
