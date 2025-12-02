@@ -2206,60 +2206,6 @@ main {
     border-bottom: 1px solid var(--gray-100);
   }
 
-  .aiq-questionnaire-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-4);
-  }
-
-  .aiq-questionnaire-card {
-    border: 1px solid var(--gray-200);
-    border-radius: var(--border-radius);
-    padding: var(--space-4);
-    background: var(--white);
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .aiq-questionnaire-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-  }
-
-  .aiq-questionnaire-meta {
-    display: flex;
-    gap: var(--space-3);
-    font-size: var(--font-size-sm);
-    color: var(--gray-500);
-  }
-
-  .aiq-completed-grid {
-    display: grid;
-    gap: var(--space-4);
-  }
-
-  .aiq-completed-card-item {
-    border: 1px solid var(--gray-200);
-    border-radius: var(--border-radius-sm);
-    padding: var(--space-4);
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-  }
-
-  .aiq-completed-status {
-    border-radius: var(--border-radius-sm);
-    padding: var(--space-3);
-    color: var(--white);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    min-width: 200px;
-  }
-
   .aiq-nav {
     display: flex;
     justify-content: space-between;
