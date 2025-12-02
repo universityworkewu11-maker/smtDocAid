@@ -1231,6 +1231,38 @@ function PatientPortal() {
           <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">View</Link></div>
         </div>
       </section>
+
+      <div className="card mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="card-title">Doctor Feedback</h3>
+            <p className="muted text-sm">Notes shared by your doctors after reviewing AI reports or questionnaires.</p>
+          </div>
+          <button className="btn btn-light" onClick={fetchDoctorFeedback} disabled={feedbackLoading}>
+            {feedbackLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+        {feedbackError && <div className="alert alert-danger mt-3">{feedbackError}</div>}
+        <div className="mt-4 space-y-3">
+          {feedbackLoading && feedbackNotes.length === 0 ? (
+            <div className="skeleton animate" style={{ height: 68, borderRadius: '0.75rem' }} />
+          ) : feedbackNotes.length > 0 ? (
+            feedbackNotes.map(note => (
+              <div key={note.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white/70 dark:bg-slate-900/40">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-sm text-slate-500 dark:text-slate-300">{new Date(note.created_at).toLocaleString()}</span>
+                  {note.wasUnread && <span className="badge success">New</span>}
+                </div>
+                <p className="mt-2 leading-relaxed">{note.message}</p>
+              </div>
+            ))
+          ) : (
+            <div className="alert alert-info mt-2">
+              No doctor feedback yet. Once a doctor reviews your shared reports, their notes will appear here.
+            </div>
+          )}
+        </div>
+      </div>
     </main>
     </>
   );
