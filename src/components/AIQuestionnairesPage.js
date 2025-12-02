@@ -359,6 +359,12 @@ function AIQuestionnairesPage() {
     return { vitals, uploads, patient };
   };
 
+  const scrollToSection = (id) => {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const startInterview = async () => {
     setILoading(prev => ({ ...prev, start: true }));
     setError('');
