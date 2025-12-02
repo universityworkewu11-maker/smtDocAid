@@ -442,7 +442,11 @@ const UploadDocumentsPage = () => {
                       <div className="file-meta">
                         {doc.size ? `${(doc.size/1024/1024).toFixed(2)} MB` : ''}
                         {doc.lastModified ? ` • ${new Date(doc.lastModified).toLocaleString()}` : ''}
+                        {doc.status ? ` • ${doc.status}` : ''}
                       </div>
+                      {doc.summary && (
+                        <div className="muted" style={{ marginTop: 4 }}>{doc.summary}</div>
+                      )}
                     </div>
                     {doc.url && (
                       <a className="btn btn-outline btn-sm" href={doc.url} target="_blank" rel="noreferrer">Open</a>
