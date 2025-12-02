@@ -25,17 +25,17 @@ import AIQuestionnairesPage from './components/AIQuestionnairesPage';
 import ScrollToTop from './components/ScrollToTop';
 import DoctorNotificationsPage from './components/DoctorNotificationsPage';
 // Interview flow is integrated into QuestionnairePage; no separate page import
+// Medical AI helper class
+class MedicalAI {
+  static async analyzePatientData(patientData, context = {}) {
+    const systemPrompt = `You are a medical diagnosis assistant analyzing:
+- Patient: ${patientData.age || 'unknown'}yo ${patientData.gender || ''}
+- Symptoms: ${JSON.stringify(patientData.symptoms || {})}
+- Vitals: ${JSON.stringify(patientData.vitals || {})}
+- History: ${patientData.history || 'none'}
+- Medications: ${patientData.medications || 'none'}
+- Context: ${JSON.stringify(context || {})}
 
-// Config
-// Supabase client is centralized in lib/supabaseClient.js
-
-// AI backend config
-const SERVER_BASE = (() => {
-  const env = (process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
-  if (env) return env;
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:5001';
 Use medical terminology but explain complex terms. Format as markdown.`;
 
     try {
@@ -45,33 +45,106 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       ]);
 
       try {
-        await supabase.from(TBL_REPORT).insert([{
-          patient_id: patientData.patientId || null,
-          doctor_id: patientData.doctorId || null,
-          content: response,
-          ai_generated: true,
-          severity: this._determineSeverity(response),
-          metadata: {
-            vitals: patientData.vitals || {},
-            symptoms: patientData.symptoms || {},
-            context
+        await supabase.from(TBL_REPORT).insert([
+          {
+            patient_id: patientData.patientId || null,
+            doctor_id: patientData.doctorId || null,
+            content: response,
+            ai_generated: true,
+            severity: this._determineSeverity(response),
+            metadata: {
+              vitals: patientData.vitals || {},
+              symptoms: patientData.symptoms || {},
+              context
+            }
           }
-        }]);
-      } catch (e) {
-        console.warn('Failed to save diagnosis:', e.message);
+        ]);
+      } catch (storageError) {
+        console.warn('Failed to save diagnosis:', storageError?.message || storageError);
       }
 
       return response;
-  const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):\n- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Include options only for radio/checkbox.\n- Include min and max only for range/scale.`;
+    } catch (error) {
+      console.error('AI Analysis Error:', error);
+      return this._getFallbackAnalysis(patientData);
+    }
+  }
+
+  static _getFallbackAnalysis(patientData) {
+    const vitals = JSON.stringify(patientData?.vitals || {}, null, 2);
+    const symptoms = JSON.stringify(patientData?.symptoms || {}, null, 2);
+    return `Demo Analysis (AI unavailable)
+
+**Differential Diagnosis**
+1. Viral Upper Respiratory Infection (40%)
+2. Dehydration (30%)
+3. Anxiety Disorder (20%)
+4. Other (10%)
+
+**Recommended Tests**
+- CBC and CMP
+- COVID-19/Influenza panel if febrile
+- Basic metabolic panel for hydration status
+
+**Treatment Suggestions**
+- Rest, oral hydration, antipyretics as needed
+- Follow-up with primary care within 72 hours if symptoms persist
+
+Latest vitals snapshot:
+${vitals}
+
+Reported symptoms:
+${symptoms}`;
+  }
+
+  static async diagnose(patientData) {
+    return this.analyzePatientData(patientData);
+  }
+
+  static async generateQuestionnaire(patientContext = {}) {
+    try {
+      const contextSummary = JSON.stringify(patientContext || {});
+      const systemPrompt = `You are a medical questionnaire generator. Using the provided patient context, generate a thorough clinical questionnaire designed to capture symptoms, vitals, relevant history, and document-relevant questions.
+
+STRICT OUTPUT FORMAT (CRITICAL):
+- Return ONLY valid JSON.
+- Output must be ONLY a valid JSON array (no prose, no markdown, no backticks, no code fences).
+- Use double quotes for all keys and string values.
+- Include at least 15 items.
+- Each item MUST include exactly these fields: id (number), text (string), type (one of: "radio", "checkbox", "range", "text", "scale"), required (boolean).
+- Include an "options" (array of strings) ONLY when type is "radio" or "checkbox".
+- For type "range" or "scale", include numeric min and max fields.
+- Keep wording concise and clinically relevant.
+- Use the patient context to tailor a subset of questions.
+
+Return ONLY the JSON array. Do not include any text before or after.
+
+Patient context: ${contextSummary}`;
+
+      const response = await this._callAI([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Return ONLY valid JSON. Output only the JSON array of questions as described. No commentary. No markdown or code fences.' }
+      ]);
+
+      try {
+        return this._parseQuestionnaire(response);
+      } catch (parseErr) {
+        const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):
+- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }
+- Use double quotes for all keys and string values.
+- Include at least 15 items.
+- Include options only for radio/checkbox.
+- Include min and max only for range/scale.`;
+
         const repaired = await this._callAI([
           { role: 'system', content: repairInstr },
           { role: 'user', content: String(response || '') }
         ]);
         return this._parseQuestionnaire(repaired);
       }
-    } catch (e) {
-      console.error('Failed to generate questionnaire:', e);
-      const msg = e?.message || '';
+    } catch (generationError) {
+      console.error('Failed to generate questionnaire:', generationError);
+      const msg = generationError?.message || '';
       throw new Error(`AI questionnaire generation failed. ${msg}`.trim());
     }
   }
@@ -81,16 +154,12 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       const sanitize = (s) => {
         if (!s) return '';
         let t = String(s);
-        // Strip code fences and headings
         t = t.replace(/```(?:json)?[\s\S]*?```/gi, (m) => m.replace(/```(?:json)?/i, '').replace(/```$/, ''));
-        t = t.replace(/^#+\s.*$/gm, ''); // remove markdown headers
-        // If contains a JSON array somewhere, slice to it
+        t = t.replace(/^#+\s.*$/gm, '');
         const first = t.indexOf('[');
         const last = t.lastIndexOf(']');
         if (first !== -1 && last !== -1 && last > first) t = t.slice(first, last + 1);
-        // Remove trailing commas before } or ]
         t = t.replace(/,\s*([}\]])/g, '$1');
-        // Normalize smart quotes
         t = t.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
         return t.trim();
       };
@@ -100,8 +169,52 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       try {
         arr = JSON.parse(text);
       } catch {
-        // last resort: try to extract the largest JSON array again
         const m = text.match(/\[[\s\S]*\]/);
+        if (m) {
+          const cleaned = sanitize(m[0]);
+          arr = JSON.parse(cleaned);
+        } else {
+          throw new Error('No JSON array found');
+        }
+      }
+
+      if (!Array.isArray(arr)) throw new Error('Invalid questionnaire format');
+
+      return arr.map((q, i) => {
+        const type = ['radio', 'checkbox', 'range', 'text', 'scale'].includes(q.type) ? q.type : 'text';
+        const base = {
+          id: Number.isFinite(q.id) ? q.id : (parseInt(q.id, 10) || i + 1),
+          text: String(q.text || `Question ${i + 1}`),
+          type,
+          required: typeof q.required === 'boolean' ? q.required : Boolean(q.required)
+        };
+
+        if (type === 'radio' || type === 'checkbox') {
+          base.options = Array.isArray(q.options) ? q.options.map(String) : ['Yes', 'No'];
+        }
+        if (type === 'range' || type === 'scale') {
+          base.min = Number.isFinite(q.min) ? q.min : 1;
+          base.max = Number.isFinite(q.max) ? q.max : 10;
+        }
+        return base;
+      });
+    } catch (parseError) {
+      console.warn('Questionnaire parse failed:', parseError);
+      throw new Error('Failed to parse AI-generated questionnaire. Please try again.');
+    }
+  }
+
+  static async _callAI(messages) {
+    return openaiChat(messages);
+  }
+
+  static _determineSeverity(text) {
+    const lower = (text || '').toLowerCase();
+    if (lower.includes('emergency') || lower.includes('immediate')) return 'high';
+    if (lower.includes('urgent') || lower.includes('soon')) return 'medium';
+    return 'low';
+  }
+}
         if (m) {
           const cleaned = sanitize(m[0]);
           arr = JSON.parse(cleaned);
