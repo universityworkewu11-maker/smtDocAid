@@ -1,7 +1,4 @@
 import 'dotenv/config';
-import path from 'node:path';
-import os from 'node:os';
-import fs from 'node:fs/promises';
 import fetch from 'cross-fetch';
 import { createClient } from '@supabase/supabase-js';
 import pdfParse from 'pdf-parse';
