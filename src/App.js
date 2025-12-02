@@ -1491,7 +1491,13 @@ function QuestionnairePage() {
             .eq('user_id', uid)
             .order('uploaded_at', { ascending: false })
             .limit(50);
-          uploads = (data || []).map(i => i.original_name || i.file_name || 'Document');
+          uploads = (data || []).map((doc) => ({
+            id: doc.id,
+            name: doc.original_name || doc.file_name || 'Document',
+            summary: doc.extraction_summary || null,
+            extractedText: doc.extracted_text || null,
+            status: doc.extraction_status || 'pending'
+          }));
         }
       } catch (_) {
         uploads = [];
