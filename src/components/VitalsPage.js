@@ -179,19 +179,31 @@ const VitalsPage = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'confirmed': return 'var(--success)';
-      case 'measured': return 'var(--warning)';
-      case 'error': return 'var(--danger)';
-      default: return 'var(--gray-400)';
+      case 'confirmed':
+        return 'var(--success)';
+      case 'measured':
+        return 'var(--warning)';
+      case 'error':
+        return 'var(--danger)';
+      case 'skipped':
+        return 'var(--gray-500)';
+      default:
+        return 'var(--gray-400)';
     }
   };
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'confirmed': return 'Confirmed';
-      case 'measured': return 'Ready to Confirm';
-      case 'error': return 'Error';
-      default: return 'Not Measured';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'measured':
+        return 'Ready to Confirm';
+      case 'error':
+        return 'Error';
+      case 'skipped':
+        return 'Skipped';
+      default:
+        return 'Not Measured';
     }
   };
 
