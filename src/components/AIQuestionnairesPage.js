@@ -142,6 +142,36 @@ function AIQuestionnairesPage() {
   // Patient/context data for the right-side context panel (vitals, uploads, demographics)
   const [contextData, setContextData] = useState({ vitals: [], uploads: [], patient: {} });
 
+  const formatContextSummary = (ctx) => {
+    if (!ctx) return '';
+    const patient = ctx.patient || {};
+    const vitals = Array.isArray(ctx.vitals) ? ctx.vitals : [];
+    const uploads = Array.isArray(ctx.uploads) ? ctx.uploads : [];
+    const lines = [];
+    lines.push('Patient Context Summary');
+    lines.push('-----------------------');
+    lines.push(`Name: ${patient.name || 'Unknown'}`);
+    lines.push(`Age: ${patient.age ?? 'Unknown'}`);
+    lines.push(`Gender: ${patient.gender || 'Unknown'}`);
+    lines.push(`Contact: ${patient.phone || patient.email || 'Unknown'}`);
+    if (vitals.length) {
+      lines.push('Vitals:');
+      vitals.forEach(v => {
+        if (!v || typeof v !== 'object') return;
+        lines.push(`  - ${v.type || 'Metric'}: ${v.value ?? 'N/A'} ${v.unit || ''}`.trim());
+      });
+    }
+    if (uploads.length) {
+      lines.push('Documents:');
+      uploads.slice(0, 5).forEach(u => {
+        const name = typeof u === 'string' ? u : (u?.name || 'File');
+        lines.push(`  - ${name}`);
+      });
+      if (uploads.length > 5) lines.push(`  (+${uploads.length - 5} more)`);
+    }
+    return lines.join('\n');
+  };
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -411,17 +441,19 @@ function AIQuestionnairesPage() {
       const j = await apiPostJSON('/api/v1/ai/interview/report', { sessionId: interview.sessionId, language: interviewLanguage });
       if (!j.ok) throw new Error(j?.error || 'Report failed');
       const reportContent = String(j.report || '');
-      setInterview(prev => ({ ...prev, report: reportContent }));
+      const contextSummary = formatContextSummary(contextData);
+      const enrichedReport = contextSummary ? `${reportContent}\n\n---\n${contextSummary}` : reportContent;
+      setInterview(prev => ({ ...prev, report: enrichedReport }));
       try {
         const raw = window.localStorage.getItem(LS_KEYS.interview);
         const parsed = raw ? JSON.parse(raw) : {};
-        parsed.report = reportContent;
+        parsed.report = enrichedReport;
         window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(parsed));
       } catch (_) {}
 
       // Save report to diagnoses table and notify selected doctors
       if (selectedDoctors.length > 0) {
-        await saveReportAndNotify(reportContent, { from: 'interview', turns: interview.turns });
+        await saveReportAndNotify(enrichedReport, { from: 'interview', turns: interview.turns, context: contextData });
       }
     } catch (e) {
       setError(e?.message || String(e));
@@ -716,7 +748,7 @@ function AIQuestionnairesPage() {
                 )}
                 <button
                   className="btn btn-secondary"
-                  onClick={() => saveReportAndNotify(interview.report)}
+                  onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
                   disabled={!interview.report || !selectedDoctors.length}
                 >
                   {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
