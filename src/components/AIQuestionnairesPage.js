@@ -888,365 +888,370 @@ function AIQuestionnairesPage() {
   }
 
   
-
   try {
+    const interviewStatus = interview.done ? 'Completed' : (interview.sessionId ? 'In Progress' : 'Idle');
+
     return (
-      <div className="ai-questionnaires-container">
-        <section className="hero animate-fade-up">
-          <h1 className="hero-title">AI Health Questionnaires</h1>
-          <p className="hero-subtitle">Adaptive interview and intelligent forms to tailor insights to your condition.</p>
-          <div className="hero-cta" style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-primary btn-lg"
-              onClick={startInterview}
-              disabled={iLoading.start}
-              title="Start Interview"
-              style={{ padding: '12px 28px' }}
-            >
-              {iLoading.start ? 'Starting…' : 'Start Interview'}
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={restartInterview}
-              disabled={iLoading.next || iLoading.report}
-              style={{ padding: '12px 28px' }}
-            >
-              Start Over
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={generateInterviewReport}
-              disabled={iLoading.report || !!interview.report}
-              title={interview.report ? 'Report already generated' : 'Generate a report from the current interview'}
-              style={{ padding: '12px 28px' }}
-            >
-              {iLoading.report ? 'Generating…' : interview.report ? 'Report Ready' : 'Generate Report'}
-            </button>
-            {interview.report && selectedDoctors.length > 0 && (
+      <div className="aiq-page">
+        <section className="card aiq-hero animate-fade-up">
+          <div className="aiq-hero-grid">
+            <div>
+              <p className="aiq-eyebrow">Guided assessments</p>
+              <h1 className="aiq-hero-title">AI Health Questionnaires</h1>
+              <p className="aiq-hero-subtitle">Adaptive interview, intelligent forms, and streamlined doctor hand-offs in one workspace.</p>
+              <div className="aiq-pill-row">
+                <span className={`aiq-pill ${interview.sessionId ? 'aiq-pill-success' : ''}`}>
+                  {interview.sessionId ? 'Interview active' : 'Interview idle'}
+                </span>
+                <span className="aiq-pill">Status: {interviewStatus}</span>
+                <span className="aiq-pill">{questionnaires.length} forms</span>
+                <span className="aiq-pill">{completedQuestionnaires.length} completed</span>
+                {interview.report && (
+                  <span className="aiq-pill aiq-pill-info">Report ready</span>
+                )}
+              </div>
+            </div>
+            <div className="aiq-hero-actions">
               <button
-                className="btn btn-secondary"
-                onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns })}
-                style={{ padding: '12px 28px' }}
+                className="btn btn-primary btn-lg"
+                onClick={startInterview}
+                disabled={iLoading.start}
               >
-                Share with Doctor
+                {interview.sessionId ? 'Resume Interview' : 'Start Interview'}
               </button>
-            )}
+              <button
+                className="btn btn-secondary btn-lg"
+                onClick={() => scrollToSection('aiq-questionnaires')}
+              >
+                Browse Questionnaires
+              </button>
+            </div>
           </div>
         </section>
 
-        <div className="ai-questionnaires-content">
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', maxWidth: 1200, margin: '0 auto', padding: 20, flexWrap: 'wrap' }}>
-
-            {/* Left/main column */}
-            <main style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ maxWidth: 980, margin: '0', paddingRight: 12 }}>
-
-                <p>Complete intelligent health assessments to get personalized insights about your well‑being.</p>
-
-                {/* Doctor Selection Section */}
-                <div className="card" style={{ marginBottom: 20 }}>
-                  <h3 className="card-title">Select Doctors to Share Report With</h3>
-                  <p className="muted">Choose which doctors should receive your AI-generated health report after the assessment.</p>
-                  {doctors.length > 0 ? (
-                    <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px', marginTop: '12px' }}>
-                      {doctors.map(doctor => {
-                        const doctorKey = doctor?.user_id || doctor?.id;
-                        return (
-                        <label key={doctorKey || (doctor?.email ?? Math.random())} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: doctorKey && selectedDoctors.includes(doctorKey) ? '#f0f8ff' : 'transparent' }}>
-                          <input
-                            type="checkbox"
-                            checked={doctorKey ? selectedDoctors.includes(doctorKey) : false}
-                            onChange={(e) => {
-                              const doctorId = doctor?.user_id || doctor?.id;
-                              if (!doctorId) return;
-                              if (e.target.checked) {
-                                setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
-                              } else {
-                                setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
-                              }
-                            }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: '500' }}>{doctor.full_name || doctor.name || 'Doctor'}</div>
-                            <div className="muted" style={{ fontSize: '12px' }}>{doctor.specialist || doctor.specialty || doctor.specialities || 'General'}</div>
-                          </div>
-                        </label>
-                      );})}
-                    </div>
-                  ) : (
-                    <p className="muted">No doctors available at the moment.</p>
-                  )}
-                  {selectedDoctors.length > 0 && (
-                    <div style={{ marginTop: '12px', fontSize: '14px' }}>
-                      <strong>Selected: {selectedDoctors.length} doctor(s)</strong>
-                    </div>
-                  )}
+        <div className="aiq-layout">
+          <main className="aiq-main">
+            <section className="aiq-action-grid">
+              <div className="card aiq-action-card">
+                <span className="aiq-step-tag">Step 1</span>
+                <h3>Adaptive Interview</h3>
+                <p>Kick off or resume the conversational intake to surface relevant clinical questions.</p>
+                <div className="aiq-action-buttons">
+                  <button
+                    className="btn btn-primary"
+                    onClick={startInterview}
+                    disabled={iLoading.start}
+                  >
+                    {interview.sessionId ? 'Resume Session' : 'Start Interview'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={restartInterview}
+                    disabled={!interview.sessionId}
+                  >
+                    Reset Session
+                  </button>
                 </div>
+                <small className="aiq-hint">{interview.sessionId ? `Session ID: ${interview.sessionId.slice(0, 8)}…` : 'No active session'}</small>
+              </div>
 
-                <div className="questionnaires-section">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: 12, flexWrap: 'wrap' }}>
-                    <h2>Available Questionnaires</h2>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        className="btn btn-primary"
-                        onClick={startInterview}
-                        disabled={iLoading.start}
-                        title="Start Interview"
-                      >
-                        {iLoading.start ? 'Starting…' : 'Start Interview'}
+              <div className="card aiq-action-card">
+                <span className="aiq-step-tag">Step 2</span>
+                <h3>Generate Insights</h3>
+                <p>Summarize the conversation into a structured clinical briefing for quick review.</p>
+                <div className="aiq-action-buttons">
+                  <button
+                    className="btn btn-primary"
+                    onClick={generateInterviewReport}
+                    disabled={iLoading.report || !!interview.report || !interview.sessionId}
+                  >
+                    {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
+                  </button>
+                </div>
+                <small className="aiq-hint">{interview.report ? 'Report saved locally' : 'Finish the interview to unlock report generation.'}</small>
+              </div>
+
+              <div className="card aiq-action-card">
+                <span className="aiq-step-tag">Step 3</span>
+                <h3>Share Securely</h3>
+                <p>Select your care team and notify them once a report is ready.</p>
+                <div className="aiq-action-buttons">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns })}
+                    disabled={!interview.report || !selectedDoctors.length}
+                  >
+                    Share with Doctor{selectedDoctors.length > 1 ? 's' : ''}
+                  </button>
+                </div>
+                <small className="aiq-hint">
+                  {!selectedDoctors.length ? 'Pick doctors below to enable sharing.' : `${selectedDoctors.length} doctor(s) selected.`}
+                </small>
+              </div>
+            </section>
+
+            <section className="card aiq-doctor-card">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Care team</p>
+                  <h2>Select doctors to notify</h2>
+                </div>
+                <span className="aiq-pill">{selectedDoctors.length} selected</span>
+              </header>
+              <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+              {doctors.length > 0 ? (
+                <div className="aiq-doctor-grid">
+                  {doctors.map((doctor) => {
+                    const doctorKey = doctor?.user_id || doctor?.id;
+                    const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
+                    return (
+                      <label key={doctorKey || (doctor?.email ?? Math.random())} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const doctorId = doctor?.user_id || doctor?.id;
+                            if (!doctorId) return;
+                            if (e.target.checked) {
+                              setSelectedDoctors(prev => Array.from(new Set([...prev, doctorId])));
+                            } else {
+                              setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                            }
+                          }}
+                        />
+                        <div>
+                          <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
+                          <div className="muted">{doctor.specialist || doctor.specialty || doctor.specialities || 'General practice'}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="aiq-empty-state">No doctors available right now.</div>
+              )}
+            </section>
+
+            <section className="card aiq-interview-card" id="aiq-interview">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Live conversation</p>
+                  <h2>Adaptive Interview Workspace</h2>
+                </div>
+                <span className={`aiq-status-dot ${interview.sessionId ? 'active' : ''}`}>
+                  {interview.sessionId ? 'Active' : 'Idle'}
+                </span>
+              </header>
+
+              {!interview.sessionId ? (
+                <div className="aiq-empty-state">
+                  <p>Start the guided interview to receive tailored dynamic questions.</p>
+                  <button className="btn btn-primary" onClick={startInterview} disabled={iLoading.start}>
+                    {iLoading.start ? 'Starting…' : 'Launch Interview'}
+                  </button>
+                </div>
+              ) : (!interview.done ? (
+                <>
+                  <div className="aiq-question-block">
+                    <p className="aiq-label">Current question</p>
+                    <h3>{interview.question || 'Waiting for next prompt…'}</h3>
+                    <input
+                      className="form-input"
+                      value={iAnswer}
+                      onChange={e => setIAnswer(e.target.value)}
+                      placeholder="Type your answer"
+                      onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
+                    />
+                  </div>
+                  <div className="aiq-button-row">
+                    <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
+                      {iLoading.next ? 'Sending…' : 'Send Answer'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
+                      Reset Interview
+                    </button>
+                    <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report}>
+                      {iLoading.report ? 'Generating…' : 'Generate Report'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="aiq-empty-state">
+                  <p>Interview complete. You can restart or jump into questionnaires.</p>
+                  <div className="aiq-button-row">
+                    <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
+                      Start Over
+                    </button>
+                    <button className="btn btn-primary" onClick={generateInterviewReport} disabled={iLoading.report || !!interview.report}>
+                      {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {interview.turns.length > 0 && (
+                <div className="aiq-subcard">
+                  <div className="aiq-section-header compact">
+                    <h3>Transcript</h3>
+                    <span className="aiq-pill">{interview.turns.length} turns</span>
+                  </div>
+                  <div className="transcript">
+                    {interview.turns.map((t, idx) => (
+                      <div key={idx} className="aiq-transcript-row">
+                        <div><strong>Q{idx + 1}:</strong> {t.q}</div>
+                        <div><strong>A{idx + 1}:</strong> {t.a}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="aiq-subcard">
+                <div className="aiq-section-header compact">
+                  <h3>Interview report</h3>
+                  {interview.report && <span className="aiq-pill aiq-pill-success">Ready</span>}
+                </div>
+                {interview.report ? (
+                  <pre className="aiq-report-preview">{interview.report}</pre>
+                ) : (
+                  <p className="muted">Generate a report once the interview wraps up to archive the summary here.</p>
+                )}
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => saveReportAndNotify(interview.report)}
+                  disabled={!interview.report || !selectedDoctors.length}
+                >
+                  {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
+                </button>
+              </div>
+            </section>
+
+            <section className="card" id="aiq-questionnaires">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Structured forms</p>
+                  <h2>Available Questionnaires</h2>
+                </div>
+                <div className="aiq-pill-row">
+                  <span className="aiq-pill">{questionnaires.length} available</span>
+                  <span className="aiq-pill">Avg {Math.round(questionnaires.reduce((sum, q) => sum + (q.estimated_duration || 5), 0) / (questionnaires.length || 1))} min</span>
+                </div>
+              </header>
+              {error && <div className="alert alert-danger" style={{ marginBottom: '20px' }}>{error}</div>}
+              {questionnaires.length > 0 ? (
+                <div className="aiq-questionnaire-grid">
+                  {questionnaires.map((questionnaire) => (
+                    <div key={questionnaire.id} className="aiq-questionnaire-card">
+                      <div>
+                        <h3>{questionnaire.title}</h3>
+                        <p>{questionnaire.description}</p>
+                      </div>
+                      <div className="aiq-questionnaire-meta">
+                        <span>{questionnaire.questions?.length || 0} questions</span>
+                        <span>~{questionnaire.estimated_duration || 5} min</span>
+                      </div>
+                      <button className="btn btn-primary" onClick={() => startQuestionnaire(questionnaire)}>
+                        Start Questionnaire
                       </button>
                     </div>
-                  </div>
-                  {error && <div className="alert alert-danger" style={{ marginBottom: '20px' }}>{error}</div>}
-
-                  <div className="card" style={{ marginBottom: 20 }}>
-                    {!interview.sessionId ? (
-                      <>
-                        <h3 className="card-title">Interview</h3>
-                        <p className="muted">Click "Start Interview" to begin. The controls appear here.</p>
-                        <div className="form-group">
-                          <input
-                            className="form-input"
-                            value={iAnswer}
-                            onChange={e => setIAnswer(e.target.value)}
-                            placeholder="Type your answer"
-                            disabled
-                          />
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-primary" disabled>
-                            Send Answer
-                          </button>
-                          <button className="btn btn-secondary" disabled>
-                            Start Over
-                          </button>
-                          <button className="btn btn-secondary" disabled title="Generate a report after completing interview">
-                            Generate Report
-                          </button>
-                        </div>
-                      </>
-                    ) : (!interview.done ? (
-                      <>
-                        <h3 className="card-title">Interview</h3>
-                        <p style={{ fontSize: 18 }}>{interview.question || '…'}</p>
-                        <div className="form-group">
-                          <input
-                            className="form-input"
-                            value={iAnswer}
-                            onChange={e => setIAnswer(e.target.value)}
-                            placeholder="Type your answer"
-                            onKeyDown={(e) => { if (e.key === 'Enter') sendInterviewAnswer(); }}
-                          />
-                        </div>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
-                            {iLoading.next ? 'Sending…' : 'Send Answer'}
-                          </button>
-                          <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.next || iLoading.report}>
-                            Start Over
-                          </button>
-                          <button className="btn btn-secondary" onClick={generateInterviewReport} disabled={iLoading.report} title="Finish now and generate a report">
-                            {iLoading.report ? 'Generating…' : 'Generate Report'}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <h3 className="card-title">Interview Complete</h3>
-                        <p className="muted">You can switch to other sections now.</p>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          <button className="btn btn-secondary" onClick={restartInterview} disabled={iLoading.report}>
-                            Start Over
-                          </button>
-                          <button className="btn btn-primary" onClick={generateInterviewReport} disabled={iLoading.report || !!interview.report}>
-                            {iLoading.report ? 'Generating…' : (interview.report ? 'Report Ready' : 'Generate Report')}
-                          </button>
-                        </div>
-                      </>
-                    ))}
-                    {interview.turns.length > 0 && (
-                      <div className="card" style={{ marginTop: 16 }}>
-                        <h3 className="card-title">Transcript</h3>
-                        <div className="transcript">
-                          {interview.turns.map((t, idx) => (
-                            <div key={idx} style={{ marginBottom: 8 }}>
-                              <div><strong>Q{idx + 1}:</strong> {t.q}</div>
-                              <div><strong>A{idx + 1}:</strong> {t.a}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div className="card" style={{ marginTop: 16 }}>
-                      <h3 className="card-title">Interview Report</h3>
-                      {interview.report ? (
-                        <pre style={{ whiteSpace: 'pre-wrap', background: '#f9f9f9', padding: 12, borderRadius: 6 }}>
-                          {interview.report}
-                        </pre>
-                      ) : (
-                        <p className="muted">
-                          Generate a report to review findings and share it with your care team.
-                        </p>
-                      )}
-                      <div style={{ marginTop: 12 }}>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => saveReportAndNotify(interview.report)}
-                          disabled={!interview.report || !selectedDoctors.length}
-                        >
-                          {selectedDoctors.length > 1 ? 'Share with Selected Doctors' : 'Share with Selected Doctor'}
-                        </button>
-                        {!interview.report && (
-                          <p className="muted" style={{ marginTop: 8 }}>
-                            Generate a report first to enable sharing.
-                          </p>
-                        )}
-                        {interview.report && !selectedDoctors.length && (
-                          <p className="muted" style={{ marginTop: 8 }}>
-                            Select at least one doctor above to send notifications with this report.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {questionnaires.length > 0 ? (
-                    <div className="questionnaires-grid">
-                      {questionnaires.map((questionnaire) => (
-                        <div key={questionnaire.id} className="questionnaire-card">
-                          <div className="questionnaire-info">
-                            <h3>{questionnaire.title}</h3>
-                            <p>{questionnaire.description}</p>
-                            <div className="questionnaire-meta">
-                              <span className="question-count">
-                                {questionnaire.questions?.length || 0} questions
-                              </span>
-                              <span className="estimated-time">
-                                ~{questionnaire.estimated_duration || 5} min
-                              </span>
-                            </div>
-                          </div>
-                          <div className="questionnaire-actions">
-                            <button
-                              className="btn btn-primary"
-                              onClick={() => startQuestionnaire(questionnaire)}
-                            >
-                              Start Questionnaire
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="no-data">No questionnaires available at the moment. Click "Generate New Questionnaire" to create one with AI.</p>
-                  )}
-
+                  ))}
                 </div>
+              ) : (
+                <div className="aiq-empty-state">No questionnaires available at the moment.</div>
+              )}
+            </section>
 
-                <div className="completed-section">
+            <section className="card aiq-completed-card">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">History</p>
                   <h2>Completed Assessments</h2>
-                  {completedQuestionnaires.length > 0 ? (
-                    <div className="completed-grid">
-                      {completedQuestionnaires.map((response) => {
-                        const result = getAssessmentResult(
-                          { questions: [] }, // In real app, fetch full questionnaire
-                          response.answers
-                        );
-                        
-                        return (
-                          <div key={response.id} className="completed-card">
-                            <div className="completed-info">
-                              <h3>{response.questionnaire_title}</h3>
-                              <p className="completion-date">
-                                Completed: {new Date(response.completed_at).toLocaleDateString()}
-                              </p>
-                              <div className="assessment-result" style={{ backgroundColor: result.color }}>
-                                <span className="result-level">{result.level}</span>
-                              </div>
-                              <p className="result-advice">{result.advice}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                </div>
+                <span className="aiq-pill">{completedQuestionnaires.length} total</span>
+              </header>
+              {completedQuestionnaires.length > 0 ? (
+                <div className="aiq-completed-grid">
+                  {completedQuestionnaires.map((response) => {
+                    const result = getAssessmentResult({ questions: [] }, response.answers);
+                    return (
+                      <div key={response.id} className="aiq-completed-card-item">
+                        <div>
+                          <h3>{response.questionnaire_title}</h3>
+                          <p className="muted">Completed {new Date(response.completed_at).toLocaleDateString()}</p>
+                        </div>
+                        <div className="aiq-completed-status" style={{ backgroundColor: result.color }}>
+                          <span>{result.level}</span>
+                          <small>{result.advice}</small>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="aiq-empty-state">Complete your first assessment to see history here.</div>
+              )}
+            </section>
+
+            <div className="aiq-nav">
+              <button className="btn btn-secondary" onClick={() => navigate('/assessment/vitals')}>
+                Back
+              </button>
+              <button className="btn btn-primary" onClick={() => navigate('/assessment/documents')}>
+                Next
+              </button>
+            </div>
+          </main>
+
+          <aside className="aiq-aside" aria-label="Patient context panel">
+            <div className="card aiq-context-card">
+              <h3 className="card-title">Patient Context</h3>
+              <p className="muted">Demographics, vitals, and uploads feed the AI prompts.</p>
+
+              <div className="aiq-context-group">
+                <strong>Demographics</strong>
+                <div className="aiq-context-list">
+                  <div><span>Name</span><span>{contextData.patient?.name || '—'}</span></div>
+                  <div><span>Age</span><span>{contextData.patient?.age ?? '—'}</span></div>
+                  <div><span>Gender</span><span>{contextData.patient?.gender || '—'}</span></div>
+                  <div><span>Contact</span><span>{contextData.patient?.phone || contextData.patient?.email || '—'}</span></div>
+                </div>
+              </div>
+
+              <div className="aiq-context-group">
+                <strong>Latest Vitals</strong>
+                <div className="aiq-context-list">
+                  {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
+                    contextData.vitals.map((v, idx) => (
+                      <div key={idx}>
+                        <span>{v.type}</span>
+                        <span>{v.value ?? '—'} {v.unit || ''}</span>
+                      </div>
+                    ))
                   ) : (
-                    <p className="no-data">No completed questionnaires yet.</p>
+                    <div className="muted">No recent vitals</div>
                   )}
                 </div>
-
-                <div className="back-actions">
-                  <button
-                    className="btn-secondary"
-                    onClick={() => navigate('/assessment/vitals')}
-                  >
-                    Back
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={() => navigate('/assessment/documents')}
-                  >
-                    Next
-                  </button>
-                </div>
-
               </div>
-            </main>
 
-            {/* Right/context column */}
-            <aside style={{ width: 320, flexShrink: 0 }} aria-label="Patient context panel">
-              <div className="card" style={{ position: 'sticky', top: 20 }}>
-                <h3 className="card-title">Patient Context</h3>
-                <p className="muted" style={{ marginBottom: 12 }}>Quick view: demographics, recent vitals, and uploads will be included in AI context.</p>
-
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Demographics</strong>
-                  <div style={{ marginTop: 8 }}>
-                    <div><strong>Name:</strong> {contextData.patient?.name || '—'}</div>
-                    <div><strong>Age:</strong> {contextData.patient?.age ?? '—'}</div>
-                    <div><strong>Gender:</strong> {contextData.patient?.gender || '—'}</div>
-                    <div><strong>Contact:</strong> {contextData.patient?.phone || contextData.patient?.email || '—'}</div>
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Latest Vitals</strong>
-                  <div style={{ marginTop: 8 }}>
-                    {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
-                      contextData.vitals.map((v, idx) => (
-                        <div key={idx} style={{ marginBottom: 6 }}>
-                          <div style={{ fontSize: 13 }}><strong>{v.type}</strong>: {v.value ?? '—'} {v.unit || ''}</div>
-                          {v.timestamp && <div style={{ fontSize: 11, color: '#666' }}>{new Date(v.timestamp).toLocaleString()}</div>}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="muted">No recent vitals</div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <strong>Uploaded Documents</strong>
-                  <div style={{ marginTop: 8 }}>
-                    {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
-                      <ul style={{ paddingLeft: 16, margin: 0 }}>
-                        {contextData.uploads.map((u, i) => (
-                          <li key={i} style={{ fontSize: 13, marginBottom: 6 }}>{u.name || u}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="muted">No uploads</div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-light" onClick={refreshContext}>Refresh</button>
-                  <button className="btn btn-outline" onClick={() => alert('This context will be included in AI prompts.')}>How it’s used</button>
-                </div>
+              <div className="aiq-context-group">
+                <strong>Uploaded Documents</strong>
+                {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
+                  <ul className="aiq-upload-list">
+                    {contextData.uploads.map((u, i) => (
+                      <li key={i}>{u.name || u}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="muted">No uploads</div>
+                )}
               </div>
-            </aside>
 
-          </div>
+              <div className="aiq-button-row">
+                <button className="btn btn-light" onClick={refreshContext}>Refresh</button>
+                <button className="btn btn-outline" onClick={() => alert('This context will be included in AI prompts.')}>How it’s used</button>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     );
