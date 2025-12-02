@@ -2732,7 +2732,7 @@ function App() {
               } />
               <Route path="/patient/questionnaire" element={
                 <ProtectedRoute role="patient">
-                  <QuestionnairePage />
+                  <AIQuestionnairesPage />
                 </ProtectedRoute>
               } />
               <Route path="/patient/ai-questionnaires" element={
