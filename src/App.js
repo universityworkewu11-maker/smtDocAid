@@ -1130,6 +1130,7 @@ function PatientPortal() {
   // Removed inline health report generation from dashboard in favor of guided flow
 
   return (
+    <>
     <main>
   <section className="hero animate-fade-up">
         <h1 className="hero-title">Patient Overview</h1>
