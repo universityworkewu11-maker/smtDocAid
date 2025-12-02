@@ -1131,7 +1131,7 @@ function PatientPortal() {
 
   return (
     <>
-    <main>
+      <main>
   <section className="hero animate-fade-up">
         <h1 className="hero-title">Patient Overview</h1>
         <p className="hero-subtitle">Track real-time vitals, complete assessments, and generate AI health insights.</p>
