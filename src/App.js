@@ -2413,11 +2413,18 @@ function ProfilePage() {
 }
 
 function DoctorPortal() {
+  const auth = useAuth();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [patientsCount, setPatientsCount] = useState(0);
   const [lastSynced, setLastSynced] = useState(null);
+  const [feedbackTarget, setFeedbackTarget] = useState(null);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState('');
+
+  const doctorDisplayName = auth?.profile?.full_name || auth?.session?.user?.user_metadata?.full_name || auth?.session?.user?.email || 'Doctor';
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
