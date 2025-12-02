@@ -530,6 +530,7 @@ function AIQuestionnairesPage() {
   
   try {
     const interviewStatus = interview.done ? 'Completed' : (interview.sessionId ? 'In Progress' : 'Idle');
+    const languageLabel = interviewLanguage === 'bn' ? 'Bangla' : 'English';
     const normalizedQuery = doctorSearch.trim().toLowerCase();
     const matchingDoctors = normalizedQuery
       ? doctors.filter(doc => {
@@ -564,6 +565,7 @@ function AIQuestionnairesPage() {
                 <span className="aiq-pill">Status: {interviewStatus}</span>
                 <span className="aiq-pill">Selected doctors: {selectedDoctors.length}</span>
                 <span className="aiq-pill">Turns captured: {interview.turns.length}</span>
+                <span className="aiq-pill">Language: {languageLabel}</span>
                 {interview.report && (
                   <span className="aiq-pill aiq-pill-info">Report ready</span>
                 )}
