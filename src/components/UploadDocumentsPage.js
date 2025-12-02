@@ -113,6 +113,28 @@ const UploadDocumentsPage = () => {
           }
         }
 
+        try {
+          const { data: insertedDocument, error: docError } = await supabase
+            .from('documents')
+            .insert([{
+              user_id: user.id,
+              storage_bucket: bucket,
+              storage_path,
+              file_name: fileName,
+              original_name: file.name,
+              mime_type: file.type,
+              size_bytes: file.size,
+              public_url: publicUrl,
+              metadata: { source: 'UploadDocumentsPage' }
+            }])
+            .select('id, original_name, file_name, storage_path, public_url, mime_type, size_bytes, uploaded_at')
+            .single();
+          if (docError) throw docError;
+          setPreviousUploads(prev => [mapDocumentRow(insertedDocument), ...prev]);
+        } catch (docInsertError) {
+          console.error('Failed to record document metadata:', docInsertError);
+        }
+
         const uploadedFile = {
           id: fileId,
           name: file.name,
@@ -131,14 +153,6 @@ const UploadDocumentsPage = () => {
 
       if (newFiles.length) {
         setUploadedFiles(prev => [...prev, ...newFiles]);
-        // Optimistically append to history list so it shows immediately
-        setPreviousUploads(prev => [...newFiles.map(f => ({
-          name: f.name,
-          path: f.storagePath,
-          url: f.url,
-          size: f.size,
-          lastModified: f.uploadedAt
-        })), ...prev]);
       }
     } finally {
       setIsUploading(false);
