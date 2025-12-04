@@ -1233,13 +1233,30 @@ function PatientPortal() {
             <span className={`badge ${deviceStatus === 'connected' ? 'success' : deviceStatus === 'offline' ? 'danger' : ''}`}>
               {deviceStatus === 'checking' ? 'Checking device...' : deviceStatus === 'connected' ? 'Device connected' : deviceStatus === 'offline' ? 'Device offline' : 'Not configured'}
             </span>
+            <span className={`badge ${vitalsStatus === 'measured' ? 'success' : 'danger'}`}>
+              {vitalsStatus === 'measured' ? 'Vitals synced' : 'No recent vitals'}
+            </span>
           </div>
         )}
         <div className="hero-stats">
-          <div className="hero-stat"><div className="text-xl font-semibold">Temp</div><div className="text-3xl font-extrabold">98.6 F</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">Heart</div><div className="text-3xl font-extrabold">72 bpm</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">SpO2</div><div className="text-3xl font-extrabold">98%</div></div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">Temp</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.temperature, ' °F')}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">Heart</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.heartRate, ' bpm')}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">SpO2</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.spo2, '%')}</div>
+          </div>
         </div>
+        <small className="muted" style={{ display: 'block', marginTop: '8px' }}>
+          {latestVitals.timestamp
+            ? `Last reading ${formatTimestamp(latestVitals.timestamp)} • ${vitalsStatus === 'measured' ? freshnessLabel : 'No recent data'}`
+            : 'No vitals recorded yet'}
+        </small>
         <div className="hero-parallax-layer" aria-hidden="true">
           <div className="blob indigo"></div>
           <div className="blob cyan"></div>
