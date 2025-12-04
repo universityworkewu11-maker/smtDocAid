@@ -11,12 +11,19 @@ LANGUAGE sql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+  WITH claims AS (
+    SELECT auth.uid() AS uid, auth.jwt() ->> 'email' AS email
+  )
   SELECT p.*
   FROM public.patients p
+  CROSS JOIN claims c
   WHERE (
-    p.user_id IS NOT DISTINCT FROM auth.uid()
+    p.user_id IS NOT DISTINCT FROM c.uid
   ) OR (
-    p.email IS NOT NULL AND p.email = auth.jwt() ->> 'email'
+    c.email IS NOT NULL AND p.email IS NOT NULL AND (
+      (pg_typeof(p.email) = 'text'::regtype AND p.email = c.email) OR
+      (pg_typeof(p.email) = 'text[]'::regtype AND c.email = ANY(p.email))
+    )
   )
   ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
   LIMIT 1;
