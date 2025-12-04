@@ -2192,6 +2192,22 @@ function ProfilePage() {
     return false;
   };
 
+  const fetchPatientRowViaRpc = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_patient_profile_for_current_user');
+      if (error) {
+        console.warn('RPC get_patient_profile_for_current_user failed:', error.message || error);
+        return null;
+      }
+      if (Array.isArray(data) && data.length) {
+        return data[0];
+      }
+    } catch (rpcErr) {
+      console.warn('RPC get_patient_profile_for_current_user exception:', rpcErr?.message || rpcErr);
+    }
+    return null;
+  };
+
   const fetchPatientProfile = async () => {
     if (!auth.session?.user?.id) return;
 
@@ -2240,6 +2256,10 @@ function ProfilePage() {
         } else if (emailError && !error) {
           error = emailError;
         }
+      }
+
+      if (!patientRow) {
+        patientRow = await fetchPatientRowViaRpc();
       }
 
       if (patientRow) {
