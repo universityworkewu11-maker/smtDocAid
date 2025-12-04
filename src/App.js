@@ -1104,6 +1104,96 @@ function PatientPortal() {
     setVitalsStatus('offline');
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const coerceNumber = (value) => {
+      if (value === null || value === undefined || value === '') return null;
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      return Math.round(num * 10) / 10;
+    };
+
+    const applySnapshot = (snapshot) => {
+      if (!snapshot || !isMounted) return;
+      setLatestVitals((prev) => {
+        const merged = {
+          temperature: snapshot.temperature ?? prev.temperature ?? null,
+          heartRate: snapshot.heartRate ?? prev.heartRate ?? null,
+          spo2: snapshot.spo2 ?? prev.spo2 ?? null,
+          timestamp: snapshot.timestamp || prev.timestamp || null
+        };
+        const hasData = merged.temperature != null || merged.heartRate != null || merged.spo2 != null;
+        setVitalsStatus(hasData ? 'measured' : 'offline');
+        if (merged.timestamp) setVitalsTimestamp(merged.timestamp);
+        return merged;
+      });
+    };
+
+    const hydrateFromLocalStorage = () => {
+      if (typeof window === 'undefined') return;
+      const keys = ['vitalsData', 'vitals_data'];
+      for (const key of keys) {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (!parsed) continue;
+          if (Array.isArray(parsed)) {
+            const latest = parsed[parsed.length - 1];
+            if (!latest) continue;
+            applySnapshot({
+              temperature: coerceNumber(latest.temperature ?? latest.temp ?? latest.object_temp_F ?? latest.object_temp_C ?? latest.body_temp),
+              heartRate: coerceNumber(latest.heartRate ?? latest.heart_rate ?? latest.pulse),
+              spo2: coerceNumber(latest.spo2 ?? latest.spo2_percent ?? latest.oxygen),
+              timestamp: latest.timestamp || latest.time || null
+            });
+            return;
+          }
+          applySnapshot({
+            temperature: coerceNumber(parsed.temperature?.value ?? parsed.temperature ?? parsed.temp),
+            heartRate: coerceNumber(parsed.heartRate?.value ?? parsed.heartRate ?? parsed.heart_rate ?? parsed.pulse),
+            spo2: coerceNumber(parsed.spo2?.value ?? parsed.spo2 ?? parsed.spo2_percent ?? parsed.oxygen),
+            timestamp: parsed.temperature?.timestamp || parsed.heartRate?.timestamp || parsed.spo2?.timestamp || parsed.timestamp || null
+          });
+          return;
+        } catch (err) {
+          console.warn('Failed to parse cached vitals:', err);
+        }
+      }
+    };
+
+    hydrateFromLocalStorage();
+
+    if (patientId) {
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('vitals')
+            .select('temperature, heart_rate, spo2, created_at, updated_at')
+            .eq('user_id', patientId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const row = data[0];
+            applySnapshot({
+              temperature: coerceNumber(row.temperature),
+              heartRate: coerceNumber(row.heart_rate),
+              spo2: coerceNumber(row.spo2),
+              timestamp: row.created_at || row.updated_at || null
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to load latest vitals:', err);
+        }
+      })();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId]);
+
   // Check Raspberry Pi device connectivity via /health endpoint
   const checkDevice = async () => {
     const base = process.env.REACT_APP_RPI_API_BASE;
