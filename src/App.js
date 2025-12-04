@@ -1069,6 +1069,7 @@ function PatientPortal() {
   const patientId = user?.id || null;
   const [vitalsStatus, setVitalsStatus] = useState('offline'); // offline, measuring, measured
   const [vitalsTimestamp, setVitalsTimestamp] = useState(null);
+  const [latestVitals, setLatestVitals] = useState({ temperature: null, heartRate: null, spo2: null, timestamp: null });
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
 
   // Helper function to calculate data freshness
