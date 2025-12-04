@@ -1233,6 +1233,35 @@ function PatientPortal() {
     old: 'Old (>30m)'
   }[freshnessState] || 'No recent data';
 
+  useEffect(() => {
+    if (!patientId) return;
+    let cancelled = false;
+    setFeedbackLoading(true);
+    setFeedbackError('');
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('patient_feedback')
+          .select('id, doctor_name, message, created_at')
+          .eq('patient_id', patientId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (error) throw error;
+        if (!cancelled) setFeedbackItems(data || []);
+      } catch (fbErr) {
+        if (!cancelled) {
+          setFeedbackItems([]);
+          setFeedbackError(fbErr?.message || 'Unable to load feedback right now.');
+        }
+      } finally {
+        if (!cancelled) setFeedbackLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId]);
+
   return (
     <main>
   <section className="hero animate-fade-up">
