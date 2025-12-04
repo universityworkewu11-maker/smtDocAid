@@ -2217,11 +2217,14 @@ function ProfilePage() {
         .single();
 
       if (newProfile && !error) {
+        const createdDob = newProfile.date_of_birth || "";
+        const createdAge = newProfile.age ?? computeAgeFromDob(createdDob);
         setProfileData({
           fullName: newProfile.full_name || "",
           email: auth.session.user.email || "",
           phone: newProfile.phone || "",
-          dob: newProfile.date_of_birth || "",
+          age: createdAge != null ? String(createdAge) : "",
+          dob: createdDob,
           address: newProfile.address || "",
           patientId: newProfile.id || null
         });
@@ -2229,7 +2232,8 @@ function ProfilePage() {
           fullName: newProfile.full_name,
           phone: newProfile.phone,
           address: newProfile.address,
-          dob: newProfile.date_of_birth
+          dob: newProfile.date_of_birth,
+          age: createdAge
         });
       } else {
         // Fallback to basic profile data if creation failed
@@ -2237,6 +2241,7 @@ function ProfilePage() {
           fullName: auth.profile?.full_name || "",
           email: auth.session.user.email || "",
           phone: "",
+          age: "",
           dob: "",
           address: "",
           patientId: null
@@ -2249,6 +2254,7 @@ function ProfilePage() {
         fullName: auth.profile?.full_name || "",
         email: auth.session.user.email || "",
         phone: "",
+        age: "",
         dob: "",
         address: "",
         patientId: null
