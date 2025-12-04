@@ -2404,7 +2404,7 @@ function ProfilePage() {
             </div>
             
             <div className="form-group">
-              <label className="form-label">Phone</label>
+              <label className="form-label">Contact</label>
               {editing ? (
                 <input
                   type="tel"
@@ -2414,6 +2414,21 @@ function ProfilePage() {
                 />
               ) : (
                 <div className="form-display">{profileData.phone || 'Not set'}</div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Age</label>
+              {editing ? (
+                <input
+                  type="number"
+                  min="0"
+                  value={profileData.age}
+                  onChange={e => setProfileData({...profileData, age: e.target.value})}
+                  className="form-input"
+                />
+              ) : (
+                <div className="form-display">{displayAgeValue || 'Not set'}</div>
               )}
             </div>
             
