@@ -1071,6 +1071,9 @@ function PatientPortal() {
   const [vitalsTimestamp, setVitalsTimestamp] = useState(null);
   const [latestVitals, setLatestVitals] = useState({ temperature: null, heartRate: null, spo2: null, timestamp: null });
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
+  const [feedbackItems, setFeedbackItems] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
 
   // Helper function to calculate data freshness
   const calculateDataFreshness = (timestamp) => {
