@@ -2121,11 +2121,6 @@ function ProfilePage() {
       email: source.email || profileData.email || auth.session.user.email || ""
     };
 
-    const resolvedPatientId = source.patientId || profileData.patientId;
-    if (resolvedPatientId) {
-      payload.patient_id = resolvedPatientId;
-    }
-
     const resolvedPhone = source.phone ?? source.contact ?? source.contact_number ?? source.phone_number ?? profileData.phone;
     if (!preserveExisting || resolvedPhone) {
       payload.phone = resolvedPhone || null;
@@ -2212,7 +2207,7 @@ function ProfilePage() {
     if (!auth.session?.user?.id) return;
 
     setLoading(true);
-    const selectColumns = 'id,patient_id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status';
+    const selectColumns = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status';
     const hydrateFromLegacy = async () => {
       const loaded = await loadLegacyPatientProfile();
       if (!loaded) {
