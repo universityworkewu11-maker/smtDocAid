@@ -2987,7 +2987,14 @@ function DoctorPortal() {
                   Cancel
                 </button>
               </div>
-              {feedbackAlert && <p className={`muted ${feedbackAlert.includes('successfully') ? 'text-success' : 'text-danger'}`} style={{ marginTop: '8px' }}>{feedbackAlert}</p>}
+              {feedbackAlert && (
+                <p
+                  className="muted"
+                  style={{ marginTop: '8px', color: feedbackAlert.includes('successfully') ? 'var(--success)' : 'var(--danger)' }}
+                >
+                  {feedbackAlert}
+                </p>
+              )}
             </form>
           </div>
         )}
