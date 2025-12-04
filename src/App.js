@@ -1329,6 +1329,38 @@ function PatientPortal() {
           <div className="mt-4"><Link to="/patient/profile" className="btn btn-light">Edit</Link></div>
         </div>
       </section>
+
+      <section className="card mt-8">
+        <div className="aiq-section-header" style={{ marginBottom: '12px' }}>
+          <div>
+            <p className="aiq-eyebrow">Care guidance</p>
+            <h2>Doctor Feedback</h2>
+          </div>
+          <span className="aiq-pill">{feedbackItems.length} note{feedbackItems.length === 1 ? '' : 's'}</span>
+        </div>
+        <p className="muted" style={{ marginBottom: '16px' }}>Your care team shares insights and next steps here.</p>
+        {feedbackLoading ? (
+          <div className="skeleton animate" style={{ height: 80, borderRadius: '1rem' }} />
+        ) : feedbackError ? (
+          <div className="alert alert-danger">{feedbackError}</div>
+        ) : feedbackItems.length === 0 ? (
+          <div className="aiq-empty-state">No feedback yet. Once a doctor shares guidance, it will appear here.</div>
+        ) : (
+          <ul className="aiq-context-list" style={{ gap: '12px' }}>
+            {feedbackItems.map((item) => (
+              <li key={item.id} className="aiq-subcard" style={{ marginTop: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                  <div>
+                    <strong>{item.doctor_name || 'Doctor'}</strong>
+                    <p className="muted" style={{ marginTop: '4px' }}>{item.message}</p>
+                  </div>
+                  <small className="muted">{formatTimestamp(item.created_at)}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }
