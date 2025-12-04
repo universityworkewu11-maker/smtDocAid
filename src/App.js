@@ -2188,6 +2188,7 @@ function ProfilePage() {
     if (!auth.session?.user?.id) return;
 
     setLoading(true);
+    const selectColumns = 'id,patient_id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status';
     const hydrateFromLegacy = async () => {
       const loaded = await loadLegacyPatientProfile();
       if (!loaded) {
@@ -2196,11 +2197,42 @@ function ProfilePage() {
     };
 
     try {
-      const { data: patientRow, error } = await supabase
+      let patientRow = null;
+      let error = null;
+
+      const { data: userMatch, error: userMatchError } = await supabase
         .from('patients')
-        .select('id,patient_id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status')
+        .select(selectColumns)
         .eq('user_id', auth.session.user.id)
         .maybeSingle();
+
+      patientRow = userMatch || null;
+      error = userMatchError || null;
+
+      if (!patientRow && auth.session?.user?.email) {
+        const { data: emailMatch, error: emailError } = await supabase
+          .from('patients')
+          .select(selectColumns)
+          .eq('email', auth.session.user.email)
+          .maybeSingle();
+
+        if (emailMatch) {
+          patientRow = emailMatch;
+          if (!patientRow.user_id) {
+            try {
+              await supabase
+                .from('patients')
+                .update({ user_id: auth.session.user.id })
+                .eq('id', patientRow.id);
+              patientRow.user_id = auth.session.user.id;
+            } catch (linkErr) {
+              console.warn('Failed to link patient row to user_id:', linkErr?.message || linkErr);
+            }
+          }
+        } else if (emailError && !error) {
+          error = emailError;
+        }
+      }
 
       if (patientRow) {
         setProfileData(mapPatientRowToProfileData(patientRow));
