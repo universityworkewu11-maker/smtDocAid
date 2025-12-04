@@ -2306,6 +2306,11 @@ function ProfilePage() {
     }
   };
 
+  const fallbackAgeFromDob = computeAgeFromDob(profileData.dob);
+  const displayAgeValue = profileData.age !== ""
+    ? String(profileData.age)
+    : (fallbackAgeFromDob != null ? String(fallbackAgeFromDob) : "");
+
   return (
     <main className="route-screen">
       <div className="card animate-fade-in">
