@@ -2166,15 +2166,16 @@ function ProfilePage() {
           age: legacyAge != null ? String(legacyAge) : "",
           dob: legacyDob,
           address: patientProfile.address || "",
-          patientId: patientProfile.id || null
+          patientId: patientProfile.patient_id || patientProfile.id || null
         });
         await syncPublicPatient({
           fullName: patientProfile.full_name,
           phone: patientProfile.phone,
           address: patientProfile.address,
           dob: patientProfile.date_of_birth,
-          age: legacyAge
-        });
+          age: legacyAge,
+          patientId: patientProfile.patient_id || patientProfile.id || null
+        }, { preserveExisting: true });
         return true;
       }
     } catch (legacyError) {
