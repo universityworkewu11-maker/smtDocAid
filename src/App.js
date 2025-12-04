@@ -338,12 +338,18 @@ function AuthProvider({ children }) {
           const email = userRes?.user?.email || null;
           const meta = userRes?.user?.user_metadata || {};
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name,
-            name: full_name,
-            email
-          });
+          await supabase
+            .from('patients')
+            .upsert(
+              {
+                user_id: userId,
+                full_name,
+                name: full_name,
+                email
+              },
+              { onConflict: 'user_id' }
+            )
+            .select();
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
         }
@@ -388,12 +394,18 @@ function AuthProvider({ children }) {
         });
         // Also upsert into public.patients with email for quick access and filtering
         try {
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name: upserted?.full_name || full_name,
-            name: upserted?.full_name || full_name,
-            email
-          });
+          await supabase
+            .from('patients')
+            .upsert(
+              {
+                user_id: userId,
+                full_name: upserted?.full_name || full_name,
+                name: upserted?.full_name || full_name,
+                email
+              },
+              { onConflict: 'user_id' }
+            )
+            .select();
         } catch (e) {
           console.warn('ensure patients (created) failed:', e?.message || e);
         }
