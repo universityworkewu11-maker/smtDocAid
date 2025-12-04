@@ -21,8 +21,11 @@ AS $$
     p.user_id IS NOT DISTINCT FROM c.uid
   ) OR (
     c.email IS NOT NULL AND p.email IS NOT NULL AND (
-      (pg_typeof(p.email) = 'text'::regtype AND p.email = c.email) OR
-      (pg_typeof(p.email) = 'text[]'::regtype AND c.email = ANY(p.email))
+      CASE
+        WHEN pg_typeof(p.email)::text = 'text' THEN p.email = c.email
+        WHEN pg_typeof(p.email)::text = 'text[]' THEN c.email = ANY(p.email)
+        ELSE FALSE
+      END
     )
   )
   ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC NULLS LAST
