@@ -2396,7 +2396,7 @@ function ProfilePage() {
               <label className="form-label">Patient ID (PID)</label>
               <div className="form-display" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#2563eb' }}>
-                  {profileData.patientId ? `PID-${profileData.patientId}` : 'Not assigned yet'}
+                  {profileData.patientId ? formattedPatientId : 'Not assigned yet'}
                 </span>
                 {profileData.patientId && (
                   <button
@@ -2404,7 +2404,7 @@ function ProfilePage() {
                     className="btn btn-secondary"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(`PID-${profileData.patientId}`);
+                        await navigator.clipboard.writeText(formattedPatientId);
                         setCopied(true);
                         setTimeout(() => setCopied(false), 1500);
                       } catch (_) {}
