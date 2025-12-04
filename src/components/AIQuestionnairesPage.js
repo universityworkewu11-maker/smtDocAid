@@ -322,7 +322,8 @@ function AIQuestionnairesPage() {
     }
     try {
       const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const authUser = authData?.user;
+      const uid = authUser?.id;
       if (uid) {
         try {
           const { data: docs, error: docsError } = await supabase
@@ -364,17 +365,22 @@ function AIQuestionnairesPage() {
           }
         }
 
+        const patientRow = await fetchPatientRecord(authUser);
+        if (patientRow) {
+          snapshot.patient = mapPatientRowToContext(patientRow, snapshot.patient);
+        }
+
         snapshot.patient = {
           ...snapshot.patient,
           id: snapshot.patient.id || uid,
-          email: snapshot.patient.email || authData.user.email
+          email: snapshot.patient.email || authUser.email
         };
       }
     } catch (ctxErr) {
       console.warn('Failed to extend context from Supabase', ctxErr);
     }
     return snapshot;
-  }, []);
+  }, [fetchPatientRecord]);
 
   const refreshContext = useCallback(async () => {
     setContextLoading(true);
