@@ -20,7 +20,7 @@ const LS_KEYS = {
 
 const initialInterviewState = { sessionId: null, question: '', turns: [], done: false, report: '' };
 const initialContextState = { patient: {}, vitals: [], uploads: [] };
-const PATIENT_COLUMNS = 'id,patient_id,user_id,full_name,name,email,phone,address,date_of_birth,age,gender';
+const PATIENT_COLUMNS = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,gender';
 
 const sanitizeBase = (base) => (base || '').replace(/\/$/, '');
 
