@@ -2133,11 +2133,14 @@ function ProfilePage() {
         .maybeSingle();
 
       if (patientProfile && !error) {
+        const legacyDob = patientProfile.date_of_birth || "";
+        const legacyAge = patientProfile.age ?? computeAgeFromDob(legacyDob);
         setProfileData({
           fullName: patientProfile.full_name || auth.profile?.full_name || "",
           email: auth.session.user.email || "",
           phone: patientProfile.phone || "",
-          dob: patientProfile.date_of_birth || "",
+          age: legacyAge != null ? String(legacyAge) : "",
+          dob: legacyDob,
           address: patientProfile.address || "",
           patientId: patientProfile.id || null
         });
@@ -2145,7 +2148,8 @@ function ProfilePage() {
           fullName: patientProfile.full_name,
           phone: patientProfile.phone,
           address: patientProfile.address,
-          dob: patientProfile.date_of_birth
+          dob: patientProfile.date_of_birth,
+          age: legacyAge
         });
         return true;
       }
