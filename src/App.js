@@ -2294,7 +2294,8 @@ function ProfilePage() {
         fullName: profileData.fullName,
         phone: profileData.phone,
         address: profileData.address,
-        dob: profileData.dob
+        dob: profileData.dob,
+        age: profileData.age
       });
 
       setEditing(false);
