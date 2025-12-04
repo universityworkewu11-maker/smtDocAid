@@ -1218,6 +1218,18 @@ function PatientPortal() {
 
   // Removed inline health report generation from dashboard in favor of guided flow
 
+  const formatVitalValue = (value, unit) => {
+    if (value === null || value === undefined) return '—';
+    return `${value}${unit}`;
+  };
+
+  const freshnessState = calculateDataFreshness(vitalsTimestamp);
+  const freshnessLabel = {
+    fresh: 'Fresh (≤5m)',
+    stale: 'Stale (≤30m)',
+    old: 'Old (>30m)'
+  }[freshnessState] || 'No recent data';
+
   return (
     <main>
   <section className="hero animate-fade-up">
