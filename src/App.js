@@ -2198,7 +2198,7 @@ function ProfilePage() {
     try {
       const { data: patientRow, error } = await supabase
         .from('patients')
-        .select('id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status')
+        .select('id,patient_id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status')
         .eq('user_id', auth.session.user.id)
         .maybeSingle();
 
