@@ -2251,15 +2251,16 @@ function ProfilePage() {
           age: createdAge != null ? String(createdAge) : "",
           dob: createdDob,
           address: newProfile.address || "",
-          patientId: newProfile.id || null
+          patientId: newProfile.patient_id || newProfile.id || null
         });
         await syncPublicPatient({
           fullName: newProfile.full_name,
           phone: newProfile.phone,
           address: newProfile.address,
           dob: newProfile.date_of_birth,
-          age: createdAge
-        });
+          age: createdAge,
+          patientId: newProfile.patient_id || newProfile.id || null
+        }, { preserveExisting: true });
       } else {
         // Fallback to basic profile data if creation failed
         setProfileData({
