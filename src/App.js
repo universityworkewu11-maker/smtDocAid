@@ -2321,7 +2321,8 @@ function ProfilePage() {
         phone: profileData.phone,
         address: profileData.address,
         dob: profileData.dob,
-        age: profileData.age
+        age: profileData.age,
+        patientId: profileData.patientId
       });
 
       setEditing(false);
