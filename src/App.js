@@ -1074,10 +1074,12 @@ function PatientPortal() {
   // Helper function to calculate data freshness
   const calculateDataFreshness = (timestamp) => {
     if (!timestamp) return 'old';
-    
-    const now = Date.now();
-    const diffInMinutes = (now - timestamp) / (1000 * 60);
-    
+
+    const ts = typeof timestamp === 'string' ? Date.parse(timestamp) : Number(timestamp);
+    if (!ts || Number.isNaN(ts)) return 'old';
+
+    const diffInMinutes = (Date.now() - ts) / (1000 * 60);
+
     if (diffInMinutes < 5) {
       return 'fresh';  // Less than 5 minutes old
     } else if (diffInMinutes < 30) {
@@ -1090,9 +1092,10 @@ function PatientPortal() {
   // Helper function to format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'Never';
-    
+
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (Number.isNaN(date.getTime())) return 'Never';
+    return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   useEffect(() => {
