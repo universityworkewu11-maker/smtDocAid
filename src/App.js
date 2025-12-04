@@ -2031,6 +2031,7 @@ function ProfilePage() {
     fullName: "",
     email: "",
     phone: "",
+    age: "",
     dob: "",
     address: "",
     patientId: null
