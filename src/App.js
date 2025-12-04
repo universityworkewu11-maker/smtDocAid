@@ -2099,8 +2099,9 @@ function ProfilePage() {
     };
   };
 
-  const syncPublicPatient = async (source = {}) => {
+  const syncPublicPatient = async (source = {}, options = {}) => {
     if (!auth.session?.user?.id) return;
+    const preserveExisting = options.preserveExisting ?? false;
     const normalizedName = source.fullName || source.full_name || profileData.fullName || auth.profile?.full_name || "";
     const normalizedAge = source.age ?? profileData.age ?? "";
     const parsedAge = normalizedAge === "" ? null : Number(normalizedAge);
@@ -2109,12 +2110,33 @@ function ProfilePage() {
       user_id: auth.session.user.id,
       full_name: normalizedName,
       name: normalizedName,
-      email: source.email || profileData.email || auth.session.user.email || "",
-      phone: source.phone ?? profileData.phone ?? "",
-      address: source.address ?? profileData.address ?? "",
-      date_of_birth: (source.dob ?? source.date_of_birth ?? profileData.dob) || null,
-      age: Number.isFinite(parsedAge) ? parsedAge : null
+      email: source.email || profileData.email || auth.session.user.email || ""
     };
+
+    const resolvedPatientId = source.patientId || profileData.patientId;
+    if (resolvedPatientId) {
+      payload.patient_id = resolvedPatientId;
+    }
+
+    const resolvedPhone = source.phone ?? profileData.phone;
+    if (!preserveExisting || resolvedPhone) {
+      payload.phone = resolvedPhone || null;
+    }
+
+    const resolvedAddress = source.address ?? profileData.address;
+    if (!preserveExisting || resolvedAddress) {
+      payload.address = resolvedAddress || null;
+    }
+
+    const resolvedDob = source.dob ?? source.date_of_birth ?? profileData.dob;
+    if (!preserveExisting || resolvedDob) {
+      payload.date_of_birth = resolvedDob || null;
+    }
+
+    if (!preserveExisting || Number.isFinite(parsedAge)) {
+      payload.age = Number.isFinite(parsedAge) ? parsedAge : null;
+    }
+
     if (source.device_status) {
       payload.device_status = source.device_status;
     }
