@@ -2086,14 +2086,16 @@ function ProfilePage() {
   const mapPatientRowToProfileData = (row) => {
     const normalizedDob = row?.date_of_birth || row?.dob || "";
     const normalizedAge = row?.age ?? computeAgeFromDob(normalizedDob);
+    const normalizedPhone = row?.phone || "";
+    const normalizedPatientId = row?.patient_id || row?.id || null;
     return {
       fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
       email: row?.email || auth.session?.user?.email || "",
-      phone: row?.phone || "",
+      phone: normalizedPhone,
       age: normalizedAge != null ? String(normalizedAge) : "",
       dob: normalizedDob,
       address: row?.address || "",
-      patientId: row?.id || row?.patient_id || null
+      patientId: normalizedPatientId
     };
   };
 
