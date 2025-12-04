@@ -2337,6 +2337,11 @@ function ProfilePage() {
   const displayAgeValue = profileData.age !== ""
     ? String(profileData.age)
     : (fallbackAgeFromDob != null ? String(fallbackAgeFromDob) : "");
+  const formattedPatientId = profileData.patientId
+    ? (String(profileData.patientId).startsWith('PID-')
+      ? String(profileData.patientId)
+      : `PID-${profileData.patientId}`)
+    : '';
 
   return (
     <main className="route-screen">
