@@ -797,17 +797,6 @@ function AIQuestionnairesPage() {
               )}
             </section>
 
-            <section className="card aiq-share-card">
-              <header className="aiq-section-header">
-                <div>
-                  <p className="aiq-eyebrow">Share summary</p>
-                  <h2>Notify your care team</h2>
-                </div>
-                <span className={`aiq-pill ${interview.report ? 'aiq-pill-success' : ''}`}>
-                  {interview.report ? 'Report ready' : 'Report pending'}
-                </span>
-              </header>
-              <p className="muted">Generated reports automatically include the patient context shown on the right.</p>
               <div className="aiq-share-status">
                 <div>
                   <strong>Language</strong>
