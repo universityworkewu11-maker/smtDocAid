@@ -2083,10 +2083,18 @@ function ProfilePage() {
     return age >= 0 ? age : null;
   };
 
+  const normalizePhone = (row = {}) => {
+    return row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || "";
+  };
+
+  const normalizeDob = (row = {}) => {
+    return row.date_of_birth || row.dob || row.birth_date || row.birthdate || "";
+  };
+
   const mapPatientRowToProfileData = (row) => {
-    const normalizedDob = row?.date_of_birth || row?.dob || "";
-    const normalizedAge = row?.age ?? computeAgeFromDob(normalizedDob);
-    const normalizedPhone = row?.phone || "";
+    const normalizedDob = normalizeDob(row);
+    const normalizedAge = row?.age ?? row?.patient_age ?? computeAgeFromDob(normalizedDob);
+    const normalizedPhone = normalizePhone(row);
     const normalizedPatientId = row?.patient_id || row?.id || null;
     return {
       fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
@@ -2103,7 +2111,7 @@ function ProfilePage() {
     if (!auth.session?.user?.id) return;
     const preserveExisting = options.preserveExisting ?? false;
     const normalizedName = source.fullName || source.full_name || profileData.fullName || auth.profile?.full_name || "";
-    const normalizedAge = source.age ?? profileData.age ?? "";
+    const normalizedAge = source.age ?? source.patient_age ?? profileData.age ?? "";
     const parsedAge = normalizedAge === "" ? null : Number(normalizedAge);
 
     const payload = {
@@ -2118,7 +2126,7 @@ function ProfilePage() {
       payload.patient_id = resolvedPatientId;
     }
 
-    const resolvedPhone = source.phone ?? profileData.phone;
+    const resolvedPhone = source.phone ?? source.contact ?? source.contact_number ?? source.phone_number ?? profileData.phone;
     if (!preserveExisting || resolvedPhone) {
       payload.phone = resolvedPhone || null;
     }
@@ -2128,7 +2136,7 @@ function ProfilePage() {
       payload.address = resolvedAddress || null;
     }
 
-    const resolvedDob = source.dob ?? source.date_of_birth ?? profileData.dob;
+    const resolvedDob = source.dob ?? source.date_of_birth ?? source.birth_date ?? source.birthdate ?? profileData.dob;
     if (!preserveExisting || resolvedDob) {
       payload.date_of_birth = resolvedDob || null;
     }
