@@ -1131,7 +1131,6 @@ function PatientPortal() {
         <p className="hero-subtitle">Track real-time vitals, complete assessments, and generate AI health insights.</p>
         <div className="hero-cta">
           <button onClick={() => navigate('/patient/vitals')} className="btn btn-primary" disabled={!user}>Start Assessment</button>
-          <Link to="/patient/questionnaire" className="btn btn-light">Questionnaire</Link>
         </div>
         {auth.profile?.full_name && (
           <div className="mt-6 text-sm text-slate-600 dark:text-slate-300 flex flex-wrap gap-2 items-center">
@@ -1160,11 +1159,6 @@ function PatientPortal() {
           <div className="mt-4"><button onClick={() => navigate('/patient/vitals')} className="btn btn-primary" disabled={!user}>Begin</button></div>
         </div>
   <div className="feature-card tilt">
-          <h3>Questionnaire</h3>
-          <p>Adaptive interview and structured questions tailor insights to your current condition.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-light">Open</Link></div>
-        </div>
-  <div className="feature-card tilt">
           <h3>Documents</h3>
           <p>Securely upload lab reports and imaging; AI references them in assessment generation.</p>
           <div className="mt-4"><Link to="/patient/uploads" className="btn btn-secondary">Manage</Link></div>
@@ -1178,16 +1172,6 @@ function PatientPortal() {
           <h3>Profile</h3>
           <p>Keep demographics and background updated for more accurate recommendations.</p>
           <div className="mt-4"><Link to="/patient/profile" className="btn btn-light">Edit</Link></div>
-        </div>
-        <div className="feature-card tilt">
-          <h3>AI Questionnaires</h3>
-          <p>Interactive AI-powered interviews with doctor selection and report sharing.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">Start AI Interview</Link></div>
-        </div>
-        <div className="feature-card tilt">
-          <h3>AI Reports</h3>
-          <p>View reports generated from your latest completed assessments and questionnaires.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">View</Link></div>
         </div>
       </section>
     </main>
