@@ -797,6 +797,13 @@ function AIQuestionnairesPage() {
               )}
             </section>
 
+            <section className="card aiq-share-card">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Share interview</p>
+                  <h2>Send summary to doctors</h2>
+                </div>
+              </header>
               <div className="aiq-share-status">
                 <div>
                   <strong>Language</strong>
@@ -815,17 +822,6 @@ function AIQuestionnairesPage() {
                 Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
               </button>
               <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
-            </section>
-
-            <section className="card aiq-nav-card">
-              <div className="aiq-nav">
-                <button className="btn btn-secondary" onClick={() => navigate('/assessment/vitals')}>
-                  Back
-                </button>
-                <button className="btn btn-primary" onClick={() => navigate('/assessment/documents')}>
-                  Next
-                </button>
-              </div>
             </section>
           </div>
         </main>
