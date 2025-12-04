@@ -172,6 +172,61 @@ function AIQuestionnairesPage() {
     } catch (_) {}
   }, []);
 
+  const fetchPatientRecord = useCallback(async (authUser) => {
+    if (!authUser?.id) return null;
+
+    const tryFetch = async (column, value) => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select(PATIENT_COLUMNS)
+          .eq(column, value)
+          .maybeSingle();
+        if (error) {
+          if (error.code !== 'PGRST116') {
+            console.warn(`patients fetch by ${column} failed:`, error.message || error);
+          }
+          return null;
+        }
+        return data || null;
+      } catch (fetchErr) {
+        console.warn(`patients fetch by ${column} exception:`, fetchErr?.message || fetchErr);
+        return null;
+      }
+    };
+
+    let row = await tryFetch('user_id', authUser.id);
+    if (!row && authUser.email) {
+      row = await tryFetch('email', authUser.email);
+    }
+    if (!row) {
+      try {
+        const { data, error } = await supabase.rpc('get_patient_profile_for_current_user');
+        if (error) {
+          console.warn('RPC get_patient_profile_for_current_user failed:', error.message || error);
+        } else if (Array.isArray(data) && data.length) {
+          row = data[0];
+        }
+      } catch (rpcErr) {
+        console.warn('RPC get_patient_profile_for_current_user exception:', rpcErr?.message || rpcErr);
+      }
+    }
+
+    if (row && !row.user_id) {
+      try {
+        await supabase
+          .from('patients')
+          .update({ user_id: authUser.id })
+          .eq('id', row.id);
+        row.user_id = authUser.id;
+      } catch (linkErr) {
+        console.warn('Failed to link patient row to user_id:', linkErr?.message || linkErr);
+      }
+    }
+
+    return row;
+  }, []);
+
   const apiPostJSON = useCallback(
     async (path, body = {}) => {
       const attempt = async (base) => {
