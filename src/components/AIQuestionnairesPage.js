@@ -20,6 +20,7 @@ const LS_KEYS = {
 
 const initialInterviewState = { sessionId: null, question: '', turns: [], done: false, report: '' };
 const initialContextState = { patient: {}, vitals: [], uploads: [] };
+const PATIENT_COLUMNS = 'id,patient_id,user_id,full_name,name,email,phone,address,date_of_birth,age,gender';
 
 const sanitizeBase = (base) => (base || '').replace(/\/$/, '');
 
@@ -106,6 +107,39 @@ const loadInitialContext = () => {
 const loadInitialSelectedDoctors = () => {
   const cached = getStoredJSON(LS_KEYS.selectedDoctors, []);
   return Array.isArray(cached) ? cached : [];
+};
+
+const computeAgeFromDob = (dob) => {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+};
+
+const normalizeDob = (row = {}) => row.date_of_birth || row.dob || row.birth_date || row.birthdate || '';
+const normalizePhone = (row = {}) => row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || '';
+
+const mapPatientRowToContext = (row, fallback = {}) => {
+  if (!row) return { ...fallback };
+  const normalizedDob = normalizeDob(row);
+  const normalizedAge = row.age ?? row.patient_age ?? computeAgeFromDob(normalizedDob);
+  return {
+    ...fallback,
+    id: fallback.id || row.user_id || row.patient_id || row.id || null,
+    patientId: fallback.patientId || row.patient_id || row.id || null,
+    name: row.full_name || row.name || fallback.name || null,
+    gender: row.gender || fallback.gender || null,
+    age: normalizedAge ?? fallback.age ?? null,
+    phone: normalizePhone(row) || fallback.phone || null,
+    email: row.email || fallback.email || null,
+    dob: normalizedDob || fallback.dob || null
+  };
 };
 
 function AIQuestionnairesPage() {
