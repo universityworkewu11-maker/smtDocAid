@@ -2661,11 +2661,16 @@ function ProfilePage() {
 }
 
 function DoctorPortal() {
+  const auth = useAuth();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [patientsCount, setPatientsCount] = useState(0);
   const [lastSynced, setLastSynced] = useState(null);
+  const [feedbackTarget, setFeedbackTarget] = useState(null);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackAlert, setFeedbackAlert] = useState('');
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
@@ -2815,6 +2820,59 @@ function DoctorPortal() {
     loadSharedPatients();
   };
 
+  const openFeedbackPanel = (patient) => {
+    setFeedbackTarget(patient);
+    setFeedbackMessage('');
+    setFeedbackAlert('');
+  };
+
+  const handleSubmitFeedback = async (event) => {
+    event.preventDefault();
+    if (!feedbackTarget) {
+      setFeedbackAlert('Select a patient first.');
+      return;
+    }
+    const trimmed = feedbackMessage.trim();
+    if (!trimmed) {
+      setFeedbackAlert('Feedback cannot be empty.');
+      return;
+    }
+    setFeedbackSubmitting(true);
+    setFeedbackAlert('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const doctorName = auth?.profile?.full_name || user.email || 'Doctor';
+      const payload = {
+        patient_id: feedbackTarget.user_id,
+        doctor_id: user.id,
+        doctor_name: doctorName,
+        message: trimmed,
+        created_at: new Date().toISOString()
+      };
+      const { error: insertErr } = await supabase.from('patient_feedback').insert([payload]);
+      if (insertErr) throw insertErr;
+      try {
+        await supabase.from('notifications').insert([{
+          doctor_id: user.id,
+          patient_id: feedbackTarget.user_id,
+          type: 'doctor_feedback',
+          message: trimmed.slice(0, 280),
+          is_read: false
+        }]);
+      } catch (notifErr) {
+        console.warn('Feedback notification failed:', notifErr?.message || notifErr);
+      }
+      setFeedbackAlert('Feedback sent successfully.');
+      setFeedbackMessage('');
+      setFeedbackTarget(null);
+    } catch (fbErr) {
+      setFeedbackAlert(fbErr?.message || 'Unable to send feedback right now.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
   const severityCounts = patients.reduce((acc, p) => {
     if (p.risk === 'high') acc.high++;
     else if (p.risk === 'medium') acc.medium++;
@@ -2899,7 +2957,7 @@ function DoctorPortal() {
                     >
                       View Details
                     </Link>
-                    <button className="btn btn-success ml-2">
+                    <button className="btn btn-success ml-2" onClick={() => openFeedbackPanel(patient)}>
                       Add Feedback
                     </button>
                   </td>
@@ -2908,6 +2966,31 @@ function DoctorPortal() {
             </tbody>
           </table>
         </div>
+        {feedbackTarget && (
+          <div className="card mt-4">
+            <h4 className="card-title">Send feedback to {feedbackTarget.name}</h4>
+            <form onSubmit={handleSubmitFeedback}>
+              <label className="form-label" htmlFor="doctor-feedback-text">Message</label>
+              <textarea
+                id="doctor-feedback-text"
+                className="form-input"
+                rows={4}
+                placeholder="Summarize key guidance, next steps, or encouragement..."
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button type="submit" className="btn btn-primary" disabled={feedbackSubmitting}>
+                  {feedbackSubmitting ? 'Sending…' : 'Send Feedback'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setFeedbackTarget(null); setFeedbackAlert(''); }}>
+                  Cancel
+                </button>
+              </div>
+              {feedbackAlert && <p className={`muted ${feedbackAlert.includes('successfully') ? 'text-success' : 'text-danger'}`} style={{ marginTop: '8px' }}>{feedbackAlert}</p>}
+            </form>
+          </div>
+        )}
       </div>
     </main>
   );
