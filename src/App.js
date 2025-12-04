@@ -2327,7 +2327,10 @@ function ProfilePage() {
       payload.device_status = source.device_status;
     }
     try {
-      await supabase.from('patients').upsert(payload);
+      await supabase
+        .from('patients')
+        .upsert(payload, { onConflict: 'user_id' })
+        .select();
     } catch (e) {
       console.warn('patients upsert failed:', e?.message || e);
     }
