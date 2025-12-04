@@ -2070,18 +2070,39 @@ function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const mapPatientRowToProfileData = (row) => ({
-    fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
-    email: row?.email || auth.session?.user?.email || "",
-    phone: row?.phone || "",
-    dob: row?.date_of_birth || row?.dob || "",
-    address: row?.address || "",
-    patientId: row?.id || row?.patient_id || null
-  });
+  const computeAgeFromDob = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : null;
+  };
+
+  const mapPatientRowToProfileData = (row) => {
+    const normalizedDob = row?.date_of_birth || row?.dob || "";
+    const normalizedAge = row?.age ?? computeAgeFromDob(normalizedDob);
+    return {
+      fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
+      email: row?.email || auth.session?.user?.email || "",
+      phone: row?.phone || "",
+      age: normalizedAge != null ? String(normalizedAge) : "",
+      dob: normalizedDob,
+      address: row?.address || "",
+      patientId: row?.id || row?.patient_id || null
+    };
+  };
 
   const syncPublicPatient = async (source = {}) => {
     if (!auth.session?.user?.id) return;
     const normalizedName = source.fullName || source.full_name || profileData.fullName || auth.profile?.full_name || "";
+    const normalizedAge = source.age ?? profileData.age ?? "";
+    const parsedAge = normalizedAge === "" ? null : Number(normalizedAge);
+
     const payload = {
       user_id: auth.session.user.id,
       full_name: normalizedName,
@@ -2089,7 +2110,8 @@ function ProfilePage() {
       email: source.email || profileData.email || auth.session.user.email || "",
       phone: source.phone ?? profileData.phone ?? "",
       address: source.address ?? profileData.address ?? "",
-      date_of_birth: (source.dob ?? source.date_of_birth ?? profileData.dob) || null
+      date_of_birth: (source.dob ?? source.date_of_birth ?? profileData.dob) || null,
+      age: Number.isFinite(parsedAge) ? parsedAge : null
     };
     if (source.device_status) {
       payload.device_status = source.device_status;
