@@ -345,15 +345,12 @@ function AuthProvider({ children }) {
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
           await supabase
             .from('patients')
-            .upsert(
-              {
-                user_id: userId,
-                full_name,
-                name: full_name,
-                email
-              },
-              { onConflict: 'user_id' }
-            )
+            .upsert({
+              user_id: userId,
+              full_name,
+              name: full_name,
+              email
+            })
             .select();
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
