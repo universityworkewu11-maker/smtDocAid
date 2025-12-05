@@ -631,6 +631,12 @@ function AIQuestionnairesPage() {
     } catch (_) {}
   }, [serverBase]);
 
+  const availableDoctorCount = useMemo(() => {
+    if (!Array.isArray(selectedDoctors) || selectedDoctors.length === 0) return 0;
+    if (!doctorIdSet.size) return 0;
+    return selectedDoctors.filter((id) => doctorIdSet.has(id)).length;
+  }, [selectedDoctors, doctorIdSet]);
+  const hasUnavailableSelections = selectedDoctors.length > 0 && availableDoctorCount < selectedDoctors.length;
   const interviewStatus = interview.done ? 'Completed' : interview.sessionId ? 'In Progress' : 'Idle';
   const languageLabel = interviewLanguage === 'bn' ? 'Bangla' : 'English';
   const normalizedQuery = doctorSearch.trim().toLowerCase();
@@ -644,14 +650,14 @@ function AIQuestionnairesPage() {
   const initialDoctorList = normalizedQuery ? matchingDoctors : doctors.slice(0, MAX_VISIBLE_DOCTORS);
   const selectedSupplements = !normalizedQuery
     ? doctors.filter((doc) => {
-        const key = doc?.user_id || doc?.id;
+        const key = doc?.id;
         if (!key) return false;
-        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => (d?.user_id || d?.id) === key);
+        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => d?.id === key);
       })
     : [];
   const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
   const noDoctorMatches = normalizedQuery && displayedDoctors.length === 0;
-  const shareDisabled = !interview.report || !selectedDoctors.length;
+  const shareDisabled = !interview.report || availableDoctorCount === 0;
 
   return (
     <div className="aiq-page">
