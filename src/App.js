@@ -2912,59 +2912,6 @@ function DoctorPortal() {
     loadSharedPatients();
   };
 
-  const openFeedbackPanel = (patient) => {
-    setFeedbackTarget(patient);
-    setFeedbackMessage('');
-    setFeedbackAlert('');
-  };
-
-  const handleSubmitFeedback = async (event) => {
-    event.preventDefault();
-    if (!feedbackTarget) {
-      setFeedbackAlert('Select a patient first.');
-      return;
-    }
-    const trimmed = feedbackMessage.trim();
-    if (!trimmed) {
-      setFeedbackAlert('Feedback cannot be empty.');
-      return;
-    }
-    setFeedbackSubmitting(true);
-    setFeedbackAlert('');
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const doctorName = auth?.profile?.full_name || user.email || 'Doctor';
-      const payload = {
-        patient_id: feedbackTarget.user_id,
-        doctor_id: user.id,
-        doctor_name: doctorName,
-        message: trimmed,
-        created_at: new Date().toISOString()
-      };
-      const { error: insertErr } = await supabase.from('patient_feedback').insert([payload]);
-      if (insertErr) throw insertErr;
-      try {
-        await supabase.from('notifications').insert([{
-          doctor_id: user.id,
-          patient_id: feedbackTarget.user_id,
-          type: 'doctor_feedback',
-          message: trimmed.slice(0, 280),
-          is_read: false
-        }]);
-      } catch (notifErr) {
-        console.warn('Feedback notification failed:', notifErr?.message || notifErr);
-      }
-      setFeedbackAlert('Feedback sent successfully.');
-      setFeedbackMessage('');
-      setFeedbackTarget(null);
-    } catch (fbErr) {
-      setFeedbackAlert(fbErr?.message || 'Unable to send feedback right now.');
-    } finally {
-      setFeedbackSubmitting(false);
-    }
-  };
-
   const severityCounts = patients.reduce((acc, p) => {
     if (p.risk === 'high') acc.high++;
     else if (p.risk === 'medium') acc.medium++;
