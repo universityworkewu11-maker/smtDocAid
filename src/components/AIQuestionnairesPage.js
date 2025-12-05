@@ -672,7 +672,7 @@ function AIQuestionnairesPage() {
                 {interview.sessionId ? 'Interview active' : 'Interview idle'}
               </span>
               <span className="aiq-pill">Status: {interviewStatus}</span>
-              <span className="aiq-pill">Selected doctors: {selectedDoctors.length}</span>
+              <span className="aiq-pill">Selected doctors: {availableDoctorCount}</span>
               <span className="aiq-pill">Turns captured: {interview.turns.length}</span>
               <span className="aiq-pill">Language: {languageLabel}</span>
               {interview.report && <span className="aiq-pill aiq-pill-info">Report ready</span>}
