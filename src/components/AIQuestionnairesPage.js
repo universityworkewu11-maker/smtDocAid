@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
@@ -21,6 +21,25 @@ const LS_KEYS = {
 const initialInterviewState = { sessionId: null, question: '', turns: [], done: false, report: '' };
 const initialContextState = { patient: {}, vitals: [], uploads: [] };
 const PATIENT_COLUMNS = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,gender';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isValidUUID = (value) => {
+  if (!value) return false;
+  const str = String(value).trim();
+  return UUID_REGEX.test(str);
+};
+
+const resolveDoctorId = (raw, lookupMap) => {
+  if (!raw) return null;
+  const direct = lookupMap.get(raw);
+  if (direct) return direct;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    return lookupMap.get(trimmed) || lookupMap.get(trimmed.toLowerCase()) || null;
+  }
+  return null;
+};
+
 
 const sanitizeBase = (base) => (base || '').replace(/\/$/, '');
 
