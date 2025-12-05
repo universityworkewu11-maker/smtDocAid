@@ -900,7 +900,7 @@ function AIQuestionnairesPage() {
                 onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
                 disabled={shareDisabled}
               >
-                Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
+                Share with doctor{availableDoctorCount === 1 ? '' : 's'}
               </button>
               <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
               {hasUnavailableSelections && (
