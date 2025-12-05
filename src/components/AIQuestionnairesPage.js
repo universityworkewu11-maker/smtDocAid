@@ -835,21 +835,28 @@ function AIQuestionnairesPage() {
                 </small>
               </div>
               <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+              {hasUnavailableSelections && (
+                <small className="aiq-hint" style={{ color: '#b45309' }}>
+                  Some previously selected doctors are no longer available. Please re-select them below.
+                </small>
+              )}
               {noDoctorMatches ? (
                 <div className="aiq-empty-state">No doctors match that search.</div>
               ) : displayedDoctors.length > 0 ? (
                 <div className="aiq-doctor-grid">
-                  {displayedDoctors.map((doctor) => {
-                    const doctorKey = doctor?.user_id || doctor?.id;
-                    const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
+                  {displayedDoctors.map((doctor, idx) => {
+                    const doctorId = doctor?.id;
+                    const optionKey = doctorId || doctor?.user_id || doctor?.email || `doctor-${idx}`;
+                    const isSelectable = Boolean(doctorId);
+                    const isChecked = isSelectable ? selectedDoctors.includes(doctorId) : false;
                     return (
-                      <label key={doctorKey || doctor?.email || Math.random()} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
+                      <label key={optionKey} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
                         <input
                           type="checkbox"
                           checked={isChecked}
+                          disabled={!isSelectable}
                           onChange={(e) => {
-                            const doctorId = doctor?.user_id || doctor?.id;
-                            if (!doctorId) return;
+                            if (!isSelectable) return;
                             if (e.target.checked) {
                               setSelectedDoctors((prev) => Array.from(new Set([...prev, doctorId])));
                             } else {
@@ -860,6 +867,7 @@ function AIQuestionnairesPage() {
                         <div>
                           <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
                           <div className="muted">{doctor.specialist || doctor.bio || 'General practice'}</div>
+                          {!isSelectable && <small className="muted">Profile not eligible for sharing</small>}
                         </div>
                       </label>
                     );
