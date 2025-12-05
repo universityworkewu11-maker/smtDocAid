@@ -3097,11 +3097,7 @@ function DoctorPortal() {
                     >
                       View Details
                     </Link>
-<<<<<<< HEAD
                     <button className="btn btn-success ml-2" onClick={() => openFeedbackForm(patient)}>
-=======
-                    <button className="btn btn-success ml-2" onClick={() => openFeedbackPanel(patient)}>
->>>>>>> 3beda64965528482b39b5ea1a09cb7214cf1fded
                       Add Feedback
                     </button>
                   </td>
@@ -3110,38 +3106,6 @@ function DoctorPortal() {
             </tbody>
           </table>
         </div>
-        {feedbackTarget && (
-          <div className="card mt-4">
-            <h4 className="card-title">Send feedback to {feedbackTarget.name}</h4>
-            <form onSubmit={handleSubmitFeedback}>
-              <label className="form-label" htmlFor="doctor-feedback-text">Message</label>
-              <textarea
-                id="doctor-feedback-text"
-                className="form-input"
-                rows={4}
-                placeholder="Summarize key guidance, next steps, or encouragement..."
-                value={feedbackMessage}
-                onChange={(e) => setFeedbackMessage(e.target.value)}
-              />
-              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <button type="submit" className="btn btn-primary" disabled={feedbackSubmitting}>
-                  {feedbackSubmitting ? 'Sending…' : 'Send Feedback'}
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => { setFeedbackTarget(null); setFeedbackAlert(''); }}>
-                  Cancel
-                </button>
-              </div>
-              {feedbackAlert && (
-                <p
-                  className="muted"
-                  style={{ marginTop: '8px', color: feedbackAlert.includes('successfully') ? 'var(--success)' : 'var(--danger)' }}
-                >
-                  {feedbackAlert}
-                </p>
-              )}
-            </form>
-          </div>
-        )}
       </div>
       </main>
       {feedbackTarget && (
