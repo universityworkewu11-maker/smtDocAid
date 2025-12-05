@@ -34,6 +34,7 @@ const UploadDocumentsPage = () => {
   const fileInputRef = useRef(null);
   const [previousUploads, setPreviousUploads] = useState([]);
   const [previousUploadsLoading, setPreviousUploadsLoading] = useState(true);
+  const [expandedDocId, setExpandedDocId] = useState(null);
 
   const loadPersistedDocuments = useCallback(async () => {
     setPreviousUploadsLoading(true);
@@ -258,6 +259,10 @@ const UploadDocumentsPage = () => {
   // Skip uploads and continue
   const handleSkip = () => {
     navigate('/patient/questionnaire');
+  };
+
+  const toggleDocDetails = (docId) => {
+    setExpandedDocId(prev => (prev === docId ? null : docId));
   };
 
   // Handle back navigation
