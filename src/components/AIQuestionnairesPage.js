@@ -592,6 +592,28 @@ function AIQuestionnairesPage() {
   }, [refreshContext]);
 
   useEffect(() => {
+    setSelectedDoctors((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      const normalized = [];
+      prev.forEach((value) => {
+        const resolved = resolveDoctorId(value, doctorIdentityMap);
+        if (resolved) {
+          if (!normalized.includes(resolved)) normalized.push(resolved);
+          return;
+        }
+        if (isValidUUID(value)) {
+          const trimmed = String(value).trim();
+          if (!normalized.includes(trimmed)) normalized.push(trimmed);
+        }
+      });
+      if (normalized.length === prev.length && normalized.every((val, idx) => val === prev[idx])) {
+        return prev;
+      }
+      return normalized;
+    });
+  }, [doctorIdentityMap]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors));
     } catch (_) {}
