@@ -457,6 +457,45 @@ const UploadDocumentsPage = () => {
                       <a className="btn btn-outline btn-sm" href={doc.url} target="_blank" rel="noreferrer">Open</a>
                     )}
                   </div>
+                  {doc.extractedText && (
+                    <div className="extracted-text" style={{ marginTop: 12 }}>
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <span className="muted text-sm">AI extracted text ({doc.extractedText.length.toLocaleString()} chars)</span>
+                        <button
+                          type="button"
+                          className="btn btn-light btn-sm"
+                          onClick={() => toggleDocDetails(doc.id || doc.path)}
+                        >
+                          {expandedDocId === (doc.id || doc.path) ? 'Hide text' : 'Show text'}
+                        </button>
+                      </div>
+                      {expandedDocId === (doc.id || doc.path) ? (
+                        <pre
+                          className="extracted-text-block"
+                          style={{
+                            marginTop: 8,
+                            background: 'var(--card-bg, rgba(148,163,184,0.08))',
+                            padding: '12px',
+                            borderRadius: '12px',
+                            maxHeight: 240,
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'var(--font-mono, "SFMono-Regular", Consolas, monospace)'
+                          }}
+                        >
+                          {doc.extractedText}
+                        </pre>
+                      ) : (
+                        <p className="muted" style={{ marginTop: 8 }}>
+                          {doc.extractedText.slice(0, 200)}
+                          {doc.extractedText.length > 200 ? '…' : ''}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {!doc.extractedText && doc.status && doc.status !== 'complete' && (
+                    <p className="muted" style={{ marginTop: 12 }}>Extraction still {doc.status}. Check back shortly.</p>
+                  )}
                 </div>
               ))}
             </div>
