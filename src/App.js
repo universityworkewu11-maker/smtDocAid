@@ -343,12 +343,18 @@ function AuthProvider({ children }) {
           const email = userRes?.user?.email || null;
           const meta = userRes?.user?.user_metadata || {};
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name,
-            name: full_name,
-            email
-          });
+          await supabase
+            .from('patients')
+            .upsert(
+              {
+                user_id: userId,
+                full_name,
+                name: full_name,
+                email
+              },
+              { onConflict: 'user_id' }
+            )
+            .select();
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
         }
@@ -393,12 +399,18 @@ function AuthProvider({ children }) {
         });
         // Also upsert into public.patients with email for quick access and filtering
         try {
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name: upserted?.full_name || full_name,
-            name: upserted?.full_name || full_name,
-            email
-          });
+          await supabase
+            .from('patients')
+            .upsert(
+              {
+                user_id: userId,
+                full_name: upserted?.full_name || full_name,
+                name: upserted?.full_name || full_name,
+                email
+              },
+              { onConflict: 'user_id' }
+            )
+            .select();
         } catch (e) {
           console.warn('ensure patients (created) failed:', e?.message || e);
         }
@@ -1074,6 +1086,7 @@ function PatientPortal() {
   const patientId = user?.id || null;
   const [vitalsStatus, setVitalsStatus] = useState('offline'); // offline, measuring, measured
   const [vitalsTimestamp, setVitalsTimestamp] = useState(null);
+  const [latestVitals, setLatestVitals] = useState({ temperature: null, heartRate: null, spo2: null, timestamp: null });
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
   const [feedbackNotes, setFeedbackNotes] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -1082,10 +1095,12 @@ function PatientPortal() {
   // Helper function to calculate data freshness
   const calculateDataFreshness = (timestamp) => {
     if (!timestamp) return 'old';
-    
-    const now = Date.now();
-    const diffInMinutes = (now - timestamp) / (1000 * 60);
-    
+
+    const ts = typeof timestamp === 'string' ? Date.parse(timestamp) : Number(timestamp);
+    if (!ts || Number.isNaN(ts)) return 'old';
+
+    const diffInMinutes = (Date.now() - ts) / (1000 * 60);
+
     if (diffInMinutes < 5) {
       return 'fresh';  // Less than 5 minutes old
     } else if (diffInMinutes < 30) {
@@ -1098,15 +1113,106 @@ function PatientPortal() {
   // Helper function to format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'Never';
-    
+
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (Number.isNaN(date.getTime())) return 'Never';
+    return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   useEffect(() => {
     // Initialize status indicators when component mounts
     setVitalsStatus('offline');
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const coerceNumber = (value) => {
+      if (value === null || value === undefined || value === '') return null;
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      return Math.round(num * 10) / 10;
+    };
+
+    const applySnapshot = (snapshot) => {
+      if (!snapshot || !isMounted) return;
+      setLatestVitals((prev) => {
+        const merged = {
+          temperature: snapshot.temperature ?? prev.temperature ?? null,
+          heartRate: snapshot.heartRate ?? prev.heartRate ?? null,
+          spo2: snapshot.spo2 ?? prev.spo2 ?? null,
+          timestamp: snapshot.timestamp || prev.timestamp || null
+        };
+        const hasData = merged.temperature != null || merged.heartRate != null || merged.spo2 != null;
+        setVitalsStatus(hasData ? 'measured' : 'offline');
+        if (merged.timestamp) setVitalsTimestamp(merged.timestamp);
+        return merged;
+      });
+    };
+
+    const hydrateFromLocalStorage = () => {
+      if (typeof window === 'undefined') return;
+      const keys = ['vitalsData', 'vitals_data'];
+      for (const key of keys) {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (!parsed) continue;
+          if (Array.isArray(parsed)) {
+            const latest = parsed[parsed.length - 1];
+            if (!latest) continue;
+            applySnapshot({
+              temperature: coerceNumber(latest.temperature ?? latest.temp ?? latest.object_temp_F ?? latest.object_temp_C ?? latest.body_temp),
+              heartRate: coerceNumber(latest.heartRate ?? latest.heart_rate ?? latest.pulse),
+              spo2: coerceNumber(latest.spo2 ?? latest.spo2_percent ?? latest.oxygen),
+              timestamp: latest.timestamp || latest.time || null
+            });
+            return;
+          }
+          applySnapshot({
+            temperature: coerceNumber(parsed.temperature?.value ?? parsed.temperature ?? parsed.temp),
+            heartRate: coerceNumber(parsed.heartRate?.value ?? parsed.heartRate ?? parsed.heart_rate ?? parsed.pulse),
+            spo2: coerceNumber(parsed.spo2?.value ?? parsed.spo2 ?? parsed.spo2_percent ?? parsed.oxygen),
+            timestamp: parsed.temperature?.timestamp || parsed.heartRate?.timestamp || parsed.spo2?.timestamp || parsed.timestamp || null
+          });
+          return;
+        } catch (err) {
+          console.warn('Failed to parse cached vitals:', err);
+        }
+      }
+    };
+
+    hydrateFromLocalStorage();
+
+    if (patientId) {
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('vitals')
+            .select('temperature, heart_rate, spo2, created_at, updated_at')
+            .eq('user_id', patientId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const row = data[0];
+            applySnapshot({
+              temperature: coerceNumber(row.temperature),
+              heartRate: coerceNumber(row.heart_rate),
+              spo2: coerceNumber(row.spo2),
+              timestamp: row.created_at || row.updated_at || null
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to load latest vitals:', err);
+        }
+      })();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId]);
 
   // Check Raspberry Pi device connectivity via /health endpoint
   const checkDevice = async () => {
@@ -1164,6 +1270,18 @@ function PatientPortal() {
 
   // Removed inline health report generation from dashboard in favor of guided flow
 
+  const formatVitalValue = (value, unit) => {
+    if (value === null || value === undefined) return '—';
+    return `${value}${unit}`;
+  };
+
+  const freshnessState = calculateDataFreshness(vitalsTimestamp);
+  const freshnessLabel = {
+    fresh: 'Fresh (≤5m)',
+    stale: 'Stale (≤30m)',
+    old: 'Old (>30m)'
+  }[freshnessState] || 'No recent data';
+
   return (
     <>
       <main>
@@ -1172,7 +1290,6 @@ function PatientPortal() {
         <p className="hero-subtitle">Track real-time vitals, complete assessments, and generate AI health insights.</p>
         <div className="hero-cta">
           <button onClick={() => navigate('/patient/vitals')} className="btn btn-primary" disabled={!user}>Start Assessment</button>
-          <Link to="/patient/questionnaire" className="btn btn-light">Questionnaire</Link>
         </div>
         {auth.profile?.full_name && (
           <div className="mt-6 text-sm text-slate-600 dark:text-slate-300 flex flex-wrap gap-2 items-center">
@@ -1181,13 +1298,30 @@ function PatientPortal() {
             <span className={`badge ${deviceStatus === 'connected' ? 'success' : deviceStatus === 'offline' ? 'danger' : ''}`}>
               {deviceStatus === 'checking' ? 'Checking device...' : deviceStatus === 'connected' ? 'Device connected' : deviceStatus === 'offline' ? 'Device offline' : 'Not configured'}
             </span>
+            <span className={`badge ${vitalsStatus === 'measured' ? 'success' : 'danger'}`}>
+              {vitalsStatus === 'measured' ? 'Vitals synced' : 'No recent vitals'}
+            </span>
           </div>
         )}
         <div className="hero-stats">
-          <div className="hero-stat"><div className="text-xl font-semibold">Temp</div><div className="text-3xl font-extrabold">98.6 F</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">Heart</div><div className="text-3xl font-extrabold">72 bpm</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">SpO2</div><div className="text-3xl font-extrabold">98%</div></div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">Temp</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.temperature, ' °F')}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">Heart</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.heartRate, ' bpm')}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">SpO2</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.spo2, '%')}</div>
+          </div>
         </div>
+        <small className="muted" style={{ display: 'block', marginTop: '8px' }}>
+          {latestVitals.timestamp
+            ? `Last reading ${formatTimestamp(latestVitals.timestamp)} • ${vitalsStatus === 'measured' ? freshnessLabel : 'No recent data'}`
+            : 'No vitals recorded yet'}
+        </small>
         <div className="hero-parallax-layer" aria-hidden="true">
           <div className="blob indigo"></div>
           <div className="blob cyan"></div>
@@ -1199,11 +1333,6 @@ function PatientPortal() {
           <h3>Health Assessment</h3>
           <p>Guided flow collecting vitals, documents, and questionnaire answers for AI synthesis.</p>
           <div className="mt-4"><button onClick={() => navigate('/patient/vitals')} className="btn btn-primary" disabled={!user}>Begin</button></div>
-        </div>
-  <div className="feature-card tilt">
-          <h3>Questionnaire</h3>
-          <p>Adaptive interview and structured questions tailor insights to your current condition.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-light">Open</Link></div>
         </div>
   <div className="feature-card tilt">
           <h3>Documents</h3>
@@ -1220,18 +1349,7 @@ function PatientPortal() {
           <p>Keep demographics and background updated for more accurate recommendations.</p>
           <div className="mt-4"><Link to="/patient/profile" className="btn btn-light">Edit</Link></div>
         </div>
-        <div className="feature-card tilt">
-          <h3>AI Questionnaires</h3>
-          <p>Interactive AI-powered interviews with doctor selection and report sharing.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">Start AI Interview</Link></div>
-        </div>
-        <div className="feature-card tilt">
-          <h3>AI Reports</h3>
-          <p>View reports generated from your latest completed assessments and questionnaires.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">View</Link></div>
-        </div>
       </section>
-
       <div className="card mt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -2107,6 +2225,7 @@ function ProfilePage() {
     fullName: "",
     email: "",
     phone: "",
+    age: "",
     dob: "",
     address: "",
     patientId: null
@@ -2145,32 +2264,84 @@ function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const mapPatientRowToProfileData = (row) => ({
-    fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
-    email: row?.email || auth.session?.user?.email || "",
-    phone: row?.phone || "",
-    dob: row?.date_of_birth || row?.dob || "",
-    address: row?.address || "",
-    patientId: row?.id || row?.patient_id || null
-  });
+  const computeAgeFromDob = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : null;
+  };
 
-  const syncPublicPatient = async (source = {}) => {
+  const normalizePhone = (row = {}) => {
+    return row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || "";
+  };
+
+  const normalizeDob = (row = {}) => {
+    return row.date_of_birth || row.dob || row.birth_date || row.birthdate || "";
+  };
+
+  const mapPatientRowToProfileData = (row) => {
+    const normalizedDob = normalizeDob(row);
+    const normalizedAge = row?.age ?? row?.patient_age ?? computeAgeFromDob(normalizedDob);
+    const normalizedPhone = normalizePhone(row);
+    const normalizedPatientId = row?.patient_id || row?.id || null;
+    return {
+      fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
+      email: row?.email || auth.session?.user?.email || "",
+      phone: normalizedPhone,
+      age: normalizedAge != null ? String(normalizedAge) : "",
+      dob: normalizedDob,
+      address: row?.address || "",
+      patientId: normalizedPatientId
+    };
+  };
+
+  const syncPublicPatient = async (source = {}, options = {}) => {
     if (!auth.session?.user?.id) return;
+    const preserveExisting = options.preserveExisting ?? false;
     const normalizedName = source.fullName || source.full_name || profileData.fullName || auth.profile?.full_name || "";
+    const normalizedAge = source.age ?? source.patient_age ?? profileData.age ?? "";
+    const parsedAge = normalizedAge === "" ? null : Number(normalizedAge);
+
     const payload = {
       user_id: auth.session.user.id,
       full_name: normalizedName,
       name: normalizedName,
-      email: source.email || profileData.email || auth.session.user.email || "",
-      phone: source.phone ?? profileData.phone ?? "",
-      address: source.address ?? profileData.address ?? "",
-      date_of_birth: (source.dob ?? source.date_of_birth ?? profileData.dob) || null
+      email: source.email || profileData.email || auth.session.user.email || ""
     };
+
+    const resolvedPhone = source.phone ?? source.contact ?? source.contact_number ?? source.phone_number ?? profileData.phone;
+    if (!preserveExisting || resolvedPhone) {
+      payload.phone = resolvedPhone || null;
+    }
+
+    const resolvedAddress = source.address ?? profileData.address;
+    if (!preserveExisting || resolvedAddress) {
+      payload.address = resolvedAddress || null;
+    }
+
+    const resolvedDob = source.dob ?? source.date_of_birth ?? source.birth_date ?? source.birthdate ?? profileData.dob;
+    if (!preserveExisting || resolvedDob) {
+      payload.date_of_birth = resolvedDob || null;
+    }
+
+    if (!preserveExisting || Number.isFinite(parsedAge)) {
+      payload.age = Number.isFinite(parsedAge) ? parsedAge : null;
+    }
+
     if (source.device_status) {
       payload.device_status = source.device_status;
     }
     try {
-      await supabase.from('patients').upsert(payload);
+      await supabase
+        .from('patients')
+        .upsert(payload, { onConflict: 'user_id' })
+        .select();
     } catch (e) {
       console.warn('patients upsert failed:', e?.message || e);
     }
@@ -2186,20 +2357,25 @@ function ProfilePage() {
         .maybeSingle();
 
       if (patientProfile && !error) {
+        const legacyDob = patientProfile.date_of_birth || "";
+        const legacyAge = patientProfile.age ?? computeAgeFromDob(legacyDob);
         setProfileData({
           fullName: patientProfile.full_name || auth.profile?.full_name || "",
           email: auth.session.user.email || "",
           phone: patientProfile.phone || "",
-          dob: patientProfile.date_of_birth || "",
+          age: legacyAge != null ? String(legacyAge) : "",
+          dob: legacyDob,
           address: patientProfile.address || "",
-          patientId: patientProfile.id || null
+          patientId: patientProfile.patient_id || patientProfile.id || null
         });
         await syncPublicPatient({
           fullName: patientProfile.full_name,
           phone: patientProfile.phone,
           address: patientProfile.address,
-          dob: patientProfile.date_of_birth
-        });
+          dob: patientProfile.date_of_birth,
+          age: legacyAge,
+          patientId: patientProfile.patient_id || patientProfile.id || null
+        }, { preserveExisting: true });
         return true;
       }
     } catch (legacyError) {
@@ -2208,10 +2384,27 @@ function ProfilePage() {
     return false;
   };
 
+  const fetchPatientRowViaRpc = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_patient_profile_for_current_user');
+      if (error) {
+        console.warn('RPC get_patient_profile_for_current_user failed:', error.message || error);
+        return null;
+      }
+      if (Array.isArray(data) && data.length) {
+        return data[0];
+      }
+    } catch (rpcErr) {
+      console.warn('RPC get_patient_profile_for_current_user exception:', rpcErr?.message || rpcErr);
+    }
+    return null;
+  };
+
   const fetchPatientProfile = async () => {
     if (!auth.session?.user?.id) return;
 
     setLoading(true);
+    const selectColumns = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status';
     const hydrateFromLegacy = async () => {
       const loaded = await loadLegacyPatientProfile();
       if (!loaded) {
@@ -2220,11 +2413,46 @@ function ProfilePage() {
     };
 
     try {
-      const { data: patientRow, error } = await supabase
+      let patientRow = null;
+      let error = null;
+
+      const { data: userMatch, error: userMatchError } = await supabase
         .from('patients')
-        .select('id,user_id,full_name,name,email,phone,address,date_of_birth,device_status')
+        .select(selectColumns)
         .eq('user_id', auth.session.user.id)
         .maybeSingle();
+
+      patientRow = userMatch || null;
+      error = userMatchError || null;
+
+      if (!patientRow && auth.session?.user?.email) {
+        const { data: emailMatch, error: emailError } = await supabase
+          .from('patients')
+          .select(selectColumns)
+          .eq('email', auth.session.user.email)
+          .maybeSingle();
+
+        if (emailMatch) {
+          patientRow = emailMatch;
+          if (!patientRow.user_id) {
+            try {
+              await supabase
+                .from('patients')
+                .update({ user_id: auth.session.user.id })
+                .eq('id', patientRow.id);
+              patientRow.user_id = auth.session.user.id;
+            } catch (linkErr) {
+              console.warn('Failed to link patient row to user_id:', linkErr?.message || linkErr);
+            }
+          }
+        } else if (emailError && !error) {
+          error = emailError;
+        }
+      }
+
+      if (!patientRow) {
+        patientRow = await fetchPatientRowViaRpc();
+      }
 
       if (patientRow) {
         setProfileData(mapPatientRowToProfileData(patientRow));
@@ -2266,26 +2494,32 @@ function ProfilePage() {
         .single();
 
       if (newProfile && !error) {
+        const createdDob = newProfile.date_of_birth || "";
+        const createdAge = newProfile.age ?? computeAgeFromDob(createdDob);
         setProfileData({
           fullName: newProfile.full_name || "",
           email: auth.session.user.email || "",
           phone: newProfile.phone || "",
-          dob: newProfile.date_of_birth || "",
+          age: createdAge != null ? String(createdAge) : "",
+          dob: createdDob,
           address: newProfile.address || "",
-          patientId: newProfile.id || null
+          patientId: newProfile.patient_id || newProfile.id || null
         });
         await syncPublicPatient({
           fullName: newProfile.full_name,
           phone: newProfile.phone,
           address: newProfile.address,
-          dob: newProfile.date_of_birth
-        });
+          dob: newProfile.date_of_birth,
+          age: createdAge,
+          patientId: newProfile.patient_id || newProfile.id || null
+        }, { preserveExisting: true });
       } else {
         // Fallback to basic profile data if creation failed
         setProfileData({
           fullName: auth.profile?.full_name || "",
           email: auth.session.user.email || "",
           phone: "",
+          age: "",
           dob: "",
           address: "",
           patientId: null
@@ -2298,6 +2532,7 @@ function ProfilePage() {
         fullName: auth.profile?.full_name || "",
         email: auth.session.user.email || "",
         phone: "",
+        age: "",
         dob: "",
         address: "",
         patientId: null
@@ -2337,7 +2572,9 @@ function ProfilePage() {
         fullName: profileData.fullName,
         phone: profileData.phone,
         address: profileData.address,
-        dob: profileData.dob
+        dob: profileData.dob,
+        age: profileData.age,
+        patientId: profileData.patientId
       });
 
       setEditing(false);
@@ -2347,6 +2584,16 @@ function ProfilePage() {
       setLoading(false);
     }
   };
+
+  const fallbackAgeFromDob = computeAgeFromDob(profileData.dob);
+  const displayAgeValue = profileData.age !== ""
+    ? String(profileData.age)
+    : (fallbackAgeFromDob != null ? String(fallbackAgeFromDob) : "");
+  const formattedPatientId = profileData.patientId
+    ? (String(profileData.patientId).startsWith('PID-')
+      ? String(profileData.patientId)
+      : `PID-${profileData.patientId}`)
+    : '';
 
   return (
     <main className="route-screen">
@@ -2401,7 +2648,7 @@ function ProfilePage() {
               <label className="form-label">Patient ID (PID)</label>
               <div className="form-display" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#2563eb' }}>
-                  {profileData.patientId ? `PID-${profileData.patientId}` : 'Not assigned yet'}
+                  {profileData.patientId ? formattedPatientId : 'Not assigned yet'}
                 </span>
                 {profileData.patientId && (
                   <button
@@ -2409,7 +2656,7 @@ function ProfilePage() {
                     className="btn btn-secondary"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(`PID-${profileData.patientId}`);
+                        await navigator.clipboard.writeText(formattedPatientId);
                         setCopied(true);
                         setTimeout(() => setCopied(false), 1500);
                       } catch (_) {}
@@ -2441,7 +2688,7 @@ function ProfilePage() {
             </div>
             
             <div className="form-group">
-              <label className="form-label">Phone</label>
+              <label className="form-label">Contact</label>
               {editing ? (
                 <input
                   type="tel"
@@ -2451,6 +2698,21 @@ function ProfilePage() {
                 />
               ) : (
                 <div className="form-display">{profileData.phone || 'Not set'}</div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Age</label>
+              {editing ? (
+                <input
+                  type="number"
+                  min="0"
+                  value={profileData.age}
+                  onChange={e => setProfileData({...profileData, age: e.target.value})}
+                  className="form-input"
+                />
+              ) : (
+                <div className="form-display">{displayAgeValue || 'Not set'}</div>
               )}
             </div>
             
@@ -2497,10 +2759,15 @@ function DoctorPortal() {
   const [lastSynced, setLastSynced] = useState(null);
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState('');
+<<<<<<< HEAD
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState(null);
 
   const doctorDisplayName = auth?.profile?.full_name || auth?.session?.user?.user_metadata?.full_name || auth?.session?.user?.email || 'Doctor';
+=======
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackAlert, setFeedbackAlert] = useState('');
+>>>>>>> 3beda64965528482b39b5ea1a09cb7214cf1fded
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
@@ -2650,6 +2917,59 @@ function DoctorPortal() {
     loadSharedPatients();
   };
 
+  const openFeedbackPanel = (patient) => {
+    setFeedbackTarget(patient);
+    setFeedbackMessage('');
+    setFeedbackAlert('');
+  };
+
+  const handleSubmitFeedback = async (event) => {
+    event.preventDefault();
+    if (!feedbackTarget) {
+      setFeedbackAlert('Select a patient first.');
+      return;
+    }
+    const trimmed = feedbackMessage.trim();
+    if (!trimmed) {
+      setFeedbackAlert('Feedback cannot be empty.');
+      return;
+    }
+    setFeedbackSubmitting(true);
+    setFeedbackAlert('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const doctorName = auth?.profile?.full_name || user.email || 'Doctor';
+      const payload = {
+        patient_id: feedbackTarget.user_id,
+        doctor_id: user.id,
+        doctor_name: doctorName,
+        message: trimmed,
+        created_at: new Date().toISOString()
+      };
+      const { error: insertErr } = await supabase.from('patient_feedback').insert([payload]);
+      if (insertErr) throw insertErr;
+      try {
+        await supabase.from('notifications').insert([{
+          doctor_id: user.id,
+          patient_id: feedbackTarget.user_id,
+          type: 'doctor_feedback',
+          message: trimmed.slice(0, 280),
+          is_read: false
+        }]);
+      } catch (notifErr) {
+        console.warn('Feedback notification failed:', notifErr?.message || notifErr);
+      }
+      setFeedbackAlert('Feedback sent successfully.');
+      setFeedbackMessage('');
+      setFeedbackTarget(null);
+    } catch (fbErr) {
+      setFeedbackAlert(fbErr?.message || 'Unable to send feedback right now.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
   const severityCounts = patients.reduce((acc, p) => {
     if (p.risk === 'high') acc.high++;
     else if (p.risk === 'medium') acc.medium++;
@@ -2782,7 +3102,11 @@ function DoctorPortal() {
                     >
                       View Details
                     </Link>
+<<<<<<< HEAD
                     <button className="btn btn-success ml-2" onClick={() => openFeedbackForm(patient)}>
+=======
+                    <button className="btn btn-success ml-2" onClick={() => openFeedbackPanel(patient)}>
+>>>>>>> 3beda64965528482b39b5ea1a09cb7214cf1fded
                       Add Feedback
                     </button>
                   </td>
@@ -2791,6 +3115,38 @@ function DoctorPortal() {
             </tbody>
           </table>
         </div>
+        {feedbackTarget && (
+          <div className="card mt-4">
+            <h4 className="card-title">Send feedback to {feedbackTarget.name}</h4>
+            <form onSubmit={handleSubmitFeedback}>
+              <label className="form-label" htmlFor="doctor-feedback-text">Message</label>
+              <textarea
+                id="doctor-feedback-text"
+                className="form-input"
+                rows={4}
+                placeholder="Summarize key guidance, next steps, or encouragement..."
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button type="submit" className="btn btn-primary" disabled={feedbackSubmitting}>
+                  {feedbackSubmitting ? 'Sending…' : 'Send Feedback'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setFeedbackTarget(null); setFeedbackAlert(''); }}>
+                  Cancel
+                </button>
+              </div>
+              {feedbackAlert && (
+                <p
+                  className="muted"
+                  style={{ marginTop: '8px', color: feedbackAlert.includes('successfully') ? 'var(--success)' : 'var(--danger)' }}
+                >
+                  {feedbackAlert}
+                </p>
+              )}
+            </form>
+          </div>
+        )}
       </div>
       </main>
       {feedbackTarget && (

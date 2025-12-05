@@ -20,6 +20,7 @@ const LS_KEYS = {
 
 const initialInterviewState = { sessionId: null, question: '', turns: [], done: false, report: '' };
 const initialContextState = { patient: {}, vitals: [], uploads: [] };
+const PATIENT_COLUMNS = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,gender';
 
 const sanitizeBase = (base) => (base || '').replace(/\/$/, '');
 
@@ -108,6 +109,39 @@ const loadInitialSelectedDoctors = () => {
   return Array.isArray(cached) ? cached : [];
 };
 
+const computeAgeFromDob = (dob) => {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+};
+
+const normalizeDob = (row = {}) => row.date_of_birth || row.dob || row.birth_date || row.birthdate || '';
+const normalizePhone = (row = {}) => row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || '';
+
+const mapPatientRowToContext = (row, fallback = {}) => {
+  if (!row) return { ...fallback };
+  const normalizedDob = normalizeDob(row);
+  const normalizedAge = row.age ?? row.patient_age ?? computeAgeFromDob(normalizedDob);
+  return {
+    ...fallback,
+    id: fallback.id || row.user_id || row.patient_id || row.id || null,
+    patientId: fallback.patientId || row.patient_id || row.id || null,
+    name: row.full_name || row.name || fallback.name || null,
+    gender: row.gender || fallback.gender || null,
+    age: normalizedAge ?? fallback.age ?? null,
+    phone: normalizePhone(row) || fallback.phone || null,
+    email: row.email || fallback.email || null,
+    dob: normalizedDob || fallback.dob || null
+  };
+};
+
 function AIQuestionnairesPage() {
   const navigate = useNavigate();
   const [serverBase, setServerBase] = useState(getInitialServerBase);
@@ -136,6 +170,61 @@ function AIQuestionnairesPage() {
     try {
       window.localStorage.setItem(LS_KEYS.context, JSON.stringify(next));
     } catch (_) {}
+  }, []);
+
+  const fetchPatientRecord = useCallback(async (authUser) => {
+    if (!authUser?.id) return null;
+
+    const tryFetch = async (column, value) => {
+      try {
+        const { data, error } = await supabase
+          .from('patients')
+          .select(PATIENT_COLUMNS)
+          .eq(column, value)
+          .maybeSingle();
+        if (error) {
+          if (error.code !== 'PGRST116') {
+            console.warn(`patients fetch by ${column} failed:`, error.message || error);
+          }
+          return null;
+        }
+        return data || null;
+      } catch (fetchErr) {
+        console.warn(`patients fetch by ${column} exception:`, fetchErr?.message || fetchErr);
+        return null;
+      }
+    };
+
+    let row = await tryFetch('user_id', authUser.id);
+    if (!row && authUser.email) {
+      row = await tryFetch('email', authUser.email);
+    }
+    if (!row) {
+      try {
+        const { data, error } = await supabase.rpc('get_patient_profile_for_current_user');
+        if (error) {
+          console.warn('RPC get_patient_profile_for_current_user failed:', error.message || error);
+        } else if (Array.isArray(data) && data.length) {
+          row = data[0];
+        }
+      } catch (rpcErr) {
+        console.warn('RPC get_patient_profile_for_current_user exception:', rpcErr?.message || rpcErr);
+      }
+    }
+
+    if (row && !row.user_id) {
+      try {
+        await supabase
+          .from('patients')
+          .update({ user_id: authUser.id })
+          .eq('id', row.id);
+        row.user_id = authUser.id;
+      } catch (linkErr) {
+        console.warn('Failed to link patient row to user_id:', linkErr?.message || linkErr);
+      }
+    }
+
+    return row;
   }, []);
 
   const apiPostJSON = useCallback(
@@ -233,7 +322,8 @@ function AIQuestionnairesPage() {
     }
     try {
       const { data: authData } = await supabase.auth.getUser();
-      const uid = authData?.user?.id;
+      const authUser = authData?.user;
+      const uid = authUser?.id;
       if (uid) {
         try {
           const { data: docs, error: docsError } = await supabase
@@ -275,17 +365,22 @@ function AIQuestionnairesPage() {
           }
         }
 
+        const patientRow = await fetchPatientRecord(authUser);
+        if (patientRow) {
+          snapshot.patient = mapPatientRowToContext(patientRow, snapshot.patient);
+        }
+
         snapshot.patient = {
           ...snapshot.patient,
           id: snapshot.patient.id || uid,
-          email: snapshot.patient.email || authData.user.email
+          email: snapshot.patient.email || authUser.email
         };
       }
     } catch (ctxErr) {
       console.warn('Failed to extend context from Supabase', ctxErr);
     }
     return snapshot;
-  }, []);
+  }, [fetchPatientRecord]);
 
   const refreshContext = useCallback(async () => {
     setContextLoading(true);
@@ -705,14 +800,10 @@ function AIQuestionnairesPage() {
             <section className="card aiq-share-card">
               <header className="aiq-section-header">
                 <div>
-                  <p className="aiq-eyebrow">Share summary</p>
-                  <h2>Notify your care team</h2>
+                  <p className="aiq-eyebrow">Share interview</p>
+                  <h2>Send summary to doctors</h2>
                 </div>
-                <span className={`aiq-pill ${interview.report ? 'aiq-pill-success' : ''}`}>
-                  {interview.report ? 'Report ready' : 'Report pending'}
-                </span>
               </header>
-              <p className="muted">Generated reports automatically include the patient context shown on the right.</p>
               <div className="aiq-share-status">
                 <div>
                   <strong>Language</strong>
@@ -731,17 +822,6 @@ function AIQuestionnairesPage() {
                 Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
               </button>
               <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
-            </section>
-
-            <section className="card aiq-nav-card">
-              <div className="aiq-nav">
-                <button className="btn btn-secondary" onClick={() => navigate('/assessment/vitals')}>
-                  Back
-                </button>
-                <button className="btn btn-primary" onClick={() => navigate('/assessment/documents')}>
-                  Next
-                </button>
-              </div>
             </section>
           </div>
         </main>
