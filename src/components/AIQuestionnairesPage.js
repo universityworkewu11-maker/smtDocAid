@@ -179,6 +179,32 @@ function AIQuestionnairesPage() {
     return stored === 'bn' ? 'bn' : 'en';
   });
 
+  const doctorIdentityMap = useMemo(() => {
+    const map = new Map();
+    (doctors || []).forEach((doc) => {
+      if (!doc) return;
+      if (doc.id) {
+        map.set(doc.id, doc.id);
+      }
+      if (doc.user_id) {
+        map.set(doc.user_id, doc.id);
+      }
+      if (doc.email) {
+        map.set(doc.email, doc.id);
+        map.set(doc.email.toLowerCase(), doc.id);
+      }
+    });
+    return map;
+  }, [doctors]);
+
+  const doctorIdSet = useMemo(() => {
+    const ids = new Set();
+    (doctors || []).forEach((doc) => {
+      if (doc?.id) ids.add(doc.id);
+    });
+    return ids;
+  }, [doctors]);
+
   const persistInterview = useCallback((next) => {
     try {
       window.localStorage.setItem(LS_KEYS.interview, JSON.stringify(next));
