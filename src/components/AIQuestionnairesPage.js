@@ -892,7 +892,7 @@ function AIQuestionnairesPage() {
                 </div>
                 <div>
                   <strong>Doctors selected</strong>
-                  <span>{selectedDoctors.length}</span>
+                  <span>{availableDoctorCount}</span>
                 </div>
               </div>
               <button
@@ -903,6 +903,11 @@ function AIQuestionnairesPage() {
                 Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
               </button>
               <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
+              {hasUnavailableSelections && (
+                <small className="aiq-hint" style={{ color: '#b45309' }}>
+                  One or more saved selections are unavailable. Re-select them to notify those doctors.
+                </small>
+              )}
             </section>
           </div>
         </main>
