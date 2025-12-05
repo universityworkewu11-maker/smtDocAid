@@ -519,6 +519,14 @@ function AIQuestionnairesPage() {
         alert('Please select at least one doctor before sharing the report.');
         return;
       }
+      const shareableDoctorIds = selectedDoctors.filter((doctorId) => doctorIdSet.has(doctorId));
+      if (!shareableDoctorIds.length) {
+        alert('Selected doctors are no longer available. Please re-select from the latest list before sharing.');
+        return;
+      }
+      if (shareableDoctorIds.length < selectedDoctors.length) {
+        console.warn('One or more selected doctors were skipped because their profiles are unavailable.');
+      }
       try {
         const { data: authData } = await supabase.auth.getUser();
         const user = authData?.user;
@@ -537,7 +545,7 @@ function AIQuestionnairesPage() {
           .select('id')
           .single();
         if (diagError) throw diagError;
-        const notifications = selectedDoctors.map((doctorId) => ({
+        const notifications = shareableDoctorIds.map((doctorId) => ({
           doctor_id: doctorId,
           patient_id: user.id,
           diagnosis_id: diagData.id,
@@ -553,7 +561,7 @@ function AIQuestionnairesPage() {
         alert('Report generated but failed to save/share. Please try again.');
       }
     },
-    [selectedDoctors, interviewLanguage]
+    [selectedDoctors, interviewLanguage, doctorIdSet]
   );
 
   const generateInterviewReport = async () => {
