@@ -816,7 +816,7 @@ function AIQuestionnairesPage() {
                   <p className="aiq-eyebrow">Care team</p>
                   <h2>Select doctors to notify</h2>
                 </div>
-                <span className="aiq-pill">{selectedDoctors.length} selected</span>
+                <span className="aiq-pill">{availableDoctorCount} selected</span>
               </header>
               <div className="aiq-doctor-toolbar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
                 <input
