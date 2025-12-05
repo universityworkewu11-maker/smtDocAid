@@ -102,6 +102,39 @@ body {
   font-family: var(--font-family);
   font-size: var(--font-size-base);
   line-height: 1.6;
+    header {
+      padding: var(--space-4) var(--space-5);
+    }
+
+    .header-content {
+      flex-wrap: wrap;
+      gap: var(--space-4);
+    }
+
+    .nav-links {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
+
+    .auth-buttons {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .aiq-layout {
+      flex-direction: column;
+    }
+
+    .aiq-main-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .aiq-support-stack,
+    .aiq-aside {
+      width: 100%;
+    }
+  }
+
   color: var(--gray-800);
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   background-attachment: fixed;
