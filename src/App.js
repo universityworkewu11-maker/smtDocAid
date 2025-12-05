@@ -401,15 +401,12 @@ function AuthProvider({ children }) {
         try {
           await supabase
             .from('patients')
-            .upsert(
-              {
-                user_id: userId,
-                full_name: upserted?.full_name || full_name,
-                name: upserted?.full_name || full_name,
-                email
-              },
-              { onConflict: 'user_id' }
-            )
+            .upsert({
+              user_id: userId,
+              full_name: upserted?.full_name || full_name,
+              name: upserted?.full_name || full_name,
+              email
+            })
             .select();
         } catch (e) {
           console.warn('ensure patients (created) failed:', e?.message || e);
@@ -2340,7 +2337,7 @@ function ProfilePage() {
     try {
       await supabase
         .from('patients')
-        .upsert(payload, { onConflict: 'user_id' })
+        .upsert(payload)
         .select();
     } catch (e) {
       console.warn('patients upsert failed:', e?.message || e);
