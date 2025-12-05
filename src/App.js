@@ -2759,15 +2759,10 @@ function DoctorPortal() {
   const [lastSynced, setLastSynced] = useState(null);
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState('');
-<<<<<<< HEAD
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState(null);
 
   const doctorDisplayName = auth?.profile?.full_name || auth?.session?.user?.user_metadata?.full_name || auth?.session?.user?.email || 'Doctor';
-=======
-  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [feedbackAlert, setFeedbackAlert] = useState('');
->>>>>>> 3beda64965528482b39b5ea1a09cb7214cf1fded
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
