@@ -1563,30 +1563,50 @@ function QuestionnairePage() {
   // Fetch doctors (used for sharing reports)
   async function fetchDoctors() {
     try {
-      let data = [];
-      try {
-        const res = await supabase
-          .from('doctors')
-          .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res.error) throw res.error;
-        data = res.data || [];
-      } catch (_) {
-        const res2 = await supabase
-          .from('doctor_profiles')
-          .select('id, user_id, full_name, email, specialty, location, city, bio, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res2.error) throw res2.error;
-        data = res2.data || [];
-      }
+      const { data, error } = await supabase
+        .from('doctors')
+        .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
       setDoctors(data || []);
       try { setFilteredDoctors(data || []); } catch (_) {}
     } catch (err) {
       console.error('fetchDoctors error:', err);
+      setDoctors([]);
+      setFilteredDoctors([]);
     }
   }
+
+  useEffect(() => {
+    if (!Array.isArray(doctors) || doctors.length === 0) return;
+    if (!Array.isArray(selectedDoctors) || selectedDoctors.length === 0) return;
+
+    const doctorIdSet = new Set((doctors || []).map(doc => doc.id).filter(Boolean));
+    const legacyMap = new Map();
+    (doctors || []).forEach(doc => {
+      if (doc.user_id && doc.id) legacyMap.set(doc.user_id, doc.id);
+      if (doc.email && doc.id) legacyMap.set(doc.email, doc.id);
+    });
+
+    const normalized = [];
+    (selectedDoctors || []).forEach(entry => {
+      if (doctorIdSet.has(entry)) {
+        normalized.push(entry);
+        return;
+      }
+      if (legacyMap.has(entry)) {
+        normalized.push(legacyMap.get(entry));
+      }
+    });
+
+    const uniqueNormalized = Array.from(new Set(normalized));
+    const isSameLength = uniqueNormalized.length === selectedDoctors.length;
+    const isSameOrder = isSameLength && uniqueNormalized.every((val, idx) => val === selectedDoctors[idx]);
+    if (!isSameLength || !isSameOrder) {
+      setSelectedDoctors(uniqueNormalized);
+    }
+  }, [doctors, selectedDoctors]);
 
   // Keep filtered list in sync with query
   useEffect(() => {
@@ -1940,7 +1960,7 @@ function QuestionnairePage() {
           <button
             className="btn btn-primary btn-lg"
             onClick={startInterview}
-            disabled={iLoading.start || selectedDoctors.length === 0}
+            disabled={iLoading.start || selectedDoctors.length === 0 || doctors.length === 0}
             title={selectedDoctors.length === 0 ? "Please select at least one doctor first" : "Start Interview"}
             style={{ padding: '12px 28px', width: '100%', maxWidth: 420 }}
           >
@@ -1969,15 +1989,26 @@ function QuestionnairePage() {
                 <button className="btn btn-light" onClick={() => setDoctorQuery('')}>Clear</button>
               </div>
               <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-              {filteredDoctors.map(doctor => (
-                <label key={doctor.id || doctor.user_id} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id || doctor.user_id) ? '#f0f8ff' : 'transparent' }}>
+              {filteredDoctors.filter(doc => Boolean(doc.id)).map(doctor => (
+                <label
+                  key={doctor.id}
+                  className="doctor-option"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id) ? '#f0f8ff' : 'transparent' }}
+                >
                   <input
                     type="checkbox"
-                    checked={selectedDoctors.includes(doctor.id || doctor.user_id)}
+                    checked={selectedDoctors.includes(doctor.id)}
                     onChange={(e) => {
-                      const doctorId = doctor.id || doctor.user_id;
-                      if (e.target.checked) setSelectedDoctors(prev => [...prev, doctorId]);
-                      else setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                      const doctorId = doctor.id;
+                      if (!doctorId) return;
+                      if (e.target.checked) {
+                        setSelectedDoctors(prev => {
+                          if (prev.includes(doctorId)) return prev;
+                          return [...prev, doctorId];
+                        });
+                      } else {
+                        setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                      }
                     }}
                   />
                   <div>
