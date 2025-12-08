@@ -53,25 +53,15 @@
 .aiq-primary-stack { min-width: 0; }
 .aiq-support-stack { width: min(360px, 34vw); display:flex; flex-direction:column; gap:12px }
 
-/* Wide screen adaptations */
+/* Keep AI Questionnaires page more compact - focus widening on Live conversation only */
 @media (min-width: 1024px) {
-  .aiq-main-grid { grid-template-columns: 1fr minmax(420px, 480px); gap: 28px; }
-  .aiq-support-stack { width: min(480px, 42vw); }
+  .aiq-main-grid { grid-template-columns: 1fr minmax(320px, 380px); gap: 24px; }
+  .aiq-support-stack { width: min(380px, 35vw); }
 }
 
 @media (min-width: 1280px) {
-  .aiq-main-grid { grid-template-columns: 1fr minmax(480px, 560px); gap: 32px; }
-  .aiq-support-stack { width: min(560px, 45vw); }
-}
-
-@media (min-width: 1440px) {
-  .aiq-main-grid { grid-template-columns: 1fr minmax(560px, 640px); gap: 36px; }
-  .aiq-support-stack { width: min(640px, 48vw); }
-}
-
-@media (min-width: 1600px) {
-  .aiq-main-grid { grid-template-columns: 1fr minmax(640px, 720px); gap: 40px; }
-  .aiq-support-stack { width: min(720px, 50vw); }
+  .aiq-main-grid { grid-template-columns: 1fr minmax(340px, 400px); gap: 28px; }
+  .aiq-support-stack { width: min(400px, 38vw); }
 }
 /* Ensure support column cards stack vertically and take full width */
 .aiq-support-stack { align-items: stretch; }
