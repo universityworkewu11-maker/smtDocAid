@@ -23,7 +23,7 @@ const DoctorDirectoryPage = () => {
 				try {
 					const res = await supabase
 						.from('doctors')
-						.select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
+						.select('id, user_id, name, email, specialty, bio, license_number, age, updated_at')
 						.order('updated_at', { ascending: false })
 						.limit(100);
 					if (res.error) throw res.error;

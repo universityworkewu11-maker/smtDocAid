@@ -20,7 +20,7 @@ const DoctorPublicProfilePage = () => {
 				let rec = null;
 				let err = null;
 				try {
-					let q1 = await supabase.from('doctors').select('id, user_id, name, email, specialist, bio, license_number, age, created_at, updated_at').eq('id', id).single();
+					let q1 = await supabase.from('doctors').select('id, user_id, name, email, specialty, bio, license_number, age, created_at, updated_at').eq('id', id).single();
 					if (q1.error) throw q1.error;
 					rec = q1.data;
 				} catch (e) {

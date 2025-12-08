@@ -325,7 +325,7 @@ function AIQuestionnairesPage() {
 
       const { data, error } = await supabase
         .from('doctors')
-        .select('id, user_id, name, email, specialist, bio, updated_at')
+        .select('id, user_id, name, email, specialty, bio, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
       console.debug('fetchDoctors result', { data, error });
@@ -673,7 +673,7 @@ function AIQuestionnairesPage() {
   const matchingDoctors = normalizedQuery
     ? doctors.filter((doc) => {
         const name = String(doc?.full_name || doc?.name || '').toLowerCase();
-        const specialty = String(doc?.specialist || doc?.bio || '').toLowerCase();
+        const specialty = String(doc?.specialist || doc?.specialty || doc?.bio || '').toLowerCase();
         return name.includes(normalizedQuery) || specialty.includes(normalizedQuery);
       })
     : doctors;
@@ -896,7 +896,7 @@ function AIQuestionnairesPage() {
                         />
                         <div>
                           <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
-                          <div className="muted">{doctor.specialist || doctor.bio || 'General practice'}</div>
+                          <div className="muted">{doctor.specialist || doctor.specialty || doctor.bio || 'General practice'}</div>
                           {!isSelectable && <small className="muted">Profile not eligible for sharing</small>}
                         </div>
                       </label>
