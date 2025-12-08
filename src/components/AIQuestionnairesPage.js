@@ -609,6 +609,13 @@ function AIQuestionnairesPage() {
     refreshContext();
   }, [refreshContext]);
 
+  // If a report already exists (e.g., from localStorage), auto-expand it so users see full content
+  useEffect(() => {
+    if (interview && interview.report) {
+      setReportExpanded(true);
+    }
+  }, [interview?.report]);
+
   useEffect(() => {
     setSelectedDoctors((prev) => {
       if (!Array.isArray(prev) || prev.length === 0) return prev;
