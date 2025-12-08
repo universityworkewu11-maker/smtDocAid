@@ -141,11 +141,13 @@ function PatientProfilePage() {
         updated_at: new Date().toISOString()
       };
 
-      const { data: savedPatient, error: patientError } = await supabase
+      const { data: savedPatient, error: patientError, status, statusText } = await supabase
         .from('patients')
         .upsert(patientPayload, { onConflict: 'user_id' })
         .select()
         .single();
+
+      console.debug('patients.upsert (ProfilePage) response:', { savedPatient, patientError, status, statusText });
 
       if (patientError) throw patientError;
 
