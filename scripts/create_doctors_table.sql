@@ -7,14 +7,15 @@ create extension if not exists pgcrypto with schema public;
 create table if not exists public.doctors (
   id uuid not null default gen_random_uuid(),
   user_id uuid not null,
-  name text,
-  age integer,
-  email text,
-  license_number text,
-  specialist text,
-  specialty text,
-  specialities text[],
-  bio text,
+  name text null,
+  age integer null,
+  email text null,
+  license_number text null,
+  specialty text null,
+  bio text null,
+  designation text null,
+  phone text null,
+  hospital text null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint doctors_pkey primary key (id),
@@ -52,8 +53,11 @@ create policy "Doctors can update own record" on public.doctors
   for update
   using (auth.uid() = user_id);
 
--- Optional: allow service role (via RLS bypass) or add insert policy if you expect self-service signup.
+-- Allow self-service inserts (signup) by the authenticated user
 drop policy if exists "Doctors can insert own record" on public.doctors;
 create policy "Doctors can insert own record" on public.doctors
   for insert
   with check (auth.uid() = user_id);
+
+-- Index for faster lookup by user_id
+create index if not exists idx_doctors_user_id on public.doctors using btree (user_id);
