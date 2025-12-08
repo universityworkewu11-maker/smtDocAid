@@ -23,6 +23,19 @@
   padding-left: 18px;
   padding-right: 18px;
 }
+
+/* Wide screen max-width adjustments */
+@media (min-width: 1280px) {
+  .aiq-page {
+    max-width: 1400px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .aiq-page {
+    max-width: 1600px;
+  }
+}
 .aiq-page .card { margin-bottom: 16px; }
 .aiq-main-grid { display: grid; grid-template-columns: 1fr minmax(320px, 360px); gap: 18px; align-items: start; }
 .aiq-primary-stack { min-width: 0; }
