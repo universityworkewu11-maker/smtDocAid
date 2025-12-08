@@ -57,9 +57,9 @@
 /* Ensure report preview is full width and legible */
 .aiq-report-preview { width: 100%; box-sizing: border-box; font-size: 0.95rem; line-height: 1.6; }
 
-@media (max-width: 880px) {
+@media (max-width: 1024px) {
   .aiq-layout { grid-template-columns: 1fr; }
-  .aiq-main-grid { flex-direction: column; }
+  .aiq-main-grid { grid-template-columns: 1fr; gap: 20px; }
   .aiq-support-stack { width: 100%; }
   .aiq-aside { width: 100%; }
 }
