@@ -104,6 +104,13 @@ tr:hover td { @apply bg-slate-50/50 dark:bg-slate-800/40; }
 /* Report */
 .report-content { @apply whitespace-pre-wrap text-sm leading-relaxed font-mono bg-slate-900/80 p-4 rounded-lg overflow-x-auto; color: #ffffff !important; }
 
+/* Stronger override when report is inside a card to ensure readability */
+.card.report-container .report-content {
+  background-color: rgba(15,23,42,0.95) !important;
+  color: #ffffff !important;
+  font-weight: 500;
+}
+
 /* Questionnaire */
 .question-text { @apply text-lg font-semibold mb-4; }
 .radio-group, .checkbox-group { @apply flex flex-col gap-2 mt-2; }
