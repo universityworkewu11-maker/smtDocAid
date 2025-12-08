@@ -350,7 +350,7 @@ header:hover {
 /* Main Content Area */
 main {
   flex: 1;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-8) 0;
   width: 100%;
   max-width: none;
   margin: 0;
