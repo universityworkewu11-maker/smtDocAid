@@ -2463,7 +2463,7 @@ function ProfilePage() {
     if (!auth.session?.user?.id) return;
 
     setLoading(true);
-    const selectColumns = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status';
+    const selectColumns = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status,gender';
     const hydrateFromLegacy = async () => {
       const loaded = await loadLegacyPatientProfile();
       if (!loaded) {
