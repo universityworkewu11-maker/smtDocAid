@@ -53,9 +53,6 @@
 .aiq-language-switch { margin-top:0 }
 
 .aiq-layout { display:block }
-.aiq-main-grid { /* grid defined above */ }
-.aiq-primary-stack { }
-.aiq-support-stack { }
 .aiq-aside { width: min(340px, 32vw) }
 
 .aiq-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
