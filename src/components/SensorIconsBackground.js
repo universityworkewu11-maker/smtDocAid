@@ -41,14 +41,35 @@ const SensorUtils = {
     if (!supabase) return this.getFallbackSensorData();
 
     try {
-      // Try to fetch from sensor_readings table
+      // Fetch rows from `sensor_readings`. Schema may vary between deployments
+      // so select all columns and map them defensively instead of assuming
+      // specific column names that may not exist (which causes PostgREST 42703).
       const { data, error } = await supabase
         .from('sensor_readings')
-        .select('sensor_type, reading_value, unit, timestamp')
+        .select('*')
         .order('timestamp', { ascending: false })
         .limit(50);
 
       if (error) {
+        // If ordering by `timestamp` fails because the column doesn't exist,
+        // retry without ordering and still attempt to map values.
+        if (error && String(error.message || '').toLowerCase().includes('column "timestamp"')) {
+          try {
+            const { data: altData, error: altErr } = await supabase
+              .from('sensor_readings')
+              .select('*')
+              .limit(50);
+            if (altErr) {
+              console.warn('Sensor data fetch error (alt):', altErr);
+              return this.getFallbackSensorData();
+            }
+            return this.transformSensorData(altData || []);
+          } catch (ee) {
+            console.warn('Failed to fetch sensor data (alt):', ee);
+            return this.getFallbackSensorData();
+          }
+        }
+
         console.warn('Sensor data fetch error:', error);
         return this.getFallbackSensorData();
       }
@@ -62,13 +83,24 @@ const SensorUtils = {
 
   // Transform raw sensor data to display format
   transformSensorData(rawData) {
-    return rawData.map(reading => ({
-      type: reading.sensor_type,
-      value: reading.reading_value,
-      unit: reading.unit,
-      timestamp: reading.timestamp,
-      icon: this.getIconForSensorType(reading.sensor_type)
-    }));
+    return rawData.map(reading => {
+      // Support multiple possible column names: `sensor_type` | `type` | `reading_type` | `name`
+      const type = reading.sensor_type || reading.type || reading.reading_type || reading.name || reading.sensor || '';
+      // Reading value may be stored under `reading_value`, `value`, or `reading`
+      const value = reading.reading_value ?? reading.value ?? reading.reading ?? null;
+      // Timestamp may be named `timestamp`, `created_at`, `ts`, or `time`
+      const timestamp = reading.timestamp || reading.created_at || reading.ts || reading.time || new Date().toISOString();
+      // Unit may be present as `unit` or omitted
+      const unit = reading.unit || reading.u || '';
+
+      return {
+        type,
+        value,
+        unit,
+        timestamp,
+        icon: this.getIconForSensorType(type)
+      };
+    });
   },
 
   // Get appropriate icon for sensor type
