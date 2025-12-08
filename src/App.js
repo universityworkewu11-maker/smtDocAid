@@ -315,29 +315,43 @@ function AuthProvider({ children }) {
         try {
           const { data: userRes } = await supabase.auth.getUser();
           const email = userRes?.user?.email || null;
-          await supabase.from('doctor_profiles').upsert({
+          await supabase.from('doctors').upsert({
             user_id: userId,
-            full_name: existing.full_name || (email ? email.split('@')[0] : null),
+            name: existing.full_name || (email ? email.split('@')[0] : null),
             email: email || null
           });
         } catch (e) {
-          console.warn('ensure doctor_profiles (existing) failed:', e?.message || e);
+          console.warn('ensure doctors (existing) failed:', e?.message || e);
         }
       } else if (existing.role === 'patient') {
-        // Ensure a patients row exists for authenticated patients (migrate away from legacy patient_profiles)
+        // Ensure a patient profile row exists for patients
         try {
-          const { data: ensuredPatients, error: ensuredPatientsErr } = await supabase
+          await supabase.from('patient_profiles').upsert({
+            user_id: userId,
+            full_name: existing.full_name || null,
+            phone: '',
+            address: '',
+            medical_history: '',
+            current_medications: ''
+          });
+        } catch (e) {
+          console.warn('ensure patient_profiles (existing) failed:', e?.message || e);
+        }
+        // Ensure public.patients row with email for authenticated patient
+        try {
+          const { data: userRes } = await supabase.auth.getUser();
+          const email = userRes?.user?.email || null;
+          const meta = userRes?.user?.user_metadata || {};
+          const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
+          await supabase
             .from('patients')
             .upsert({
               user_id: userId,
-              full_name: existing.full_name || null,
-              name: existing.full_name || null,
-              phone: '',
-              address: ''
-            }, { onConflict: 'user_id' })
+              full_name,
+              name: full_name,
+              email
+            })
             .select();
-          if (ensuredPatientsErr) console.warn('ensure patients (existing) upsert error:', ensuredPatientsErr);
-          else console.debug('ensure patients (existing) upsert success:', ensuredPatients);
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
         }
@@ -366,33 +380,37 @@ function AuthProvider({ children }) {
     // Ensure doctor has a public profile row after creating profile
     try {
       if ((upserted?.role || role) === 'doctor') {
-        await supabase.from('doctor_profiles').upsert({
+        await supabase.from('doctors').upsert({
           user_id: userId,
-          full_name: upserted?.full_name || full_name,
+          name: upserted?.full_name || full_name,
           email
         });
       } else if ((upserted?.role || role) === 'patient') {
-        // Do not write to legacy `patient_profiles` in deployed environments
-        // because the schema may differ. Instead ensure a canonical `patients`
-        // row exists for the authenticated user.
+        await supabase.from('patient_profiles').upsert({
+          user_id: userId,
+          full_name: upserted?.full_name || full_name,
+          phone: '',
+          address: '',
+          medical_history: '',
+          current_medications: ''
+        });
+        // Also upsert into public.patients with email for quick access and filtering
         try {
-          const { data: ensuredPatientsCreated, error: ensuredPatientsCreatedErr } = await supabase
+          await supabase
             .from('patients')
             .upsert({
               user_id: userId,
               full_name: upserted?.full_name || full_name,
               name: upserted?.full_name || full_name,
               email
-            }, { onConflict: 'user_id' })
+            })
             .select();
-          if (ensuredPatientsCreatedErr) console.warn('ensure patients (created) upsert error:', ensuredPatientsCreatedErr);
-          else console.debug('ensure patients (created) upsert success:', ensuredPatientsCreated);
         } catch (e) {
-          console.warn('ensure patients (created) failed (exception):', e?.message || e);
+          console.warn('ensure patients (created) failed:', e?.message || e);
         }
       }
     } catch (e) {
-      console.warn('ensure doctor_profiles (created) failed:', e?.message || e);
+      console.warn('ensure doctors (created) failed:', e?.message || e);
     }
 
     return upserted;
@@ -963,28 +981,22 @@ function SignupPage() {
           full_name: fullName, 
           role 
         });
-        // If signing up as a doctor, create a public `doctors` row so patients can discover them.
-        if (role === 'doctor') {
+
+        // If signing up as a doctor, attempt to create a public doctor profile row only
+        // when the signup returned an active session (i.e. the user is authenticated).
+        // If your project requires email confirmation (no session returned), the
+        // client will not be authenticated and the insert would fail under RLS.
+        // In that case `fetchProfile` runs on first real login and will create the
+        // `doctors` row server-side.
+        if (role === 'doctor' && data?.session) {
           try {
-            // Upsert canonical doctors table used across the app
             await supabase.from('doctors').upsert({
               user_id: userId,
               name: fullName,
               email
-            }, { onConflict: 'user_id' });
-          } catch (e) {
-            console.warn('doctors upsert failed (signup):', e?.message || e);
-          }
-
-          // Keep legacy doctor_profiles in sync if present
-          try {
-            await supabase.from('doctor_profiles').upsert({
-              user_id: userId,
-              full_name: fullName,
-              email
             });
           } catch (e) {
-            console.warn('doctor_profiles upsert failed (signup legacy):', e?.message || e);
+            console.warn('doctors upsert failed (signup):', e?.message || e);
           }
         }
       }
@@ -1559,7 +1571,7 @@ function QuestionnairePage() {
     try {
       const { data, error } = await supabase
         .from('doctors')
-          .select('id, user_id, name, email, specialty, bio, license_number, age, updated_at')
+        .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -2247,7 +2259,6 @@ function ProfilePage() {
     age: "",
     dob: "",
     address: "",
-    gender: "",
     patientId: null
   });
   const [loading, setLoading] = useState(true);
@@ -2301,21 +2312,6 @@ function ProfilePage() {
     return row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || "";
   };
 
-  const normalizeGender = (row = {}) => {
-    const raw = row.gender || row.sex || row.gender_identity || row.patient_gender || '';
-    const g = String(raw || '').trim().toLowerCase();
-    if (!g) return '';
-
-    // Map common variants to canonical keys used in UI
-    if (['m', 'male', 'man'].includes(g)) return 'male';
-    if (['f', 'female', 'woman'].includes(g)) return 'female';
-    if (['other', 'o', 'non-binary', 'nonbinary', 'nb'].includes(g)) return 'other';
-    if (['prefer_not_to_say', 'prefer not to say', 'undisclosed', 'none'].includes(g)) return 'prefer_not_to_say';
-
-    // Fallback: return the cleaned value (lowercase)
-    return g;
-  };
-
   const normalizeDob = (row = {}) => {
     return row.date_of_birth || row.dob || row.birth_date || row.birthdate || "";
   };
@@ -2324,7 +2320,6 @@ function ProfilePage() {
     const normalizedDob = normalizeDob(row);
     const normalizedAge = row?.age ?? row?.patient_age ?? computeAgeFromDob(normalizedDob);
     const normalizedPhone = normalizePhone(row);
-    const normalizedGender = normalizeGender(row);
     const normalizedPatientId = row?.patient_id || row?.id || null;
     return {
       fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
@@ -2333,7 +2328,6 @@ function ProfilePage() {
       age: normalizedAge != null ? String(normalizedAge) : "",
       dob: normalizedDob,
       address: row?.address || "",
-      gender: normalizedGender,
       patientId: normalizedPatientId
     };
   };
@@ -2367,12 +2361,6 @@ function ProfilePage() {
       payload.date_of_birth = resolvedDob || null;
     }
 
-    const resolvedGender = source.gender ?? source.sex ?? profileData.gender;
-    const normalizedGenderValue = resolvedGender ? String(resolvedGender).toLowerCase() : null;
-    if (!preserveExisting || normalizedGenderValue) {
-      payload.gender = normalizedGenderValue;
-    }
-
     if (!preserveExisting || Number.isFinite(parsedAge)) {
       payload.age = Number.isFinite(parsedAge) ? parsedAge : null;
     }
@@ -2381,26 +2369,49 @@ function ProfilePage() {
       payload.device_status = source.device_status;
     }
     try {
-      // Use ON CONFLICT on user_id so we merge rows for the same authenticated user
-      const { data: upsertData, error: upsertError } = await supabase
+      await supabase
         .from('patients')
-        .upsert(payload, { onConflict: 'user_id' })
+        .upsert(payload)
         .select();
-
-      if (upsertError) {
-        console.error('patients upsert error:', upsertError);
-      } else {
-        console.debug('patients upsert success:', upsertData);
-      }
     } catch (e) {
-      console.warn('patients upsert failed (exception):', e?.message || e);
+      console.warn('patients upsert failed:', e?.message || e);
     }
   };
 
   const loadLegacyPatientProfile = async () => {
-    // Legacy `patient_profiles` table is not guaranteed to exist in all deployments
-    // (schema drift). To avoid PostgREST schema-cache errors we skip querying it
-    // at runtime and rely on the canonical `patients` table instead.
+    if (!auth.session?.user?.id) return false;
+    try {
+      const { data: patientProfile, error } = await supabase
+        .from('patient_profiles')
+        .select('*')
+        .eq('user_id', auth.session.user.id)
+        .maybeSingle();
+
+      if (patientProfile && !error) {
+        const legacyDob = patientProfile.date_of_birth || "";
+        const legacyAge = patientProfile.age ?? computeAgeFromDob(legacyDob);
+        setProfileData({
+          fullName: patientProfile.full_name || auth.profile?.full_name || "",
+          email: auth.session.user.email || "",
+          phone: patientProfile.phone || "",
+          age: legacyAge != null ? String(legacyAge) : "",
+          dob: legacyDob,
+          address: patientProfile.address || "",
+          patientId: patientProfile.patient_id || patientProfile.id || null
+        });
+        await syncPublicPatient({
+          fullName: patientProfile.full_name,
+          phone: patientProfile.phone,
+          address: patientProfile.address,
+          dob: patientProfile.date_of_birth,
+          age: legacyAge,
+          patientId: patientProfile.patient_id || patientProfile.id || null
+        }, { preserveExisting: true });
+        return true;
+      }
+    } catch (legacyError) {
+      console.error('Error fetching patient profile (legacy table):', legacyError);
+    }
     return false;
   };
 
@@ -2480,30 +2491,6 @@ function ProfilePage() {
           setDeviceStatus(patientRow.device_status);
         }
       } else {
-              // Ensure public.patients row with email for authenticated patient
-              try {
-                const { data: userRes } = await supabase.auth.getUser();
-                const email = userRes?.user?.email || null;
-                const meta = userRes?.user?.user_metadata || {};
-                const full_name = auth.profile?.full_name || meta.full_name || (email ? email.split('@')[0] : null);
-                try {
-                  const { data: ensuredPatients, error: ensuredPatientsErr } = await supabase
-                    .from('patients')
-                    .upsert({
-                      user_id: auth.session.user.id,
-                      full_name,
-                      name: full_name,
-                      email
-                    }, { onConflict: 'user_id' })
-                    .select();
-                  if (ensuredPatientsErr) console.warn('ensure patients (existing) upsert error:', ensuredPatientsErr);
-                  else console.debug('ensure patients (existing) upsert success:', ensuredPatients);
-                } catch (e) {
-                  console.warn('ensure patients (existing) failed (exception):', e?.message || e);
-                }
-              } catch (e) {
-                console.warn('ensure patients (existing) failed:', e?.message || e);
-              }
         if (error) {
           console.warn('patients fetch error:', error.message || error);
         }
@@ -2521,62 +2508,44 @@ function ProfilePage() {
     if (!auth.session?.user?.id) return;
 
     try {
-      // Create a row in the canonical `patients` table (avoid legacy `patient_profiles` schema)
-      const patientsData = {
+      const patientProfileData = {
         user_id: auth.session.user.id,
         full_name: auth.profile?.full_name || "",
-        name: auth.profile?.full_name || "",
-        email: auth.session.user.email || null,
         phone: "",
+        date_of_birth: null,
         address: "",
-        date_of_birth: null
+        medical_history: "",
+        current_medications: ""
       };
 
-      try {
-        const { data: newPatient, error: newPatientErr } = await supabase
-          .from('patients')
-          .upsert(patientsData, { onConflict: 'user_id' })
-          .select()
-          .single();
+      const { data: newProfile, error } = await supabase
+        .from('patient_profiles')
+        .insert([patientProfileData])
+        .select()
+        .single();
 
-        if (newPatientErr) {
-          console.error('patients insert/upsert failed:', newPatientErr);
-          setProfileData({
-            fullName: auth.profile?.full_name || "",
-            email: auth.session.user.email || "",
-            phone: "",
-            age: "",
-            dob: "",
-            address: "",
-            gender: "",
-            patientId: null
-          });
-        } else {
-          const createdDob = newPatient.date_of_birth || "";
-          const createdAge = newPatient.age ?? computeAgeFromDob(createdDob);
-          setProfileData({
-            fullName: newPatient.full_name || "",
-            email: newPatient.email || auth.session.user.email || "",
-            phone: newPatient.phone || "",
-            age: createdAge != null ? String(createdAge) : "",
-            dob: createdDob,
-            address: newPatient.address || "",
-            gender: normalizeGender(newPatient),
-            patientId: newPatient.patient_id || newPatient.id || null
-          });
-
-          await syncPublicPatient({
-            fullName: newPatient.full_name,
-            phone: newPatient.phone,
-            address: newPatient.address,
-            dob: newPatient.date_of_birth,
-            gender: newPatient.gender,
-            age: createdAge,
-            patientId: newPatient.patient_id || newPatient.id || null
-          }, { preserveExisting: true });
-        }
-      } catch (err) {
-        console.error('Error creating patient row in patients table:', err);
+      if (newProfile && !error) {
+        const createdDob = newProfile.date_of_birth || "";
+        const createdAge = newProfile.age ?? computeAgeFromDob(createdDob);
+        setProfileData({
+          fullName: newProfile.full_name || "",
+          email: auth.session.user.email || "",
+          phone: newProfile.phone || "",
+          age: createdAge != null ? String(createdAge) : "",
+          dob: createdDob,
+          address: newProfile.address || "",
+          patientId: newProfile.patient_id || newProfile.id || null
+        });
+        await syncPublicPatient({
+          fullName: newProfile.full_name,
+          phone: newProfile.phone,
+          address: newProfile.address,
+          dob: newProfile.date_of_birth,
+          age: createdAge,
+          patientId: newProfile.patient_id || newProfile.id || null
+        }, { preserveExisting: true });
+      } else {
+        // Fallback to basic profile data if creation failed
         setProfileData({
           fullName: auth.profile?.full_name || "",
           email: auth.session.user.email || "",
@@ -2584,7 +2553,6 @@ function ProfilePage() {
           age: "",
           dob: "",
           address: "",
-          gender: "",
           patientId: null
         });
       }
@@ -2598,7 +2566,6 @@ function ProfilePage() {
         age: "",
         dob: "",
         address: "",
-        gender: "",
         patientId: null
       });
     }
@@ -2621,29 +2588,15 @@ function ProfilePage() {
         full_name: profileData.fullName,
         phone: profileData.phone,
         date_of_birth: profileData.dob,
-        address: profileData.address,
-        gender: profileData.gender || null
+        address: profileData.address
       };
 
-      // Upsert into canonical `patients` table instead of legacy `patient_profiles`
-      try {
-        const { data: patientsUpsertData, error: patientsUpsertErr } = await supabase
-          .from('patients')
-          .upsert({
-            user_id: auth.session.user.id,
-            full_name: patientProfileData.full_name,
-            name: patientProfileData.full_name,
-            phone: patientProfileData.phone,
-            date_of_birth: patientProfileData.date_of_birth,
-            address: patientProfileData.address,
-            gender: patientProfileData.gender
-          }, { onConflict: 'user_id' })
-          .select();
+      const { error } = await supabase
+        .from('patient_profiles')
+        .upsert(patientProfileData);
 
-        if (patientsUpsertErr) console.error('patients upsert failed:', patientsUpsertErr, patientsUpsertData);
-        else console.debug('patients upsert success:', patientsUpsertData);
-      } catch (e) {
-        console.error('patients upsert exception:', e?.message || e);
+      if (error) {
+        console.error('Patient profile update failed:', error);
       }
 
       await syncPublicPatient({
@@ -2651,7 +2604,6 @@ function ProfilePage() {
         phone: profileData.phone,
         address: profileData.address,
         dob: profileData.dob,
-        gender: profileData.gender,
         age: profileData.age,
         patientId: profileData.patientId
       });
@@ -2673,15 +2625,6 @@ function ProfilePage() {
       ? String(profileData.patientId)
       : `PID-${profileData.patientId}`)
     : '';
-  const genderLabelMap = {
-    male: 'Male',
-    female: 'Female',
-    other: 'Other',
-    'prefer_not_to_say': 'Prefer not to say'
-  };
-  const displayGenderValue = profileData.gender
-    ? (genderLabelMap[profileData.gender] || profileData.gender)
-    : 'Not set';
 
   return (
     <main className="route-screen">
@@ -2786,25 +2729,6 @@ function ProfilePage() {
                 />
               ) : (
                 <div className="form-display">{profileData.phone || 'Not set'}</div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Gender</label>
-              {editing ? (
-                <select
-                  className="form-input"
-                  value={profileData.gender}
-                  onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
-                >
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                  <option value="prefer_not_to_say">Prefer not to say</option>
-                </select>
-              ) : (
-                <div className="form-display">{displayGenderValue}</div>
               )}
             </div>
 

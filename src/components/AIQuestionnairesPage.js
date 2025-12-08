@@ -172,6 +172,7 @@ function AIQuestionnairesPage() {
   const [selectedDoctors, setSelectedDoctors] = useState(loadInitialSelectedDoctors);
   const [contextData, setContextData] = useState(loadInitialContext);
   const [contextLoading, setContextLoading] = useState(false);
+  const [staleSelections, setStaleSelections] = useState([]);
   const [error, setError] = useState('');
   const [interviewLanguage, setInterviewLanguage] = useState(() => {
     if (typeof window === 'undefined') return 'en';
@@ -313,34 +314,12 @@ function AIQuestionnairesPage() {
 
   const fetchDoctors = useCallback(async () => {
     try {
-      // Diagnostic: ensure user is authenticated before fetching doctors
-      const { data: authData } = await supabase.auth.getUser();
-      const authUser = authData?.user;
-      if (!authUser) {
-        console.warn('fetchDoctors: no authenticated user; aborting doctor list fetch');
-        setDoctors([]);
-        setError('Please sign in to view available doctors');
-        return;
-      }
-
       const { data, error } = await supabase
         .from('doctors')
-        .select('id, user_id, name, email, specialty, bio, updated_at')
+        .select('id, user_id, name, email, specialist, bio, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
-      console.debug('fetchDoctors result', { data, error });
-      if (error) {
-        // Surface RLS/permission errors clearly
-        console.error('fetchDoctors error:', error);
-        setDoctors([]);
-        setError(error.message || 'Failed to load doctors');
-        return;
-      }
-      if (!Array.isArray(data) || data.length === 0) {
-        setDoctors([]);
-        setError('No doctors available at the moment');
-        return;
-      }
+      if (error) throw error;
       setDoctors(data || []);
       setError('');
     } catch (fetchError) {
@@ -567,43 +546,22 @@ function AIQuestionnairesPage() {
           .select('id')
           .single();
         if (diagError) throw diagError;
-        // Build notifications with both `doctor_id` (doctors.id) and `doctor_user_id` (auth.users.id)
-        const notifications = [];
-        for (const doctorId of shareableDoctorIds) {
-          const doc = (doctors || []).find(d => d && (d.id === doctorId || d.user_id === doctorId));
-          const doctorUserId = doc?.user_id || null;
-          notifications.push({
-            doctor_id: doctorId,
-            doctor_user_id: doctorUserId,
-            patient_id: user.id,
-            diagnosis_id: diagData.id,
-            message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
-            type: 'report_shared',
-            is_read: false
-          });
+        const notifications = shareableDoctorIds.map((doctorId) => ({
+          doctor_id: doctorId,
+          patient_id: user.id,
+          diagnosis_id: diagData.id,
+          message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
+          type: 'report_shared',
+          is_read: false
+        }));
+        const { error: notifError } = await supabase.from('notifications').insert(notifications);
+        const numShared = shareableDoctorIds.length;
+        if (notifError) console.warn('Failed to create notifications:', notifError);
+        let alertMessage = `Report saved and shared with ${numShared} doctor(s)!`;
+        if (numShared < selectedDoctors.length) {
+          alertMessage += `\n\nNote: ${selectedDoctors.length - numShared} previously selected doctor(s) were unavailable and not notified.`;
         }
-
-        let notifError = null;
-        try {
-          const res = await supabase.from('notifications').insert(notifications);
-          notifError = res.error;
-          if (notifError) throw notifError;
-        } catch (insErr) {
-          // If column `doctor_user_id` doesn't exist, retry inserting without it
-          const msg = insErr?.message || String(insErr);
-          if (msg.includes('doctor_user_id') || (insErr?.code === '42703')) {
-            const fallback = notifications.map(n => {
-              const copy = { ...n };
-              delete copy.doctor_user_id;
-              return copy;
-            });
-            const res2 = await supabase.from('notifications').insert(fallback);
-            if (res2.error) console.warn('Failed to create notifications on fallback:', res2.error);
-          } else {
-            console.warn('Failed to create notifications:', insErr);
-          }
-        }
-        alert(`Report saved and shared with ${selectedDoctors.length} doctor(s)!`);
+        alert(alertMessage);
       } catch (shareError) {
         console.error('Error saving report and notifying doctors:', shareError);
         alert('Report generated but failed to save/share. Please try again.');
@@ -651,6 +609,7 @@ function AIQuestionnairesPage() {
     setSelectedDoctors((prev) => {
       if (!Array.isArray(prev) || prev.length === 0) return prev;
       const normalized = [];
+      const stale = [];
       prev.forEach((value) => {
         const resolved = resolveDoctorId(value, doctorIdentityMap);
         if (resolved) {
@@ -659,9 +618,14 @@ function AIQuestionnairesPage() {
         }
         if (isValidUUID(value)) {
           const trimmed = String(value).trim();
-          if (!normalized.includes(trimmed)) normalized.push(trimmed);
+          if (!normalized.includes(trimmed)) {
+            stale.push(trimmed);
+          }
         }
       });
+      if (stale.length > 0) {
+        setStaleSelections(stale);
+      }
       if (normalized.length === prev.length && normalized.every((val, idx) => val === prev[idx])) {
         return prev;
       }
@@ -699,7 +663,7 @@ function AIQuestionnairesPage() {
   const matchingDoctors = normalizedQuery
     ? doctors.filter((doc) => {
         const name = String(doc?.full_name || doc?.name || '').toLowerCase();
-        const specialty = String(doc?.specialist || doc?.specialty || doc?.bio || '').toLowerCase();
+        const specialty = String(doc?.specialist || doc?.bio || '').toLowerCase();
         return name.includes(normalizedQuery) || specialty.includes(normalizedQuery);
       })
     : doctors;
@@ -891,6 +855,16 @@ function AIQuestionnairesPage() {
                 </small>
               </div>
               <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+              {staleSelections.length > 0 && (
+                <div className="alert alert-warning">
+                  <p>Some of your previously selected doctors are no longer available and have been removed from your selection:</p>
+                  <ul>
+                    {staleSelections.map((staleId) => (
+                      <li key={staleId}>{staleId}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {hasUnavailableSelections && (
                 <small className="aiq-hint" style={{ color: '#b45309' }}>
                   Some previously selected doctors are no longer available. Please re-select them below.
@@ -905,8 +879,9 @@ function AIQuestionnairesPage() {
                     const optionKey = doctorId || doctor?.user_id || doctor?.email || `doctor-${idx}`;
                     const isSelectable = Boolean(doctorId);
                     const isChecked = isSelectable ? selectedDoctors.includes(doctorId) : false;
+                    const isStale = isChecked && !doctorIdSet.has(doctorId);
                     return (
-                      <label key={optionKey} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
+                      <label key={optionKey} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''} ${isStale ? 'stale' : ''}`}>
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -921,8 +896,8 @@ function AIQuestionnairesPage() {
                           }}
                         />
                         <div>
-                          <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
-                          <div className="muted">{doctor.specialist || doctor.specialty || doctor.bio || 'General practice'}</div>
+                          <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'} {isStale && <span className="badge danger" title="This doctor is no longer available and cannot be notified. Please unselect them.">Stale</span>}</div>
+                          <div className="muted">{doctor.specialist || doctor.bio || 'General practice'}</div>
                           {!isSelectable && <small className="muted">Profile not eligible for sharing</small>}
                         </div>
                       </label>

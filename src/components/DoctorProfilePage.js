@@ -13,7 +13,6 @@ const DoctorProfilePage = () => {
 		full_name: '',
 		email: '',
 		specialty: '',
-		phone: '',
 		location: '',
 		bio: ''
 	});
@@ -27,33 +26,13 @@ const DoctorProfilePage = () => {
 				const uid = user?.id;
 				if (!uid) throw new Error('Not signed in');
 				const { data, error } = await supabase
-					.from('doctor_profiles')
+					.from('doctors')
 					.select('*')
 					.eq('user_id', uid)
 					.single();
 				if (error && error.code !== 'PGRST116') throw error; // ignore row not found
-				if (data) setProfile(prev => ({ ...prev, ...data }));
+				if (data) setProfile(prev => ({ ...prev, ...data, full_name: data.name || prev.full_name }));
 				else setProfile(prev => ({ ...prev, user_id: uid }));
-
-				// Also attempt to read the newer `doctors` table and merge phone/name if present
-				try {
-					const { data: ddata, error: derr } = await supabase
-						.from('doctors')
-						.select('id, user_id, name, phone, specialty')
-						.eq('user_id', uid)
-						.maybeSingle();
-					if (!derr && ddata) {
-						setProfile(prev => ({
-							...prev,
-							id: prev.id || ddata.id,
-							full_name: prev.full_name || ddata.name || prev.full_name,
-							specialty: prev.specialty || ddata.specialty || prev.specialty,
-							phone: prev.phone || ddata.phone || prev.phone
-						}));
-					}
-				} catch (e) {
-					// ignore doctors table read errors
-				}
 				// ensure email fallback from auth
 				if (!data?.email) {
 					setProfile(prev => ({ ...prev, email: user?.email || prev.email }));
@@ -72,48 +51,20 @@ const DoctorProfilePage = () => {
 		setSaving(true);
 		setError('');
 		try {
-			// Upsert into legacy `doctor_profiles` table
+			// Try to upsert extended columns; gracefully fallback if table lacks some
 			const payload = {
 				user_id: profile.user_id,
-				full_name: profile.full_name,
+				name: profile.full_name,
 				email: profile.email,
 				specialty: profile.specialty,
 				location: profile.location,
 				bio: profile.bio
 			};
-			let res = await supabase.from('doctor_profiles').upsert(payload).select().single();
+			let res = await supabase.from('doctors').upsert(payload).select().single();
 			if (res.error) {
-				// Fallback with minimal columns
-				const minimal = { user_id: profile.user_id, full_name: profile.full_name, email: profile.email };
-				res = await supabase.from('doctor_profiles').upsert(minimal).select().single();
-				if (res.error) throw res.error;
+				throw res.error;
 			}
-			setProfile(prev => ({ ...prev, ...(res.data || {}) }));
-
-			// Also ensure `doctors` table is kept in sync (preferred for newer flows)
-			try {
-				const uid = profile.user_id;
-				if (uid) {
-					// Check if a doctors row exists for this user
-					const { data: existing, error: existErr } = await supabase.from('doctors').select('id').eq('user_id', uid).maybeSingle();
-					if (existErr) throw existErr;
-					const docPayload = {
-						user_id: uid,
-						name: profile.full_name,
-						specialty: profile.specialty,
-						phone: profile.phone || null,
-						email: profile.email || null
-					};
-					if (existing && existing.id) {
-						await supabase.from('doctors').update(docPayload).eq('id', existing.id);
-					} else {
-						await supabase.from('doctors').insert(docPayload);
-					}
-				}
-			} catch (docErr) {
-				// If RLS or schema prevents writing to `doctors`, surface a non-blocking warning
-				console.warn('Failed to sync profile to doctors table:', docErr?.message || docErr);
-			}
+			setProfile(prev => ({ ...prev, ...(res.data || {}), full_name: res.data.name || prev.full_name }));
 		} catch (e) {
 			setError(e?.message || String(e));
 		} finally {

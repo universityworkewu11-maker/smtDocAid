@@ -7,15 +7,14 @@ create extension if not exists pgcrypto with schema public;
 create table if not exists public.doctors (
   id uuid not null default gen_random_uuid(),
   user_id uuid not null,
-  name text null,
-  age integer null,
-  email text null,
-  license_number text null,
-  specialty text null,
-  bio text null,
-  designation text null,
-  phone text null,
-  hospital text null,
+  name text,
+  age integer,
+  email text,
+  license_number text,
+  specialist text,
+  specialty text,
+  specialities text[],
+  bio text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint doctors_pkey primary key (id),
@@ -45,27 +44,23 @@ execute function public.set_updated_at();
 alter table public.doctors enable row level security;
 
 -- Allow doctors to read/update their own record; admins/full access can be granted separately.
-drop policy if exists "Doctors can view own record" on public.doctors;
 create policy "Doctors can view own record" on public.doctors
   for select
   using (auth.uid() = user_id);
 
-drop policy if exists "Doctors can update own record" on public.doctors;
 create policy "Doctors can update own record" on public.doctors
   for update
   using (auth.uid() = user_id);
 
--- Allow self-service inserts (signup) by the authenticated user
-drop policy if exists "Doctors can insert own record" on public.doctors;
+-- Optional: allow service role (via RLS bypass) or add insert policy if you expect self-service signup.
+
+-- Allow doctors to insert their own record during self-service signup when they are authenticated.
+-- This policy requires the client to be authenticated (auth.uid() set) and match the provided user_id.
 create policy "Doctors can insert own record" on public.doctors
   for insert
   with check (auth.uid() = user_id);
 
--- Index for faster lookup by user_id
-create index if not exists idx_doctors_user_id on public.doctors using btree (user_id);
-
--- Allow authenticated users (patients) to list doctors for discovery
-drop policy if exists "Authenticated users can view doctors" on public.doctors;
-create policy "Authenticated users can view doctors" on public.doctors
-  for select
-  using (auth.role() = 'authenticated');
+-- Note: If your sign-up flow requires email confirmation (no session returned after signUp),
+-- the client will not be authenticated yet and this policy will prevent inserts. In that case
+-- create the `doctors` row either from a server-side function using the service key or create
+-- the row after the user has confirmed and signed in (the app's `fetchProfile` already does this).
