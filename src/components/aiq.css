@@ -10,7 +10,7 @@
 }
 
 .aiq-page { padding: 18px; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color: #111827; }
-.card { background: var(--aiq-bg); border-radius: var(--card-radius); padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+.aiq-page .card { background: var(--aiq-bg); border-radius: var(--card-radius); padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
 
 .aiq-hero { margin-bottom: 16px; }
 .aiq-hero-grid { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: center; }
@@ -26,11 +26,11 @@
 .btn-lg { padding:12px 18px }
 .aiq-language-switch { margin-top:6px }
 
-.aiq-layout { display:grid; grid-template-columns: 1fr 320px; gap:18px; align-items:start }
+.aiq-layout { display:grid; grid-template-columns: 1fr minmax(220px,360px); gap:18px; align-items:start }
 .aiq-main-grid { display:flex; gap:18px }
 .aiq-primary-stack { flex:1 }
-.aiq-support-stack { width:360px; display:flex; flex-direction:column; gap:12px }
-.aiq-aside { width:340px }
+.aiq-support-stack { width: min(360px, 34vw); display:flex; flex-direction:column; gap:12px }
+.aiq-aside { width: min(340px, 32vw) }
 
 .aiq-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
 .aiq-section-header.compact { margin-bottom:8px }
