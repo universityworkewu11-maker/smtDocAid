@@ -2058,11 +2058,11 @@ main {
  grid-column: 1 / -1;
 }
 
-/* Wide screen layout */
+/* Ultra-wide layout for Adaptive Interview Workspace */
 @media (min-width: 1024px) {
   .interview-workspace {
-    grid-template-columns: 2.5fr 1.5fr;
-    gap: var(--space-10);
+    grid-template-columns: 3fr 1fr;
+    gap: var(--space-12);
   }
 
   .interview-main {
@@ -2089,15 +2089,22 @@ main {
 
 @media (min-width: 1280px) {
   .interview-workspace {
-    grid-template-columns: 3fr 2fr;
-    gap: var(--space-12);
+    grid-template-columns: 4fr 1fr;
+    gap: var(--space-16);
   }
 }
 
 @media (min-width: 1440px) {
   .interview-workspace {
-    grid-template-columns: 3.5fr 2.5fr;
-    gap: var(--space-16);
+    grid-template-columns: 5fr 1fr;
+    gap: var(--space-20);
+  }
+}
+
+@media (min-width: 1600px) {
+  .interview-workspace {
+    grid-template-columns: 6fr 1fr;
+    gap: var(--space-24);
   }
 }
 
