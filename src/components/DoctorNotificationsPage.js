@@ -42,34 +42,8 @@ const DoctorNotificationsPage = () => {
           patient:patient_id (
             id,
             user_id,
-            full_name,
-            name,
-            email
-          ),
-          diagnosis:diagnosis_id (
-            content,
-            severity,
-            created_at
-          )
-        `)
-        // Prefer matching by doctor_user_id (the auth user id). If unavailable, fall back to doctor_id = doctors.id
-        .or(
-          doctorIdForQuery ? `doctor_user_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}` : `doctor_user_id.eq.${user.id}`
-        )
-        .order('created_at', { ascending: false });
-
-      // Build base select
-      const baseSelect = `
-        id,
-        message,
-        type,
-        is_read,
-        created_at,
-        diagnosis_id,
-        patient_id,
-        patient:patient_id (
-          id,
-          user_id,
+        let data;
+        let error;
           full_name,
           name,
           email
@@ -143,6 +117,8 @@ const DoctorNotificationsPage = () => {
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
+        // set notifications into state
+        setNotifications(data || []);
         .eq('id', notificationId);
 
       if (error) throw error;
