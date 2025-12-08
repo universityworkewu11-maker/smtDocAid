@@ -53,3 +53,11 @@ create policy "Doctors can update own record" on public.doctors
   using (auth.uid() = user_id);
 
 -- Optional: allow service role (via RLS bypass) or add insert policy if you expect self-service signup.
+
+-- Allow read access to doctor listings for authenticated users so patients can discover doctors.
+-- If you prefer public (unauthenticated) read access, change the USING clause to `using (true)`.
+create policy "Public read doctors" on public.doctors
+  for select
+  using (auth.role() = 'authenticated');
+
+-- Note: Be mindful of privacy. Only expose non-sensitive fields in the frontend.
