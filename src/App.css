@@ -2169,7 +2169,7 @@ main {
 /* Ultra-maximum screens - Absolute maximum utilization */
 @media (min-width: 1600px) {
   .interview-workspace {
-    grid-template-columns: 2fr 0.3fr;
+    grid-template-columns: 2.5fr 0.2fr;
     gap: var(--space-48);
   }
 
@@ -2178,15 +2178,27 @@ main {
   }
 }
 
-/* Insanely wide screens - No limits */
+/* Insanely wide screens - Extreme right push */
 @media (min-width: 2000px) {
   .interview-workspace {
-    grid-template-columns: 2.5fr 0.2fr;
+    grid-template-columns: 3fr 0.15fr;
     gap: var(--space-56);
   }
 
   .interview-report-section {
     margin-top: var(--space-48);
+  }
+}
+
+/* Ultra-insanely wide screens - Maximum right push */
+@media (min-width: 2400px) {
+  .interview-workspace {
+    grid-template-columns: 4fr 0.1fr;
+    gap: var(--space-64);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-56);
   }
 }
 
