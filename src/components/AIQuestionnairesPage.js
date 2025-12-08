@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
+import './aiq.css';
 
 // Version stamp to help verify which build is running in the browser
 try {

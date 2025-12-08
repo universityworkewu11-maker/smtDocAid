@@ -1,0 +1,79 @@
+/* Styles for AIQuestionnairesPage - focused, minimal, responsive */
+:root{
+  --aiq-gap: 16px;
+  --aiq-bg: #ffffff;
+  --aiq-muted: #6b7280;
+  --aiq-accent: #0ea5a4;
+  --aiq-pill-bg: #eef2f7;
+  --aiq-success: #10b981;
+  --card-radius: 10px;
+}
+
+.aiq-page { padding: 18px; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color: #111827; }
+.card { background: var(--aiq-bg); border-radius: var(--card-radius); padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+
+.aiq-hero { margin-bottom: 16px; }
+.aiq-hero-grid { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: center; }
+.aiq-eyebrow { text-transform: uppercase; font-size: 12px; letter-spacing: 0.06em; color: var(--aiq-muted); margin:0 0 6px 0 }
+.aiq-hero-title { margin:0 0 6px 0; font-size: 22px }
+.aiq-hero-subtitle { margin:0; color:var(--aiq-muted); }
+.aiq-pill-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px }
+.aiq-pill { background: var(--aiq-pill-bg); color:#0f172a; padding:6px 8px; border-radius:999px; font-size:12px }
+.aiq-pill-success { background: rgba(16,185,129,0.12); color:var(--aiq-success) }
+.aiq-pill-info { background: rgba(14,165,164,0.12); color:var(--aiq-accent) }
+
+.aiq-hero-actions { display:flex; flex-direction:column; gap:8px; align-items:stretch }
+.btn-lg { padding:12px 18px }
+.aiq-language-switch { margin-top:6px }
+
+.aiq-layout { display:grid; grid-template-columns: 1fr 320px; gap:18px; align-items:start }
+.aiq-main-grid { display:flex; gap:18px }
+.aiq-primary-stack { flex:1 }
+.aiq-support-stack { width:360px; display:flex; flex-direction:column; gap:12px }
+.aiq-aside { width:340px }
+
+.aiq-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
+.aiq-section-header.compact { margin-bottom:8px }
+.aiq-status-dot { font-size:13px; padding:6px 10px; border-radius:999px; background:var(--aiq-pill-bg) }
+.aiq-status-dot.active { background: rgba(14,165,164,0.12); color:var(--aiq-accent) }
+
+.aiq-question-block h3 { margin:6px 0 12px }
+.aiq-button-row { display:flex; gap:8px; margin-top:12px }
+
+.transcript { max-height:220px; overflow:auto; padding:8px; border-radius:6px; background:#fafafa }
+.aiq-transcript-row { padding:8px 6px; border-bottom:1px solid rgba(15,23,42,0.03) }
+
+.aiq-subcard { margin-top:12px }
+.aiq-report-preview { background:#0f172a; color:#f8fafc; padding:12px; border-radius:6px; max-height:220px; overflow:auto }
+
+.aiq-doctor-grid { display:grid; grid-template-columns: repeat(1, 1fr); gap:8px; max-height:360px; overflow:auto }
+@media(min-width:760px){ .aiq-doctor-grid { grid-template-columns: repeat(1, 1fr); } }
+.aiq-doctor-card-option { display:flex; gap:10px; align-items:flex-start; padding:10px; border-radius:8px; border:1px solid rgba(15,23,42,0.04); cursor:pointer }
+.aiq-doctor-card-option.selected { background: #f0f9f8; border-color: rgba(14,165,164,0.12) }
+.aiq-doctor-name { font-weight:600 }
+.aiq-doctor-card-option .muted { color:var(--aiq-muted); font-size:13px }
+.badge.danger { background: #fee2e2; color:#b91c1c; padding:2px 6px; border-radius:6px; margin-left:6px; font-size:11px }
+
+.aiq-context-card .aiq-context-list div { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed rgba(15,23,42,0.03) }
+.aiq-upload-list { list-style:none; padding:0; margin:0 }
+.aiq-upload-list li { padding:8px 0; border-bottom:1px solid rgba(15,23,42,0.03) }
+
+.aiq-empty-state { padding:12px; color:var(--aiq-muted) }
+.aiq-hint { display:block; margin-top:8px; color:var(--aiq-muted) }
+
+/* Small tweaks for inputs */
+.form-input { padding:8px 10px; border-radius:8px; border:1px solid rgba(15,23,42,0.06); }
+
+/* make buttons visually consistent if site doesn't have global btn classes */
+.btn { border: none; background: #0ea5a4; color: white; padding:8px 10px; border-radius:8px; cursor:pointer }
+.btn.btn-secondary { background:#e6e9ee; color:#0f172a }
+.btn.btn-light { background: #fff; color:#0f172a; border:1px solid rgba(15,23,42,0.06) }
+.btn:disabled { opacity:0.6; cursor:not-allowed }
+
+/* Responsive adjustments */
+@media(max-width:980px){
+  .aiq-hero-grid { grid-template-columns: 1fr; }
+  .aiq-layout { grid-template-columns: 1fr; }
+  .aiq-support-stack { width:auto }
+  .aiq-aside { width:auto }
+}

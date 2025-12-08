@@ -53,14 +53,3 @@ create policy "Doctors can update own record" on public.doctors
   using (auth.uid() = user_id);
 
 -- Optional: allow service role (via RLS bypass) or add insert policy if you expect self-service signup.
-
--- Allow doctors to insert their own record during self-service signup when they are authenticated.
--- This policy requires the client to be authenticated (auth.uid() set) and match the provided user_id.
-create policy "Doctors can insert own record" on public.doctors
-  for insert
-  with check (auth.uid() = user_id);
-
--- Note: If your sign-up flow requires email confirmation (no session returned after signUp),
--- the client will not be authenticated yet and this policy will prevent inserts. In that case
--- create the `doctors` row either from a server-side function using the service key or create
--- the row after the user has confirmed and signed in (the app's `fetchProfile` already does this).
