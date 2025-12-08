@@ -963,83 +963,80 @@ function AIQuestionnairesPage() {
                 </small>
               )}
             </section>
-          </div>
-        </main>
+          
+            <section className="card aiq-context-card">
+              <h3 className="card-title">Patient Context</h3>
+              <p className="muted">Demographics, vitals, and uploads feed the AI prompts.</p>
+              <small className="muted" style={{ display: 'block', marginBottom: '12px' }}>
+                This panel refreshes automatically from your profile, vitals, and documents—no manual entry needed.
+              </small>
 
-        <aside className="aiq-aside" aria-label="Patient context panel">
-          <div className="card aiq-context-card">
-            <h3 className="card-title">Patient Context</h3>
-            <p className="muted">Demographics, vitals, and uploads feed the AI prompts.</p>
-            <small className="muted" style={{ display: 'block', marginBottom: '12px' }}>
-              This panel refreshes automatically from your profile, vitals, and documents—no manual entry needed.
-            </small>
-
-            <div className="aiq-context-group">
-              <strong>Demographics</strong>
-              <div className="aiq-context-list">
-                <div>
-                  <span>Name</span>
-                  <span>{contextData.patient?.name || '—'}</span>
-                </div>
-                <div>
-                  <span>Age</span>
-                  <span>{contextData.patient?.age ?? '—'}</span>
-                </div>
-                <div>
-                  <span>Gender</span>
-                  <span>{contextData.patient?.gender || '—'}</span>
-                </div>
-                <div>
-                  <span>Contact</span>
-                  <span>{contextData.patient?.phone || contextData.patient?.email || '—'}</span>
+              <div className="aiq-context-group">
+                <strong>Demographics</strong>
+                <div className="aiq-context-list">
+                  <div>
+                    <span>Name</span>
+                    <span>{contextData.patient?.name || '—'}</span>
+                  </div>
+                  <div>
+                    <span>Age</span>
+                    <span>{contextData.patient?.age ?? '—'}</span>
+                  </div>
+                  <div>
+                    <span>Gender</span>
+                    <span>{contextData.patient?.gender || '—'}</span>
+                  </div>
+                  <div>
+                    <span>Contact</span>
+                    <span>{contextData.patient?.phone || contextData.patient?.email || '—'}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="aiq-context-group">
-              <strong>Latest Vitals</strong>
-              <div className="aiq-context-list">
-                {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
-                  contextData.vitals.map((vital, index) => (
-                    <div key={`${vital.type || 'vital'}-${index}`}>
-                      <span>{vital.type || vital.label || 'Metric'}</span>
-                      <span>
-                        {vital.value ?? '—'} {vital.unit || ''}
-                      </span>
-                    </div>
-                  ))
+              <div className="aiq-context-group">
+                <strong>Latest Vitals</strong>
+                <div className="aiq-context-list">
+                  {Array.isArray(contextData.vitals) && contextData.vitals.length > 0 ? (
+                    contextData.vitals.map((vital, index) => (
+                      <div key={`${vital.type || 'vital'}-${index}`}>
+                        <span>{vital.type || vital.label || 'Metric'}</span>
+                        <span>
+                          {vital.value ?? '—'} {vital.unit || ''}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="muted">No recent vitals</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="aiq-context-group">
+                <strong>Uploaded Documents</strong>
+                {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
+                  <ul className="aiq-upload-list">
+                    {contextData.uploads.map((upload, index) => (
+                      <li key={`${upload.name || 'upload'}-${index}`}>
+                        <div><strong>{upload.name || upload}</strong> {upload.status && <span className="muted">({upload.status})</span>}</div>
+                        {upload.summary && <small className="muted">{upload.summary}</small>}
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
-                  <div className="muted">No recent vitals</div>
+                  <div className="muted">No uploads</div>
                 )}
               </div>
-            </div>
 
-            <div className="aiq-context-group">
-              <strong>Uploaded Documents</strong>
-              {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
-                <ul className="aiq-upload-list">
-                  {contextData.uploads.map((upload, index) => (
-                    <li key={`${upload.name || 'upload'}-${index}`}>
-                      <div><strong>{upload.name || upload}</strong> {upload.status && <span className="muted">({upload.status})</span>}</div>
-                      {upload.summary && <small className="muted">{upload.summary}</small>}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="muted">No uploads</div>
-              )}
-            </div>
+              <div className="aiq-button-row">
+                <button className="btn btn-light" onClick={refreshContext} disabled={contextLoading}>
+                  {contextLoading ? 'Refreshing…' : 'Refresh'}
+                </button>
+                <button className="btn btn-outline" onClick={() => alert('This context will be included in AI prompts.')}>How it’s used</button>
+              </div>
+            </section>
 
-            <div className="aiq-button-row">
-              <button className="btn btn-light" onClick={refreshContext} disabled={contextLoading}>
-                {contextLoading ? 'Refreshing…' : 'Refresh'}
-              </button>
-              <button className="btn btn-outline" onClick={() => alert('This context will be included in AI prompts.')}>
-                How it’s used
-              </button>
-            </div>
           </div>
-        </aside>
+        </main>
       </div>
     </div>
   );
