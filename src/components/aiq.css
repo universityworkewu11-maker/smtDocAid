@@ -73,7 +73,6 @@
 .aiq-report-preview.expanded {
   max-height: none !important;
   overflow: visible !important;
-  min-height: auto;
 }
 
 /* Strong override when inside global card rules that force colors */
