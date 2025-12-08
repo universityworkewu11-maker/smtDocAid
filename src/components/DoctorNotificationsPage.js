@@ -58,10 +58,80 @@ const DoctorNotificationsPage = () => {
         )
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setNotifications(data || []);
-    } catch (e) {
-      setError(e?.message || String(e));
+      // Build base select
+      const baseSelect = `
+        id,
+        message,
+        type,
+        is_read,
+        created_at,
+        diagnosis_id,
+        patient_id,
+        patient:patient_id (
+          id,
+          user_id,
+          full_name,
+          name,
+          email
+        ),
+        diagnosis:diagnosis_id (
+          content,
+          severity,
+          created_at
+        )
+      `;
+
+      let data;
+      let error;
+
+      // Try query using doctor_user_id (if the column exists). If that fails with a column-not-found error, fall back.
+      try {
+        if (doctorIdForQuery) {
+          ({ data, error } = await supabase
+            .from('notifications')
+            .select(baseSelect)
+            .or(`doctor_user_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}`)
+            .order('created_at', { ascending: false }));
+        } else {
+          ({ data, error } = await supabase
+            .from('notifications')
+            .select(baseSelect)
+            .eq('doctor_user_id', user.id)
+            .order('created_at', { ascending: false }));
+        }
+        if (error) throw error;
+      } catch (err) {
+        // If error indicates missing column `doctor_user_id`, retry with safer query by doctor_id only
+        const msg = err?.message || String(err);
+        if (msg.includes('doctor_user_id') || (err?.code === '42703')) {
+          try {
+            if (doctorIdForQuery) {
+              const q = await supabase
+                .from('notifications')
+                .select(baseSelect)
+                .eq('doctor_id', doctorIdForQuery)
+                .order('created_at', { ascending: false });
+              data = q.data;
+              error = q.error;
+              if (error) throw error;
+            } else {
+              // Last resort: query by doctor_id matching auth.user.id (if schema used that way)
+              const q = await supabase
+                .from('notifications')
+                .select(baseSelect)
+                .eq('doctor_id', user.id)
+                .order('created_at', { ascending: false });
+              data = q.data;
+              error = q.error;
+              if (error) throw error;
+            }
+          } catch (err2) {
+            throw err2;
+          }
+        } else {
+          throw err;
+        }
+      }
     } finally {
       setLoading(false);
     }

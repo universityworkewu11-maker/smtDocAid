@@ -583,8 +583,26 @@ function AIQuestionnairesPage() {
           });
         }
 
-        const { error: notifError } = await supabase.from('notifications').insert(notifications);
-        if (notifError) console.warn('Failed to create notifications:', notifError);
+        let notifError = null;
+        try {
+          const res = await supabase.from('notifications').insert(notifications);
+          notifError = res.error;
+          if (notifError) throw notifError;
+        } catch (insErr) {
+          // If column `doctor_user_id` doesn't exist, retry inserting without it
+          const msg = insErr?.message || String(insErr);
+          if (msg.includes('doctor_user_id') || (insErr?.code === '42703')) {
+            const fallback = notifications.map(n => {
+              const copy = { ...n };
+              delete copy.doctor_user_id;
+              return copy;
+            });
+            const res2 = await supabase.from('notifications').insert(fallback);
+            if (res2.error) console.warn('Failed to create notifications on fallback:', res2.error);
+          } else {
+            console.warn('Failed to create notifications:', insErr);
+          }
+        }
         alert(`Report saved and shared with ${selectedDoctors.length} doctor(s)!`);
       } catch (shareError) {
         console.error('Error saving report and notifying doctors:', shareError);
