@@ -102,7 +102,7 @@ tr:hover td { @apply bg-slate-50/50 dark:bg-slate-800/40; }
 .progress-fill { @apply h-full bg-primary transition-all; }
 
 /* Report */
-.report-content { @apply whitespace-pre-wrap text-sm leading-relaxed font-mono bg-slate-900/80 text-slate-100 p-4 rounded-lg overflow-x-auto; }
+.report-content { @apply whitespace-pre-wrap text-sm leading-relaxed font-mono bg-slate-900/80 text-white p-4 rounded-lg overflow-x-auto; }
 
 /* Questionnaire */
 .question-text { @apply text-lg font-semibold mb-4; }
