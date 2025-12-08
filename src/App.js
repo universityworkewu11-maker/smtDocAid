@@ -2833,6 +2833,25 @@ function ProfilePage() {
             </div>
             
             <div className="form-group">
+              <label className="form-label">Gender</label>
+              {editing ? (
+                <select
+                  value={profileData.gender || ''}
+                  onChange={e => setProfileData({...profileData, gender: e.target.value})}
+                  className="form-input"
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="prefer_not_say">Prefer not to say</option>
+                </select>
+              ) : (
+                <div className="form-display">{profileData.gender ? (profileData.gender.charAt(0).toUpperCase() + profileData.gender.slice(1).replace(/_/g,' ')) : 'Not set'}</div>
+              )}
+            </div>
+            
+            <div className="form-group">
               <label className="form-label">Address</label>
               {editing ? (
                 <input
