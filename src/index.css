@@ -63,6 +63,19 @@ main { @apply max-w-7xl mx-auto px-6 py-8; }
 .card-title { @apply text-xl font-semibold mb-4 tracking-tight; }
 .muted { @apply text-slate-500 dark:text-slate-400 text-sm; }
 
+/* Ensure readable foreground colors inside cards and forms regardless of theme */
+.card, .card * {
+  color: var(--color-fg) !important;
+}
+.dark .card, .dark .card * {
+  color: var(--color-fg) !important;
+}
+.form-input, .form-select, .textarea-input {
+  color: var(--color-fg) !important;
+}
+.card-title { color: var(--color-fg) !important; }
+.muted { color: var(--color-fg-muted) !important; }
+
 /* Simple table styling */
 table { @apply w-full border-collapse text-sm; }
 th { @apply text-left font-semibold py-3 px-4 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300; }
