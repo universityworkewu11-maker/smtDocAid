@@ -2328,8 +2328,18 @@ function ProfilePage() {
   };
 
   const normalizeGender = (row = {}) => {
-    const g = row.gender || row.sex || row.gender_identity || row.patient_gender;
-    return g ? String(g).toLowerCase() : "";
+    const raw = row.gender || row.sex || row.gender_identity || row.patient_gender || '';
+    const g = String(raw || '').trim().toLowerCase();
+    if (!g) return '';
+
+    // Map common variants to canonical keys used in UI
+    if (['m', 'male', 'man'].includes(g)) return 'male';
+    if (['f', 'female', 'woman'].includes(g)) return 'female';
+    if (['other', 'o', 'non-binary', 'nonbinary', 'nb'].includes(g)) return 'other';
+    if (['prefer_not_to_say', 'prefer not to say', 'undisclosed', 'none'].includes(g)) return 'prefer_not_to_say';
+
+    // Fallback: return the cleaned value (lowercase)
+    return g;
   };
 
   const normalizeDob = (row = {}) => {
