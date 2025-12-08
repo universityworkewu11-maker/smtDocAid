@@ -27,6 +27,22 @@
 .aiq-main-grid { display: grid; grid-template-columns: 1fr minmax(320px, 360px); gap: 18px; align-items: start; }
 .aiq-primary-stack { min-width: 0; }
 .aiq-support-stack { width: min(360px, 34vw); display:flex; flex-direction:column; gap:12px }
+
+/* Wide screen adaptations */
+@media (min-width: 1024px) {
+  .aiq-main-grid { grid-template-columns: 1fr minmax(380px, 420px); gap: 24px; }
+  .aiq-support-stack { width: min(420px, 38vw); }
+}
+
+@media (min-width: 1280px) {
+  .aiq-main-grid { grid-template-columns: 1fr minmax(420px, 480px); gap: 28px; }
+  .aiq-support-stack { width: min(480px, 42vw); }
+}
+
+@media (min-width: 1440px) {
+  .aiq-main-grid { grid-template-columns: 1fr minmax(480px, 520px); gap: 32px; }
+  .aiq-support-stack { width: min(520px, 45vw); }
+}
 /* Ensure support column cards stack vertically and take full width */
 .aiq-support-stack { align-items: stretch; }
 .aiq-support-stack > .card { width: 100%; box-sizing: border-box; }
