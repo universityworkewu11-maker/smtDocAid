@@ -4,6 +4,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import fetch from 'cross-fetch';
+import { runExtractionBatch } from './lib/documentExtractor.js';
 
 // Use global fetch if available; otherwise fall back to cross-fetch (avoid top-level await for Node compatibility)
 const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetch;
@@ -60,6 +61,20 @@ app.get('/health', (req, res) => {
 app.get('/api/health', (req, res) => {
 	setCorsHeaders(req, res);
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
+});
+
+// Internal: trigger one extraction batch (protected by INTERNAL_SECRET)
+app.post('/internal/extract-documents', async (req, res) => {
+	setCorsHeaders(req, res);
+	const secret = process.env.INTERNAL_SECRET;
+	const provided = req.get('x-internal-secret') || req.body?.secret;
+	if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
+	try {
+		const result = await runExtractionBatch();
+		return res.json({ ok: true, result });
+	} catch (err) {
+		return res.status(500).json({ ok: false, error: err?.message || String(err) });
+	}
 });
 
 // Chat proxy: POST /api/v1/ai/chat { messages: [...], model?: string, temperature?: number, max_tokens?: number }
