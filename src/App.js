@@ -2602,6 +2602,28 @@ function ProfilePage() {
         patientId: profileData.patientId
       });
 
+      // Also attempt an explicit upsert into the canonical `patients` table so
+      // the UI-backed public row is updated immediately. This is a separate
+      // best-effort write in case RLS/policies allow it.
+      try {
+        const patientsPayload = {
+          user_id: auth.session.user.id,
+          full_name: profileData.fullName,
+          name: profileData.fullName,
+          email: profileData.email || auth.session.user.email || null,
+          phone: profileData.phone || null,
+          address: profileData.address || null,
+          date_of_birth: profileData.dob || null,
+          age: profileData.age ? (Number.isFinite(Number(profileData.age)) ? Number(profileData.age) : null) : null
+        };
+        const { error: patientsErr } = await supabase.from('patients').upsert(patientsPayload);
+        if (patientsErr) {
+          console.warn('patients upsert (profile save) failed:', patientsErr);
+        }
+      } catch (patientsEx) {
+        console.warn('patients upsert (profile save) exception:', patientsEx);
+      }
+
       setEditing(false);
     } catch (err) {
       console.error('Profile update failed:', err);
