@@ -2058,20 +2058,24 @@ main {
  grid-column: 1 / -1;
 }
 
-/* Extreme layout - Adaptive Interview Workspace dominates */
+/* Vertical layout - Transcript below Interview Workspace */
 @media (min-width: 1024px) {
   .interview-workspace {
-    grid-template-columns: 4fr 0.8fr;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-16);
   }
 
   .interview-main {
-    grid-column: 1;
+    flex: 1;
+    width: 100%;
   }
 
   .interview-sidebar {
-    grid-column: 2;
-    max-width: 300px;
+    width: 100%;
+    max-width: 100%;
+    align-self: flex-end;
+    justify-self: flex-end;
   }
 
   .interview-question-section {
@@ -2079,45 +2083,31 @@ main {
   }
 
   .interview-transcript-section {
-    order: 1;
+    order: 2;
+    width: 100%;
   }
 
   .interview-report-section {
-    grid-column: 1;
-    order: 2;
+    order: 3;
+    width: 100%;
   }
 }
 
 @media (min-width: 1280px) {
   .interview-workspace {
-    grid-template-columns: 5fr 0.6fr;
     gap: var(--space-20);
-  }
-
-  .interview-sidebar {
-    max-width: 280px;
   }
 }
 
 @media (min-width: 1440px) {
   .interview-workspace {
-    grid-template-columns: 6fr 0.5fr;
     gap: var(--space-24);
-  }
-
-  .interview-sidebar {
-    max-width: 250px;
   }
 }
 
 @media (min-width: 1600px) {
   .interview-workspace {
-    grid-template-columns: 7fr 0.4fr;
     gap: var(--space-28);
-  }
-
-  .interview-sidebar {
-    max-width: 220px;
   }
 }
 
