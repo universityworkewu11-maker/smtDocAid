@@ -2422,6 +2422,7 @@ function ProfilePage() {
           phone: patientProfile.phone || "",
           age: legacyAge != null ? String(legacyAge) : "",
           dob: legacyDob,
+          gender: patientProfile.gender || "",
           address: patientProfile.address || "",
           patientId: patientProfile.patient_id || patientProfile.id || null
         });
@@ -2430,6 +2431,7 @@ function ProfilePage() {
           phone: patientProfile.phone,
           address: patientProfile.address,
           dob: patientProfile.date_of_birth,
+          gender: patientProfile.gender,
           age: legacyAge,
           patientId: patientProfile.patient_id || patientProfile.id || null
         }, { preserveExisting: true });
@@ -2559,6 +2561,7 @@ function ProfilePage() {
           phone: newProfile.phone || "",
           age: createdAge != null ? String(createdAge) : "",
           dob: createdDob,
+          gender: newProfile.gender || "",
           address: newProfile.address || "",
           patientId: newProfile.patient_id || newProfile.id || null
         });
@@ -2567,6 +2570,7 @@ function ProfilePage() {
           phone: newProfile.phone,
           address: newProfile.address,
           dob: newProfile.date_of_birth,
+          gender: newProfile.gender,
           age: createdAge,
           patientId: newProfile.patient_id || newProfile.id || null
         }, { preserveExisting: true });
@@ -2578,6 +2582,7 @@ function ProfilePage() {
           phone: "",
           age: "",
           dob: "",
+          gender: "",
           address: "",
           patientId: null
         });
@@ -2591,6 +2596,7 @@ function ProfilePage() {
         phone: "",
         age: "",
         dob: "",
+        gender: "",
         address: "",
         patientId: null
       });
