@@ -131,7 +131,6 @@ body {
 .app-container {
   min-height: 100vh;
   position: relative;
-  overflow-x: hidden;
 }
 
 .content-layer {
