@@ -567,14 +567,22 @@ function AIQuestionnairesPage() {
           .select('id')
           .single();
         if (diagError) throw diagError;
-        const notifications = shareableDoctorIds.map((doctorId) => ({
-          doctor_id: doctorId,
-          patient_id: user.id,
-          diagnosis_id: diagData.id,
-          message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
-          type: 'report_shared',
-          is_read: false
-        }));
+        // Build notifications with both `doctor_id` (doctors.id) and `doctor_user_id` (auth.users.id)
+        const notifications = [];
+        for (const doctorId of shareableDoctorIds) {
+          const doc = (doctors || []).find(d => d && (d.id === doctorId || d.user_id === doctorId));
+          const doctorUserId = doc?.user_id || null;
+          notifications.push({
+            doctor_id: doctorId,
+            doctor_user_id: doctorUserId,
+            patient_id: user.id,
+            diagnosis_id: diagData.id,
+            message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
+            type: 'report_shared',
+            is_read: false
+          });
+        }
+
         const { error: notifError } = await supabase.from('notifications').insert(notifications);
         if (notifError) console.warn('Failed to create notifications:', notifError);
         alert(`Report saved and shared with ${selectedDoctors.length} doctor(s)!`);

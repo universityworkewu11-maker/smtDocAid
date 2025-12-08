@@ -20,6 +20,15 @@ const DoctorNotificationsPage = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // Find this doctor's `doctors.id` (preferred) and also use `doctor_user_id`.
+      const { data: doctorRows, error: doctorErr } = await supabase
+        .from('doctors')
+        .select('id, user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const doctorIdForQuery = doctorRows?.id || null;
+
       const { data, error } = await supabase
         .from('notifications')
         .select(`
@@ -43,7 +52,10 @@ const DoctorNotificationsPage = () => {
             created_at
           )
         `)
-        .eq('doctor_id', user.id)
+        // Prefer matching by doctor_user_id (the auth user id). If unavailable, fall back to doctor_id = doctors.id
+        .or(
+          doctorIdForQuery ? `doctor_user_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}` : `doctor_user_id.eq.${user.id}`
+        )
         .order('created_at', { ascending: false });
 
       if (error) throw error;
