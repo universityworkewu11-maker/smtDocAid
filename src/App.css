@@ -2096,8 +2096,8 @@ main {
   }
 }
 
-/* Horizontal layout - Question and Transcript side by side on very wide screens */
-@media (min-width: 1440px) {
+/* Horizontal layout - Question and Transcript side by side on wide screens */
+@media (min-width: 1200px) {
   .interview-workspace {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2131,6 +2131,40 @@ main {
     order: 2;
     width: 100%;
     margin-top: var(--space-16);
+  }
+}
+
+/* Ultra-wide layout - More aggressive horizontal layout */
+@media (min-width: 1600px) {
+  .interview-workspace {
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: var(--space-32);
+  }
+
+  .interview-main {
+    grid-column: 1;
+  }
+
+  .interview-sidebar {
+    grid-column: 2;
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-24);
+  }
+}
+
+/* Extremely wide screens - Maximum utilization */
+@media (min-width: 1920px) {
+  .interview-workspace {
+    grid-template-columns: 1.5fr 0.7fr;
+    gap: var(--space-40);
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-32);
   }
 }
 
