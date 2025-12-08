@@ -52,7 +52,7 @@
 .btn-lg { padding:12px 18px }
 .aiq-language-switch { margin-top:0 }
 
-.aiq-layout { display:block }
+.aiq-layout { display:grid; grid-template-columns: 1fr minmax(300px, 360px); gap:20px; align-items: start }
 .aiq-aside { width: min(340px, 32vw) }
 
 .aiq-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
@@ -67,7 +67,7 @@
 .aiq-transcript-row { padding:8px 6px; border-bottom:1px solid rgba(15,23,42,0.03) }
 
 .aiq-subcard { margin-top:12px }
-.aiq-report-preview { background: linear-gradient(180deg, rgba(2,6,23,0.95), rgba(15,23,42,0.95)); color:#f8fafc; padding:14px; border-radius:10px; max-height:340px; overflow:auto; box-shadow: 0 8px 30px rgba(2,6,23,0.35); border-left: 4px solid rgba(99,102,241,0.9); width:100%; }
+.aiq-report-preview { background: linear-gradient(180deg, rgba(2,6,23,0.95), rgba(15,23,42,0.95)); color:#f8fafc; padding:14px; border-radius:10px; min-height:420px; max-height:720px; overflow:auto; box-shadow: 0 8px 30px rgba(2,6,23,0.35); border-left: 4px solid rgba(99,102,241,0.9); width:100%; white-space: pre-wrap; }
 
 /* Strong override when inside global card rules that force colors */
 .card .aiq-report-preview,
