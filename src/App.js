@@ -981,14 +981,8 @@ function SignupPage() {
           full_name: fullName, 
           role 
         });
-
-        // If signing up as a doctor, attempt to create a public doctor profile row only
-        // when the signup returned an active session (i.e. the user is authenticated).
-        // If your project requires email confirmation (no session returned), the
-        // client will not be authenticated and the insert would fail under RLS.
-        // In that case `fetchProfile` runs on first real login and will create the
-        // `doctors` row server-side.
-        if (role === 'doctor' && data?.session) {
+        // If signing up as a doctor, also create a public doctor profile row so patients can find them immediately
+        if (role === 'doctor') {
           try {
             await supabase.from('doctors').upsert({
               user_id: userId,
@@ -1571,7 +1565,7 @@ function QuestionnairePage() {
     try {
       const { data, error } = await supabase
         .from('doctors')
-        .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
+        .select('id, user_id, name, email, specialty, bio, license_number, age, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -1624,7 +1618,7 @@ function QuestionnairePage() {
       }
       const out = (doctors || []).filter(d => {
         const name = String(d.full_name || d.name || d.user_id || '').toLowerCase();
-        const spec = String(d.specialist || d.specialty || d.specialities || d.city || '').toLowerCase();
+        const spec = String(d.specialty || d.specialist || d.specialities || d.city || '').toLowerCase();
         const email = String(d.email || '').toLowerCase();
         return name.includes(q) || spec.includes(q) || email.includes(q);
       });

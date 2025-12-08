@@ -75,7 +75,7 @@ const DoctorPublicProfilePage = () => {
 						<div className="profile-header" style={{ alignItems: 'flex-start' }}>
 							<div>
 								<h2 className="card-title" style={{ marginBottom: 6 }}>{doc.name || doc.full_name || 'Doctor'}</h2>
-								<div className="badge" style={{ marginRight: 8 }}>{doc.specialist || doc.specialty || 'General'}</div>
+								<div className="badge" style={{ marginRight: 8 }}>{doc.specialty || doc.specialist || 'General'}</div>
 								{(doc.location || doc.city) && <span className="muted" style={{ marginLeft: 8 }}>{doc.location || doc.city}</span>}
 							</div>
 							{doc.email && (
