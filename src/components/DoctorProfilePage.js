@@ -13,6 +13,7 @@ const DoctorProfilePage = () => {
 		full_name: '',
 		email: '',
 		specialty: '',
+		phone: '',
 		location: '',
 		bio: ''
 	});
@@ -33,6 +34,26 @@ const DoctorProfilePage = () => {
 				if (error && error.code !== 'PGRST116') throw error; // ignore row not found
 				if (data) setProfile(prev => ({ ...prev, ...data }));
 				else setProfile(prev => ({ ...prev, user_id: uid }));
+
+				// Also attempt to read the newer `doctors` table and merge phone/name if present
+				try {
+					const { data: ddata, error: derr } = await supabase
+						.from('doctors')
+						.select('id, user_id, name, phone, specialty')
+						.eq('user_id', uid)
+						.maybeSingle();
+					if (!derr && ddata) {
+						setProfile(prev => ({
+							...prev,
+							id: prev.id || ddata.id,
+							full_name: prev.full_name || ddata.name || prev.full_name,
+							specialty: prev.specialty || ddata.specialty || prev.specialty,
+							phone: prev.phone || ddata.phone || prev.phone
+						}));
+					}
+				} catch (e) {
+					// ignore doctors table read errors
+				}
 				// ensure email fallback from auth
 				if (!data?.email) {
 					setProfile(prev => ({ ...prev, email: user?.email || prev.email }));
@@ -51,7 +72,7 @@ const DoctorProfilePage = () => {
 		setSaving(true);
 		setError('');
 		try {
-			// Try to upsert extended columns; gracefully fallback if table lacks some
+			// Upsert into legacy `doctor_profiles` table
 			const payload = {
 				user_id: profile.user_id,
 				full_name: profile.full_name,
@@ -68,6 +89,31 @@ const DoctorProfilePage = () => {
 				if (res.error) throw res.error;
 			}
 			setProfile(prev => ({ ...prev, ...(res.data || {}) }));
+
+			// Also ensure `doctors` table is kept in sync (preferred for newer flows)
+			try {
+				const uid = profile.user_id;
+				if (uid) {
+					// Check if a doctors row exists for this user
+					const { data: existing, error: existErr } = await supabase.from('doctors').select('id').eq('user_id', uid).maybeSingle();
+					if (existErr) throw existErr;
+					const docPayload = {
+						user_id: uid,
+						name: profile.full_name,
+						specialty: profile.specialty,
+						phone: profile.phone || null,
+						email: profile.email || null
+					};
+					if (existing && existing.id) {
+						await supabase.from('doctors').update(docPayload).eq('id', existing.id);
+					} else {
+						await supabase.from('doctors').insert(docPayload);
+					}
+				}
+			} catch (docErr) {
+				// If RLS or schema prevents writing to `doctors`, surface a non-blocking warning
+				console.warn('Failed to sync profile to doctors table:', docErr?.message || docErr);
+			}
 		} catch (e) {
 			setError(e?.message || String(e));
 		} finally {
