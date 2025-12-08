@@ -63,3 +63,9 @@ create policy "Doctors can insert own record" on public.doctors
 
 -- Index for faster lookup by user_id
 create index if not exists idx_doctors_user_id on public.doctors using btree (user_id);
+
+-- Allow authenticated users (patients) to list doctors for discovery
+drop policy if exists "Authenticated users can view doctors" on public.doctors;
+create policy "Authenticated users can view doctors" on public.doctors
+  for select
+  using (auth.role() = 'authenticated');
