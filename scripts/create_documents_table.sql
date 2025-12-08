@@ -24,6 +24,52 @@ create table if not exists public.documents (
   updated_at timestamptz not null default now()
 );
 
+-- Ensure legacy tables pick up the newer columns when rerunning the script
+alter table public.documents
+  add column if not exists storage_bucket text default 'uploads';
+alter table public.documents
+  add column if not exists storage_path text;
+alter table public.documents
+  add column if not exists file_name text;
+alter table public.documents
+  add column if not exists original_name text;
+alter table public.documents
+  add column if not exists mime_type text;
+alter table public.documents
+  add column if not exists size_bytes bigint;
+alter table public.documents
+  add column if not exists public_url text;
+alter table public.documents
+  add column if not exists checksum text;
+alter table public.documents
+  add column if not exists metadata jsonb default '{}'::jsonb;
+alter table public.documents
+  add column if not exists extraction_status text not null default 'pending';
+alter table public.documents
+  add column if not exists extracted_text text;
+alter table public.documents
+  add column if not exists extraction_summary text;
+alter table public.documents
+  add column if not exists extraction_error text;
+alter table public.documents
+  add column if not exists last_extracted_at timestamptz;
+alter table public.documents
+  add column if not exists uploaded_at timestamptz not null default now();
+alter table public.documents
+  add column if not exists updated_at timestamptz not null default now();
+alter table public.documents
+  add column if not exists name text;
+alter table public.documents
+  add column if not exists path text;
+alter table public.documents
+  add column if not exists url text;
+alter table public.documents
+  alter column name drop not null;
+alter table public.documents
+  alter column path drop not null;
+alter table public.documents
+  alter column url drop not null;
+
 create index if not exists documents_user_id_idx on public.documents(user_id);
 create index if not exists documents_uploaded_at_idx on public.documents(uploaded_at desc);
 

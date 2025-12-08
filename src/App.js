@@ -2217,6 +2217,7 @@ function ProfilePage() {
     age: "",
     dob: "",
     address: "",
+    gender: "",
     patientId: null
   });
   const [loading, setLoading] = useState(true);
@@ -2270,6 +2271,11 @@ function ProfilePage() {
     return row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || "";
   };
 
+  const normalizeGender = (row = {}) => {
+    const g = row.gender || row.sex || row.gender_identity || row.patient_gender;
+    return g ? String(g).toLowerCase() : "";
+  };
+
   const normalizeDob = (row = {}) => {
     return row.date_of_birth || row.dob || row.birth_date || row.birthdate || "";
   };
@@ -2278,6 +2284,7 @@ function ProfilePage() {
     const normalizedDob = normalizeDob(row);
     const normalizedAge = row?.age ?? row?.patient_age ?? computeAgeFromDob(normalizedDob);
     const normalizedPhone = normalizePhone(row);
+    const normalizedGender = normalizeGender(row);
     const normalizedPatientId = row?.patient_id || row?.id || null;
     return {
       fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
@@ -2286,6 +2293,7 @@ function ProfilePage() {
       age: normalizedAge != null ? String(normalizedAge) : "",
       dob: normalizedDob,
       address: row?.address || "",
+      gender: normalizedGender,
       patientId: normalizedPatientId
     };
   };
@@ -2317,6 +2325,12 @@ function ProfilePage() {
     const resolvedDob = source.dob ?? source.date_of_birth ?? source.birth_date ?? source.birthdate ?? profileData.dob;
     if (!preserveExisting || resolvedDob) {
       payload.date_of_birth = resolvedDob || null;
+    }
+
+    const resolvedGender = source.gender ?? source.sex ?? profileData.gender;
+    const normalizedGenderValue = resolvedGender ? String(resolvedGender).toLowerCase() : null;
+    if (!preserveExisting || normalizedGenderValue) {
+      payload.gender = normalizedGenderValue;
     }
 
     if (!preserveExisting || Number.isFinite(parsedAge)) {
@@ -2355,6 +2369,7 @@ function ProfilePage() {
           age: legacyAge != null ? String(legacyAge) : "",
           dob: legacyDob,
           address: patientProfile.address || "",
+          gender: normalizeGender(patientProfile),
           patientId: patientProfile.patient_id || patientProfile.id || null
         });
         await syncPublicPatient({
@@ -2362,6 +2377,7 @@ function ProfilePage() {
           phone: patientProfile.phone,
           address: patientProfile.address,
           dob: patientProfile.date_of_birth,
+          gender: patientProfile.gender,
           age: legacyAge,
           patientId: patientProfile.patient_id || patientProfile.id || null
         }, { preserveExisting: true });
@@ -2492,6 +2508,7 @@ function ProfilePage() {
           age: createdAge != null ? String(createdAge) : "",
           dob: createdDob,
           address: newProfile.address || "",
+          gender: normalizeGender(newProfile),
           patientId: newProfile.patient_id || newProfile.id || null
         });
         await syncPublicPatient({
@@ -2499,6 +2516,7 @@ function ProfilePage() {
           phone: newProfile.phone,
           address: newProfile.address,
           dob: newProfile.date_of_birth,
+          gender: newProfile.gender,
           age: createdAge,
           patientId: newProfile.patient_id || newProfile.id || null
         }, { preserveExisting: true });
@@ -2511,6 +2529,7 @@ function ProfilePage() {
           age: "",
           dob: "",
           address: "",
+          gender: "",
           patientId: null
         });
       }
@@ -2524,6 +2543,7 @@ function ProfilePage() {
         age: "",
         dob: "",
         address: "",
+        gender: "",
         patientId: null
       });
     }
@@ -2546,7 +2566,8 @@ function ProfilePage() {
         full_name: profileData.fullName,
         phone: profileData.phone,
         date_of_birth: profileData.dob,
-        address: profileData.address
+        address: profileData.address,
+        gender: profileData.gender || null
       };
 
       const { error } = await supabase
@@ -2562,6 +2583,7 @@ function ProfilePage() {
         phone: profileData.phone,
         address: profileData.address,
         dob: profileData.dob,
+        gender: profileData.gender,
         age: profileData.age,
         patientId: profileData.patientId
       });
@@ -2583,6 +2605,15 @@ function ProfilePage() {
       ? String(profileData.patientId)
       : `PID-${profileData.patientId}`)
     : '';
+  const genderLabelMap = {
+    male: 'Male',
+    female: 'Female',
+    other: 'Other',
+    'prefer_not_to_say': 'Prefer not to say'
+  };
+  const displayGenderValue = profileData.gender
+    ? (genderLabelMap[profileData.gender] || profileData.gender)
+    : 'Not set';
 
   return (
     <main className="route-screen">
@@ -2687,6 +2718,25 @@ function ProfilePage() {
                 />
               ) : (
                 <div className="form-display">{profileData.phone || 'Not set'}</div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Gender</label>
+              {editing ? (
+                <select
+                  className="form-input"
+                  value={profileData.gender}
+                  onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              ) : (
+                <div className="form-display">{displayGenderValue}</div>
               )}
             </div>
 
