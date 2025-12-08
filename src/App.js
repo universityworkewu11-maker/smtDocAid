@@ -27,9 +27,6 @@ import DoctorNotificationsPage from './components/DoctorNotificationsPage';
 // Interview flow is integrated into QuestionnairePage; no separate page import
 
 // Config
-// Supabase client is centralized in lib/supabaseClient.js
-
-// AI backend config
 const SERVER_BASE = (() => {
   const env = (process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
   if (env) return env;
@@ -40,12 +37,10 @@ const SERVER_BASE = (() => {
   return '';
 })();
 
-// Supabase table config (allow overriding via .env)
 const TBL_REPORT = process.env.REACT_APP_TBL_REPORT || 'diagnoses';
 const TBL_QR = process.env.REACT_APP_TBL_QR || 'questionnaire_responses';
 
 async function openaiChat(messages) {
-  // Always call backend server to keep API key private
   const res = await fetch(`${SERVER_BASE}/api/v1/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +48,6 @@ async function openaiChat(messages) {
   });
   const text = await res.text();
   if (!res.ok) {
-    // Backend already masks invalid key messages
     throw new Error(text ? (JSON.parseSafe?.(text)?.error || text) : 'Server AI error');
   }
   try {
@@ -75,13 +69,6 @@ class MedicalAI {
 - Medications: ${patientData.medications || 'none'}
 - Context: ${JSON.stringify(context || {})}
 
-Provide structured analysis with:
-1. Differential Diagnosis (ranked)
-2. Recommended Tests
-3. Treatment Options
-4. Risk Assessment
-5. Follow-up Plan
-
 Use medical terminology but explain complex terms. Format as markdown.`;
 
     try {
@@ -91,20 +78,22 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       ]);
 
       try {
-        await supabase.from(TBL_REPORT).insert([{
-          patient_id: patientData.patientId || null,
-          doctor_id: patientData.doctorId || null,
-          content: response,
-          ai_generated: true,
-          severity: this._determineSeverity(response),
-          metadata: {
-            vitals: patientData.vitals || {},
-            symptoms: patientData.symptoms || {},
-            context
+        await supabase.from(TBL_REPORT).insert([
+          {
+            patient_id: patientData.patientId || null,
+            doctor_id: patientData.doctorId || null,
+            content: response,
+            ai_generated: true,
+            severity: this._determineSeverity(response),
+            metadata: {
+              vitals: patientData.vitals || {},
+              symptoms: patientData.symptoms || {},
+              context
+            }
           }
-        }]);
-      } catch (e) {
-        console.warn('Failed to save diagnosis:', e.message);
+        ]);
+      } catch (storageError) {
+        console.warn('Failed to save diagnosis:', storageError?.message || storageError);
       }
 
       return response;
@@ -115,57 +104,80 @@ Use medical terminology but explain complex terms. Format as markdown.`;
   }
 
   static _getFallbackAnalysis(patientData) {
-    return `Demo Analysis (AI Unavailable)
-    
-**Differential Diagnosis**:
+    const vitals = JSON.stringify(patientData?.vitals || {}, null, 2);
+    const symptoms = JSON.stringify(patientData?.symptoms || {}, null, 2);
+    return `Demo Analysis (AI unavailable)
+
+**Differential Diagnosis**
 1. Viral Upper Respiratory Infection (40%)
 2. Dehydration (30%)
 3. Anxiety Disorder (20%)
 4. Other (10%)
 
-**Recommended Tests**:
-- Complete Blood Count (CBC)
-- Comprehensive Metabolic Panel (CMP)
-- COVID-19 test if febrile
+**Recommended Tests**
+- CBC and CMP
+- COVID-19/Influenza panel if febrile
+- Basic metabolic panel for hydration status
 
-**Treatment Options**:
-- Rest and hydration
-- Antipyretics if fever > 101 F
-- Follow-up in 3 days if symptoms persist
+**Treatment Suggestions**
+- Rest, oral hydration, antipyretics as needed
+- Follow-up with primary care within 72 hours if symptoms persist
 
-**Risk Assessment**: Low
-**Follow-up Plan**: Telehealth visit in 3 days
+Latest vitals snapshot:
+${vitals}
 
-Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
+Reported symptoms:
+${symptoms}`;
   }
 
   static async diagnose(patientData) {
     return this.analyzePatientData(patientData);
   }
 
-  static async generateQuestionnaire(patientContext) {
+  static async generateQuestionnaire(patientContext = {}) {
     try {
       const contextSummary = JSON.stringify(patientContext || {});
-      const systemPrompt = `You are a medical questionnaire generator. Using the provided patient context, generate a thorough clinical questionnaire designed to capture symptoms, vitals, relevant history, and document-relevant questions.\n\nSTRICT OUTPUT FORMAT (CRITICAL):\n- Return ONLY valid JSON.\n- Output must be ONLY a valid JSON array (no prose, no markdown, no backticks, no code fences).\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Each item MUST include exactly these fields: id (number), text (string), type (one of: "radio", "checkbox", "range", "text", "scale"), required (boolean).\n- Include an "options" (array of strings) ONLY when type is "radio" or "checkbox".\n- For type "range" or "scale", include numeric min and max fields.\n- Keep wording concise and clinically relevant.\n- Use the patient context to tailor a subset of questions.\n\nEXAMPLE (FORMAT ONLY, NOT CONTENT):\n[\n  {"id": 1, "text": "Chief complaint?", "type": "text", "required": true},\n  {"id": 2, "text": "Do you have a fever?", "type": "radio", "required": true, "options": ["Yes", "No"]}\n]\n\nReturn ONLY the JSON array. Do not include any text before or after.\n\nPatient context: ${contextSummary}`;
+      const systemPrompt = `You are a medical questionnaire generator. Using the provided patient context, generate a thorough clinical questionnaire designed to capture symptoms, vitals, relevant history, and document-relevant questions.
+
+STRICT OUTPUT FORMAT (CRITICAL):
+- Return ONLY valid JSON.
+- Output must be ONLY a valid JSON array (no prose, no markdown, no backticks, no code fences).
+- Use double quotes for all keys and string values.
+- Include at least 15 items.
+- Each item MUST include exactly these fields: id (number), text (string), type (one of: "radio", "checkbox", "range", "text", "scale"), required (boolean).
+- Include an "options" (array of strings) ONLY when type is "radio" or "checkbox".
+- For type "range" or "scale", include numeric min and max fields.
+- Keep wording concise and clinically relevant.
+- Use the patient context to tailor a subset of questions.
+
+Return ONLY the JSON array. Do not include any text before or after.
+
+Patient context: ${contextSummary}`;
 
       const response = await this._callAI([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: 'Return ONLY valid JSON. Output only the JSON array of questions as described. No commentary. No markdown or code fences.' }
       ]);
+
       try {
         return this._parseQuestionnaire(response);
       } catch (parseErr) {
-        // One-shot repair: ask the AI to convert to strict JSON array
-  const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):\n- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Include options only for radio/checkbox.\n- Include min and max only for range/scale.`;
+        const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):
+- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }
+- Use double quotes for all keys and string values.
+- Include at least 15 items.
+- Include options only for radio/checkbox.
+- Include min and max only for range/scale.`;
+
         const repaired = await this._callAI([
           { role: 'system', content: repairInstr },
           { role: 'user', content: String(response || '') }
         ]);
         return this._parseQuestionnaire(repaired);
       }
-    } catch (e) {
-      console.error('Failed to generate questionnaire:', e);
-      const msg = e?.message || '';
+    } catch (generationError) {
+      console.error('Failed to generate questionnaire:', generationError);
+      const msg = generationError?.message || '';
       throw new Error(`AI questionnaire generation failed. ${msg}`.trim());
     }
   }
@@ -175,16 +187,12 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
       const sanitize = (s) => {
         if (!s) return '';
         let t = String(s);
-        // Strip code fences and headings
         t = t.replace(/```(?:json)?[\s\S]*?```/gi, (m) => m.replace(/```(?:json)?/i, '').replace(/```$/, ''));
-        t = t.replace(/^#+\s.*$/gm, ''); // remove markdown headers
-        // If contains a JSON array somewhere, slice to it
+        t = t.replace(/^#+\s.*$/gm, '');
         const first = t.indexOf('[');
         const last = t.lastIndexOf(']');
         if (first !== -1 && last !== -1 && last > first) t = t.slice(first, last + 1);
-        // Remove trailing commas before } or ]
         t = t.replace(/,\s*([}\]])/g, '$1');
-        // Normalize smart quotes
         t = t.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
         return t.trim();
       };
@@ -194,7 +202,6 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
       try {
         arr = JSON.parse(text);
       } catch {
-        // last resort: try to extract the largest JSON array again
         const m = text.match(/\[[\s\S]*\]/);
         if (m) {
           const cleaned = sanitize(m[0]);
@@ -207,7 +214,7 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
       if (!Array.isArray(arr)) throw new Error('Invalid questionnaire format');
 
       return arr.map((q, i) => {
-        const type = ['radio','checkbox','range','text','scale'].includes(q.type) ? q.type : 'text';
+        const type = ['radio', 'checkbox', 'range', 'text', 'scale'].includes(q.type) ? q.type : 'text';
         const base = {
           id: Number.isFinite(q.id) ? q.id : (parseInt(q.id, 10) || i + 1),
           text: String(q.text || `Question ${i + 1}`),
@@ -224,15 +231,13 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
         }
         return base;
       });
-    } catch (e) {
-      console.warn('Questionnaire parse failed:', e);
+    } catch (parseError) {
+      console.warn('Questionnaire parse failed:', parseError);
       throw new Error('Failed to parse AI-generated questionnaire. Please try again.');
     }
   }
 
-
   static async _callAI(messages) {
-    // Always route via backend
     return openaiChat(messages);
   }
 
@@ -340,15 +345,12 @@ function AuthProvider({ children }) {
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
           await supabase
             .from('patients')
-            .upsert(
-              {
-                user_id: userId,
-                full_name,
-                name: full_name,
-                email
-              },
-              { onConflict: 'user_id' }
-            )
+            .upsert({
+              user_id: userId,
+              full_name,
+              name: full_name,
+              email
+            })
             .select();
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
@@ -396,15 +398,12 @@ function AuthProvider({ children }) {
         try {
           await supabase
             .from('patients')
-            .upsert(
-              {
-                user_id: userId,
-                full_name: upserted?.full_name || full_name,
-                name: upserted?.full_name || full_name,
-                email
-              },
-              { onConflict: 'user_id' }
-            )
+            .upsert({
+              user_id: userId,
+              full_name: upserted?.full_name || full_name,
+              name: upserted?.full_name || full_name,
+              email
+            })
             .select();
         } catch (e) {
           console.warn('ensure patients (created) failed:', e?.message || e);
@@ -911,7 +910,7 @@ function ResetPasswordPage() {
   }
 
   return (
-    <main>
+      <main>
       <div className="card form-container">
         <h2 className="card-title">Reset Password</h2>
         {error && <div className="alert alert-danger">{error}</div>}
@@ -1011,7 +1010,7 @@ function SignupPage() {
   }
 
   return (
-    <main>
+      <main>
       <div className="card form-container">
         <h2 className="card-title">Sign Up</h2>
         {error && <div className="alert alert-danger">{error}</div>}
@@ -1083,7 +1082,7 @@ function PatientPortal() {
   const [vitalsTimestamp, setVitalsTimestamp] = useState(null);
   const [latestVitals, setLatestVitals] = useState({ temperature: null, heartRate: null, spo2: null, timestamp: null });
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
-  const [feedbackItems, setFeedbackItems] = useState([]);
+  const [feedbackNotes, setFeedbackNotes] = useState([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
 
@@ -1231,6 +1230,38 @@ function PatientPortal() {
     checkDevice();
   }, []);
 
+  const fetchDoctorFeedback = useCallback(async () => {
+    if (!patientId) return;
+    setFeedbackLoading(true);
+    setFeedbackError('');
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id,message,created_at,is_read')
+        .eq('patient_id', patientId)
+        .eq('type', 'doctor_feedback')
+        .order('created_at', { ascending: false })
+        .limit(15);
+      if (error) throw error;
+      const rows = (data || []).map(row => ({ ...row, wasUnread: !row.is_read }));
+      setFeedbackNotes(rows);
+      const unreadIds = rows.filter(row => row.wasUnread).map(row => row.id);
+      if (unreadIds.length) {
+        try {
+          await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
+        } catch (_) {}
+      }
+    } catch (err) {
+      setFeedbackError(err?.message || String(err));
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [patientId]);
+
+  useEffect(() => {
+    fetchDoctorFeedback();
+  }, [fetchDoctorFeedback]);
+
   // Removed inline health report generation from dashboard in favor of guided flow
 
   const formatVitalValue = (value, unit) => {
@@ -1245,37 +1276,9 @@ function PatientPortal() {
     old: 'Old (>30m)'
   }[freshnessState] || 'No recent data';
 
-  useEffect(() => {
-    if (!patientId) return;
-    let cancelled = false;
-    setFeedbackLoading(true);
-    setFeedbackError('');
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from('patient_feedback')
-          .select('id, doctor_name, message, created_at')
-          .eq('patient_id', patientId)
-          .order('created_at', { ascending: false })
-          .limit(10);
-        if (error) throw error;
-        if (!cancelled) setFeedbackItems(data || []);
-      } catch (fbErr) {
-        if (!cancelled) {
-          setFeedbackItems([]);
-          setFeedbackError(fbErr?.message || 'Unable to load feedback right now.');
-        }
-      } finally {
-        if (!cancelled) setFeedbackLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [patientId]);
-
   return (
-    <main>
+    <>
+      <main>
   <section className="hero animate-fade-up">
         <h1 className="hero-title">Patient Overview</h1>
         <p className="hero-subtitle">Track real-time vitals, complete assessments, and generate AI health insights.</p>
@@ -1341,39 +1344,39 @@ function PatientPortal() {
           <div className="mt-4"><Link to="/patient/profile" className="btn btn-light">Edit</Link></div>
         </div>
       </section>
-
-      <section className="card mt-8">
-        <div className="aiq-section-header" style={{ marginBottom: '12px' }}>
+      <div className="card mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="aiq-eyebrow">Care guidance</p>
-            <h2>Doctor Feedback</h2>
+            <h3 className="card-title">Doctor Feedback</h3>
+            <p className="muted text-sm">Notes shared by your doctors after reviewing AI reports or questionnaires.</p>
           </div>
-          <span className="aiq-pill">{feedbackItems.length} note{feedbackItems.length === 1 ? '' : 's'}</span>
+          <button className="btn btn-light" onClick={fetchDoctorFeedback} disabled={feedbackLoading}>
+            {feedbackLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
         </div>
-        <p className="muted" style={{ marginBottom: '16px' }}>Your care team shares insights and next steps here.</p>
-        {feedbackLoading ? (
-          <div className="skeleton animate" style={{ height: 80, borderRadius: '1rem' }} />
-        ) : feedbackError ? (
-          <div className="alert alert-danger">{feedbackError}</div>
-        ) : feedbackItems.length === 0 ? (
-          <div className="aiq-empty-state">No feedback yet. Once a doctor shares guidance, it will appear here.</div>
-        ) : (
-          <ul className="aiq-context-list" style={{ gap: '12px' }}>
-            {feedbackItems.map((item) => (
-              <li key={item.id} className="aiq-subcard" style={{ marginTop: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                  <div>
-                    <strong>{item.doctor_name || 'Doctor'}</strong>
-                    <p className="muted" style={{ marginTop: '4px' }}>{item.message}</p>
-                  </div>
-                  <small className="muted">{formatTimestamp(item.created_at)}</small>
+        {feedbackError && <div className="alert alert-danger mt-3">{feedbackError}</div>}
+        <div className="mt-4 space-y-3">
+          {feedbackLoading && feedbackNotes.length === 0 ? (
+            <div className="skeleton animate" style={{ height: 68, borderRadius: '0.75rem' }} />
+          ) : feedbackNotes.length > 0 ? (
+            feedbackNotes.map(note => (
+              <div key={note.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white/70 dark:bg-slate-900/40">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-sm text-slate-500 dark:text-slate-300">{new Date(note.created_at).toLocaleString()}</span>
+                  {note.wasUnread && <span className="badge success">New</span>}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                <p className="mt-2 leading-relaxed">{note.message}</p>
+              </div>
+            ))
+          ) : (
+            <div className="alert alert-info mt-2">
+              No doctor feedback yet. Once a doctor reviews your shared reports, their notes will appear here.
+            </div>
+          )}
+        </div>
+      </div>
     </main>
+    </>
   );
 }
 
@@ -1560,30 +1563,50 @@ function QuestionnairePage() {
   // Fetch doctors (used for sharing reports)
   async function fetchDoctors() {
     try {
-      let data = [];
-      try {
-        const res = await supabase
-          .from('doctors')
-          .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res.error) throw res.error;
-        data = res.data || [];
-      } catch (_) {
-        const res2 = await supabase
-          .from('doctor_profiles')
-          .select('id, user_id, full_name, email, specialty, location, city, bio, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res2.error) throw res2.error;
-        data = res2.data || [];
-      }
+      const { data, error } = await supabase
+        .from('doctors')
+        .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
       setDoctors(data || []);
       try { setFilteredDoctors(data || []); } catch (_) {}
     } catch (err) {
       console.error('fetchDoctors error:', err);
+      setDoctors([]);
+      setFilteredDoctors([]);
     }
   }
+
+  useEffect(() => {
+    if (!Array.isArray(doctors) || doctors.length === 0) return;
+    if (!Array.isArray(selectedDoctors) || selectedDoctors.length === 0) return;
+
+    const doctorIdSet = new Set((doctors || []).map(doc => doc.id).filter(Boolean));
+    const legacyMap = new Map();
+    (doctors || []).forEach(doc => {
+      if (doc.user_id && doc.id) legacyMap.set(doc.user_id, doc.id);
+      if (doc.email && doc.id) legacyMap.set(doc.email, doc.id);
+    });
+
+    const normalized = [];
+    (selectedDoctors || []).forEach(entry => {
+      if (doctorIdSet.has(entry)) {
+        normalized.push(entry);
+        return;
+      }
+      if (legacyMap.has(entry)) {
+        normalized.push(legacyMap.get(entry));
+      }
+    });
+
+    const uniqueNormalized = Array.from(new Set(normalized));
+    const isSameLength = uniqueNormalized.length === selectedDoctors.length;
+    const isSameOrder = isSameLength && uniqueNormalized.every((val, idx) => val === selectedDoctors[idx]);
+    if (!isSameLength || !isSameOrder) {
+      setSelectedDoctors(uniqueNormalized);
+    }
+  }, [doctors, selectedDoctors]);
 
   // Keep filtered list in sync with query
   useEffect(() => {
@@ -1924,7 +1947,8 @@ function QuestionnairePage() {
   };
 
   return (
-    <main>
+    <>
+      <main>
         <div className="card questionnaire-container route-screen">
           <div style={{ maxWidth: 980, margin: '0 auto', padding: 20 }}>
         <div className="questionnaire-header">
@@ -1936,7 +1960,7 @@ function QuestionnairePage() {
           <button
             className="btn btn-primary btn-lg"
             onClick={startInterview}
-            disabled={iLoading.start || selectedDoctors.length === 0}
+            disabled={iLoading.start || selectedDoctors.length === 0 || doctors.length === 0}
             title={selectedDoctors.length === 0 ? "Please select at least one doctor first" : "Start Interview"}
             style={{ padding: '12px 28px', width: '100%', maxWidth: 420 }}
           >
@@ -1965,15 +1989,26 @@ function QuestionnairePage() {
                 <button className="btn btn-light" onClick={() => setDoctorQuery('')}>Clear</button>
               </div>
               <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-              {filteredDoctors.map(doctor => (
-                <label key={doctor.id || doctor.user_id} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id || doctor.user_id) ? '#f0f8ff' : 'transparent' }}>
+              {filteredDoctors.filter(doc => Boolean(doc.id)).map(doctor => (
+                <label
+                  key={doctor.id}
+                  className="doctor-option"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id) ? '#f0f8ff' : 'transparent' }}
+                >
                   <input
                     type="checkbox"
-                    checked={selectedDoctors.includes(doctor.id || doctor.user_id)}
+                    checked={selectedDoctors.includes(doctor.id)}
                     onChange={(e) => {
-                      const doctorId = doctor.id || doctor.user_id;
-                      if (e.target.checked) setSelectedDoctors(prev => [...prev, doctorId]);
-                      else setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                      const doctorId = doctor.id;
+                      if (!doctorId) return;
+                      if (e.target.checked) {
+                        setSelectedDoctors(prev => {
+                          if (prev.includes(doctorId)) return prev;
+                          return [...prev, doctorId];
+                        });
+                      } else {
+                        setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                      }
                     }}
                   />
                   <div>
@@ -2142,6 +2177,7 @@ function QuestionnairePage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 
@@ -2343,7 +2379,7 @@ function ProfilePage() {
     try {
       await supabase
         .from('patients')
-        .upsert(payload, { onConflict: 'user_id' })
+        .upsert(payload)
         .select();
     } catch (e) {
       console.warn('patients upsert failed:', e?.message || e);
@@ -2798,8 +2834,10 @@ function DoctorPortal() {
   const [lastSynced, setLastSynced] = useState(null);
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackMessage, setFeedbackMessage] = useState('');
-  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [feedbackAlert, setFeedbackAlert] = useState('');
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
+
+  const doctorDisplayName = auth?.profile?.full_name || auth?.session?.user?.user_metadata?.full_name || auth?.session?.user?.email || 'Doctor';
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
@@ -2949,59 +2987,6 @@ function DoctorPortal() {
     loadSharedPatients();
   };
 
-  const openFeedbackPanel = (patient) => {
-    setFeedbackTarget(patient);
-    setFeedbackMessage('');
-    setFeedbackAlert('');
-  };
-
-  const handleSubmitFeedback = async (event) => {
-    event.preventDefault();
-    if (!feedbackTarget) {
-      setFeedbackAlert('Select a patient first.');
-      return;
-    }
-    const trimmed = feedbackMessage.trim();
-    if (!trimmed) {
-      setFeedbackAlert('Feedback cannot be empty.');
-      return;
-    }
-    setFeedbackSubmitting(true);
-    setFeedbackAlert('');
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      const doctorName = auth?.profile?.full_name || user.email || 'Doctor';
-      const payload = {
-        patient_id: feedbackTarget.user_id,
-        doctor_id: user.id,
-        doctor_name: doctorName,
-        message: trimmed,
-        created_at: new Date().toISOString()
-      };
-      const { error: insertErr } = await supabase.from('patient_feedback').insert([payload]);
-      if (insertErr) throw insertErr;
-      try {
-        await supabase.from('notifications').insert([{
-          doctor_id: user.id,
-          patient_id: feedbackTarget.user_id,
-          type: 'doctor_feedback',
-          message: trimmed.slice(0, 280),
-          is_read: false
-        }]);
-      } catch (notifErr) {
-        console.warn('Feedback notification failed:', notifErr?.message || notifErr);
-      }
-      setFeedbackAlert('Feedback sent successfully.');
-      setFeedbackMessage('');
-      setFeedbackTarget(null);
-    } catch (fbErr) {
-      setFeedbackAlert(fbErr?.message || 'Unable to send feedback right now.');
-    } finally {
-      setFeedbackSubmitting(false);
-    }
-  };
-
   const severityCounts = patients.reduce((acc, p) => {
     if (p.risk === 'high') acc.high++;
     else if (p.risk === 'medium') acc.medium++;
@@ -3009,8 +2994,56 @@ function DoctorPortal() {
     return acc;
   }, { low: 0, medium: 0, high: 0 });
 
+  const openFeedbackForm = (patient) => {
+    setFeedbackTarget(patient);
+    setFeedbackMessage('');
+    setFeedbackStatus(null);
+  };
+
+  const closeFeedbackForm = () => {
+    if (feedbackSaving) return;
+    setFeedbackTarget(null);
+    setFeedbackMessage('');
+    setFeedbackStatus(null);
+  };
+
+  const submitFeedback = async (event) => {
+    event?.preventDefault?.();
+    if (!feedbackTarget) return;
+    const trimmed = feedbackMessage.trim();
+    if (!trimmed) {
+      setFeedbackStatus({ type: 'error', message: 'Please enter feedback before sending.' });
+      return;
+    }
+    setFeedbackSaving(true);
+    setFeedbackStatus(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const payload = {
+        doctor_id: user.id,
+        patient_id: feedbackTarget.user_id,
+        type: 'doctor_feedback',
+        message: `Feedback from ${doctorDisplayName}: ${trimmed}`,
+        is_read: false
+      };
+      const { error: insertError } = await supabase.from('notifications').insert(payload);
+      if (insertError) throw insertError;
+      setFeedbackStatus({ type: 'success', message: 'Feedback sent to patient.' });
+      setFeedbackMessage('');
+      setTimeout(() => {
+        closeFeedbackForm();
+      }, 800);
+    } catch (feedbackError) {
+      setFeedbackStatus({ type: 'error', message: feedbackError?.message || String(feedbackError) });
+    } finally {
+      setFeedbackSaving(false);
+    }
+  };
+
   return (
-    <main>
+    <>
+      <main>
       <section className="hero">
         <h1 className="hero-title">Doctor Dashboard</h1>
         <p className="hero-subtitle">Only patients who explicitly shared their records appear in your panel.</p>
@@ -3086,7 +3119,7 @@ function DoctorPortal() {
                     >
                       View Details
                     </Link>
-                    <button className="btn btn-success ml-2" onClick={() => openFeedbackPanel(patient)}>
+                    <button className="btn btn-success ml-2" onClick={() => openFeedbackForm(patient)}>
                       Add Feedback
                     </button>
                   </td>
@@ -3095,40 +3128,53 @@ function DoctorPortal() {
             </tbody>
           </table>
         </div>
-        {feedbackTarget && (
-          <div className="card mt-4">
-            <h4 className="card-title">Send feedback to {feedbackTarget.name}</h4>
-            <form onSubmit={handleSubmitFeedback}>
-              <label className="form-label" htmlFor="doctor-feedback-text">Message</label>
+      </div>
+      </main>
+      {feedbackTarget && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+            padding: '16px'
+          }}
+        >
+          <div className="card" style={{ maxWidth: 520, width: '100%', padding: 24, position: 'relative' }}>
+            <h3 className="card-title" style={{ marginBottom: 4 }}>Send Feedback</h3>
+            <p className="muted" style={{ marginBottom: 12 }}>Patient: {feedbackTarget.name}</p>
+            {feedbackStatus && (
+              <div className={`alert ${feedbackStatus.type === 'error' ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: 12 }}>
+                {feedbackStatus.message}
+              </div>
+            )}
+            <form onSubmit={submitFeedback}>
               <textarea
-                id="doctor-feedback-text"
                 className="form-input"
-                rows={4}
-                placeholder="Summarize key guidance, next steps, or encouragement..."
+                rows={5}
                 value={feedbackMessage}
                 onChange={(e) => setFeedbackMessage(e.target.value)}
+                placeholder="Share clinical notes, next steps, or recommendations"
+                style={{ width: '100%', minHeight: 140, resize: 'vertical', marginBottom: 16 }}
+                disabled={feedbackSaving}
               />
-              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <button type="submit" className="btn btn-primary" disabled={feedbackSubmitting}>
-                  {feedbackSubmitting ? 'Sending…' : 'Send Feedback'}
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => { setFeedbackTarget(null); setFeedbackAlert(''); }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <button type="button" className="btn btn-light" onClick={closeFeedbackForm} disabled={feedbackSaving}>
                   Cancel
                 </button>
+                <button type="submit" className="btn btn-primary" disabled={feedbackSaving}>
+                  {feedbackSaving ? 'Sending…' : 'Send Feedback'}
+                </button>
               </div>
-              {feedbackAlert && (
-                <p
-                  className="muted"
-                  style={{ marginTop: '8px', color: feedbackAlert.includes('successfully') ? 'var(--success)' : 'var(--danger)' }}
-                >
-                  {feedbackAlert}
-                </p>
-              )}
             </form>
           </div>
-        )}
-      </div>
-    </main>
+        </div>
+      )}
+    </>
   );
 }
 

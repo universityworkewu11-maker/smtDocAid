@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
@@ -21,6 +21,25 @@ const LS_KEYS = {
 const initialInterviewState = { sessionId: null, question: '', turns: [], done: false, report: '' };
 const initialContextState = { patient: {}, vitals: [], uploads: [] };
 const PATIENT_COLUMNS = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,gender';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isValidUUID = (value) => {
+  if (!value) return false;
+  const str = String(value).trim();
+  return UUID_REGEX.test(str);
+};
+
+const resolveDoctorId = (raw, lookupMap) => {
+  if (!raw) return null;
+  const direct = lookupMap.get(raw);
+  if (direct) return direct;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    return lookupMap.get(trimmed) || lookupMap.get(trimmed.toLowerCase()) || null;
+  }
+  return null;
+};
+
 
 const sanitizeBase = (base) => (base || '').replace(/\/$/, '');
 
@@ -159,6 +178,32 @@ function AIQuestionnairesPage() {
     const stored = window.localStorage.getItem(LS_KEYS.language);
     return stored === 'bn' ? 'bn' : 'en';
   });
+
+  const doctorIdentityMap = useMemo(() => {
+    const map = new Map();
+    (doctors || []).forEach((doc) => {
+      if (!doc) return;
+      if (doc.id) {
+        map.set(doc.id, doc.id);
+      }
+      if (doc.user_id) {
+        map.set(doc.user_id, doc.id);
+      }
+      if (doc.email) {
+        map.set(doc.email, doc.id);
+        map.set(doc.email.toLowerCase(), doc.id);
+      }
+    });
+    return map;
+  }, [doctors]);
+
+  const doctorIdSet = useMemo(() => {
+    const ids = new Set();
+    (doctors || []).forEach((doc) => {
+      if (doc?.id) ids.add(doc.id);
+    });
+    return ids;
+  }, [doctors]);
 
   const persistInterview = useCallback((next) => {
     try {
@@ -474,6 +519,14 @@ function AIQuestionnairesPage() {
         alert('Please select at least one doctor before sharing the report.');
         return;
       }
+      const shareableDoctorIds = selectedDoctors.filter((doctorId) => doctorIdSet.has(doctorId));
+      if (!shareableDoctorIds.length) {
+        alert('Selected doctors are no longer available. Please re-select from the latest list before sharing.');
+        return;
+      }
+      if (shareableDoctorIds.length < selectedDoctors.length) {
+        console.warn('One or more selected doctors were skipped because their profiles are unavailable.');
+      }
       try {
         const { data: authData } = await supabase.auth.getUser();
         const user = authData?.user;
@@ -492,7 +545,7 @@ function AIQuestionnairesPage() {
           .select('id')
           .single();
         if (diagError) throw diagError;
-        const notifications = selectedDoctors.map((doctorId) => ({
+        const notifications = shareableDoctorIds.map((doctorId) => ({
           doctor_id: doctorId,
           patient_id: user.id,
           diagnosis_id: diagData.id,
@@ -508,7 +561,7 @@ function AIQuestionnairesPage() {
         alert('Report generated but failed to save/share. Please try again.');
       }
     },
-    [selectedDoctors, interviewLanguage]
+    [selectedDoctors, interviewLanguage, doctorIdSet]
   );
 
   const generateInterviewReport = async () => {
@@ -547,6 +600,28 @@ function AIQuestionnairesPage() {
   }, [refreshContext]);
 
   useEffect(() => {
+    setSelectedDoctors((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      const normalized = [];
+      prev.forEach((value) => {
+        const resolved = resolveDoctorId(value, doctorIdentityMap);
+        if (resolved) {
+          if (!normalized.includes(resolved)) normalized.push(resolved);
+          return;
+        }
+        if (isValidUUID(value)) {
+          const trimmed = String(value).trim();
+          if (!normalized.includes(trimmed)) normalized.push(trimmed);
+        }
+      });
+      if (normalized.length === prev.length && normalized.every((val, idx) => val === prev[idx])) {
+        return prev;
+      }
+      return normalized;
+    });
+  }, [doctorIdentityMap]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(LS_KEYS.selectedDoctors, JSON.stringify(selectedDoctors));
     } catch (_) {}
@@ -564,6 +639,12 @@ function AIQuestionnairesPage() {
     } catch (_) {}
   }, [serverBase]);
 
+  const availableDoctorCount = useMemo(() => {
+    if (!Array.isArray(selectedDoctors) || selectedDoctors.length === 0) return 0;
+    if (!doctorIdSet.size) return 0;
+    return selectedDoctors.filter((id) => doctorIdSet.has(id)).length;
+  }, [selectedDoctors, doctorIdSet]);
+  const hasUnavailableSelections = selectedDoctors.length > 0 && availableDoctorCount < selectedDoctors.length;
   const interviewStatus = interview.done ? 'Completed' : interview.sessionId ? 'In Progress' : 'Idle';
   const languageLabel = interviewLanguage === 'bn' ? 'Bangla' : 'English';
   const normalizedQuery = doctorSearch.trim().toLowerCase();
@@ -577,14 +658,14 @@ function AIQuestionnairesPage() {
   const initialDoctorList = normalizedQuery ? matchingDoctors : doctors.slice(0, MAX_VISIBLE_DOCTORS);
   const selectedSupplements = !normalizedQuery
     ? doctors.filter((doc) => {
-        const key = doc?.user_id || doc?.id;
+        const key = doc?.id;
         if (!key) return false;
-        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => (d?.user_id || d?.id) === key);
+        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => d?.id === key);
       })
     : [];
   const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
   const noDoctorMatches = normalizedQuery && displayedDoctors.length === 0;
-  const shareDisabled = !interview.report || !selectedDoctors.length;
+  const shareDisabled = !interview.report || availableDoctorCount === 0;
 
   return (
     <div className="aiq-page">
@@ -599,7 +680,7 @@ function AIQuestionnairesPage() {
                 {interview.sessionId ? 'Interview active' : 'Interview idle'}
               </span>
               <span className="aiq-pill">Status: {interviewStatus}</span>
-              <span className="aiq-pill">Selected doctors: {selectedDoctors.length}</span>
+              <span className="aiq-pill">Selected doctors: {availableDoctorCount}</span>
               <span className="aiq-pill">Turns captured: {interview.turns.length}</span>
               <span className="aiq-pill">Language: {languageLabel}</span>
               {interview.report && <span className="aiq-pill aiq-pill-info">Report ready</span>}
@@ -743,7 +824,7 @@ function AIQuestionnairesPage() {
                   <p className="aiq-eyebrow">Care team</p>
                   <h2>Select doctors to notify</h2>
                 </div>
-                <span className="aiq-pill">{selectedDoctors.length} selected</span>
+                <span className="aiq-pill">{availableDoctorCount} selected</span>
               </header>
               <div className="aiq-doctor-toolbar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
                 <input
@@ -762,21 +843,28 @@ function AIQuestionnairesPage() {
                 </small>
               </div>
               <p className="muted">Choose the clinicians who should automatically receive updates when you save or share a report.</p>
+              {hasUnavailableSelections && (
+                <small className="aiq-hint" style={{ color: '#b45309' }}>
+                  Some previously selected doctors are no longer available. Please re-select them below.
+                </small>
+              )}
               {noDoctorMatches ? (
                 <div className="aiq-empty-state">No doctors match that search.</div>
               ) : displayedDoctors.length > 0 ? (
                 <div className="aiq-doctor-grid">
-                  {displayedDoctors.map((doctor) => {
-                    const doctorKey = doctor?.user_id || doctor?.id;
-                    const isChecked = doctorKey ? selectedDoctors.includes(doctorKey) : false;
+                  {displayedDoctors.map((doctor, idx) => {
+                    const doctorId = doctor?.id;
+                    const optionKey = doctorId || doctor?.user_id || doctor?.email || `doctor-${idx}`;
+                    const isSelectable = Boolean(doctorId);
+                    const isChecked = isSelectable ? selectedDoctors.includes(doctorId) : false;
                     return (
-                      <label key={doctorKey || doctor?.email || Math.random()} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
+                      <label key={optionKey} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}>
                         <input
                           type="checkbox"
                           checked={isChecked}
+                          disabled={!isSelectable}
                           onChange={(e) => {
-                            const doctorId = doctor?.user_id || doctor?.id;
-                            if (!doctorId) return;
+                            if (!isSelectable) return;
                             if (e.target.checked) {
                               setSelectedDoctors((prev) => Array.from(new Set([...prev, doctorId])));
                             } else {
@@ -787,6 +875,7 @@ function AIQuestionnairesPage() {
                         <div>
                           <div className="aiq-doctor-name">{doctor.full_name || doctor.name || 'Doctor'}</div>
                           <div className="muted">{doctor.specialist || doctor.bio || 'General practice'}</div>
+                          {!isSelectable && <small className="muted">Profile not eligible for sharing</small>}
                         </div>
                       </label>
                     );
@@ -811,7 +900,7 @@ function AIQuestionnairesPage() {
                 </div>
                 <div>
                   <strong>Doctors selected</strong>
-                  <span>{selectedDoctors.length}</span>
+                  <span>{availableDoctorCount}</span>
                 </div>
               </div>
               <button
@@ -819,9 +908,14 @@ function AIQuestionnairesPage() {
                 onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
                 disabled={shareDisabled}
               >
-                Share with doctor{selectedDoctors.length === 1 ? '' : 's'}
+                Share with doctor{availableDoctorCount === 1 ? '' : 's'}
               </button>
               <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
+              {hasUnavailableSelections && (
+                <small className="aiq-hint" style={{ color: '#b45309' }}>
+                  One or more saved selections are unavailable. Re-select them to notify those doctors.
+                </small>
+              )}
             </section>
           </div>
         </main>
