@@ -302,6 +302,7 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 	setCorsHeaders(req, res);
 	try {
 		const { sessionId, answer, language } = req.body || {};
+		if (!sessionId) return res.status(400).json({ ok: false, error: 'missing sessionId' });
 		const sess = sessions.get(sessionId);
 		if (!sess) return res.status(400).json({ ok: false, error: 'invalid sessionId' });
 		const lang = language === 'bn' ? 'bn' : sess.language || 'en';
@@ -328,6 +329,24 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 		return res.json({ ok: true, sessionId, question: done ? '' : question, done });
 	} catch (e) {
 		return res.status(500).json({ ok: false, error: e?.message || String(e) });
+	}
+});
+
+// Internal: inspect active in-memory interview sessions (dev/ops only)
+// Protected by INTERNAL_SECRET header or body field. Returns minimal session metadata.
+app.get('/internal/debug-sessions', (req, res) => {
+	setCorsHeaders(req, res);
+	const secret = process.env.INTERNAL_SECRET;
+	const provided = req.get('x-internal-secret') || req.query?.secret;
+	if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
+	try {
+		const out = [];
+		for (const [id, s] of sessions.entries()) {
+			out.push({ sessionId: id, turns: s.turns || 0, createdAt: s.createdAt || null, language: s.language || null });
+		}
+		return res.json({ ok: true, count: out.length, sessions: out });
+	} catch (err) {
+		return res.status(500).json({ ok: false, error: String(err) });
 	}
 });
 
