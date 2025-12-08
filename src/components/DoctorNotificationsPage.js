@@ -20,30 +20,25 @@ const DoctorNotificationsPage = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Find this doctor's `doctors.id` (preferred) and also use `doctor_user_id`.
-      const { data: doctorRows, error: doctorErr } = await supabase
+      // If a doctors row exists linking to this auth user, prefer that id for doctor lookup
+      const { data: doctorRow } = await supabase
         .from('doctors')
         .select('id, user_id')
         .eq('user_id', user.id)
         .maybeSingle();
+      const doctorIdForQuery = doctorRow?.id || null;
 
-      const doctorIdForQuery = doctorRows?.id || null;
-
-      const { data, error } = await supabase
-        .from('notifications')
-        .select(`
+      const baseSelect = `
+        id,
+        message,
+        type,
+        is_read,
+        created_at,
+        diagnosis_id,
+        patient_id,
+        patient:patient_id (
           id,
-          message,
-          type,
-          is_read,
-          created_at,
-          diagnosis_id,
-          patient_id,
-          patient:patient_id (
-            id,
-            user_id,
-        let data;
-        let error;
+          user_id,
           full_name,
           name,
           email
@@ -55,45 +50,35 @@ const DoctorNotificationsPage = () => {
         )
       `;
 
-      let data;
-      let error;
+      let data = null;
+      let error = null;
 
-      // Try query using doctor_user_id (if the column exists). If that fails with a column-not-found error, fall back.
+      // Try to query notifications. Prefer matching by doctor_id = auth uid, but if a doctors.id exists, include it as an alternative.
       try {
         if (doctorIdForQuery) {
           ({ data, error } = await supabase
             .from('notifications')
             .select(baseSelect)
-            .or(`doctor_user_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}`)
+            .or(`doctor_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}`)
             .order('created_at', { ascending: false }));
         } else {
           ({ data, error } = await supabase
             .from('notifications')
             .select(baseSelect)
-            .eq('doctor_user_id', user.id)
+            .eq('doctor_id', user.id)
             .order('created_at', { ascending: false }));
         }
         if (error) throw error;
       } catch (err) {
-        // If error indicates missing column `doctor_user_id`, retry with safer query by doctor_id only
+        // If the column is missing or another schema issue, try safer fallbacks: query by doctor_id only (already attempted), or by doctors.id if present.
         const msg = err?.message || String(err);
-        if (msg.includes('doctor_user_id') || (err?.code === '42703')) {
+        if (msg.includes('doctor_id') || (err?.code === '42703')) {
           try {
             if (doctorIdForQuery) {
               const q = await supabase
                 .from('notifications')
                 .select(baseSelect)
                 .eq('doctor_id', doctorIdForQuery)
-                .order('created_at', { ascending: false });
-              data = q.data;
-              error = q.error;
-              if (error) throw error;
-            } else {
-              // Last resort: query by doctor_id matching auth.user.id (if schema used that way)
-              const q = await supabase
-                .from('notifications')
-                .select(baseSelect)
-                .eq('doctor_id', user.id)
                 .order('created_at', { ascending: false });
               data = q.data;
               error = q.error;
@@ -106,6 +91,10 @@ const DoctorNotificationsPage = () => {
           throw err;
         }
       }
+
+      setNotifications(data || []);
+    } catch (e) {
+      setError(e?.message || String(e));
     } finally {
       setLoading(false);
     }
