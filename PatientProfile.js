@@ -161,11 +161,14 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
         updated_at: new Date().toISOString()
       };
 
-      const { data: savedPatient, error: patientError } = await supabase
+      const { data: savedPatient, error: patientError, status, statusText } = await supabase
         .from('patients')
         .upsert(patientPayload, { onConflict: 'user_id' })
         .select()
         .single();
+
+      // Diagnostic logging to help surface why saves may silently fail
+      console.debug('patients.upsert response:', { savedPatient, patientError, status, statusText });
 
       if (patientError) throw patientError;
 
