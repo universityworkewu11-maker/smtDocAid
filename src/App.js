@@ -327,13 +327,14 @@ function AuthProvider({ children }) {
         // Ensure a patient profile row exists for patients
         try {
           await supabase.from('patient_profiles').upsert({
-            user_id: userId,
-            full_name: existing.full_name || null,
-            phone: '',
-            address: '',
-            medical_history: '',
-            current_medications: ''
-          });
+              user_id: userId,
+              full_name: existing.full_name || null,
+              phone: '',
+              address: '',
+              medical_history: '',
+              current_medications: '',
+              gender: null
+            });
         } catch (e) {
           console.warn('ensure patient_profiles (existing) failed:', e?.message || e);
         }
@@ -344,15 +345,25 @@ function AuthProvider({ children }) {
           const meta = userRes?.user?.user_metadata || {};
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
           try {
-            await supabase
-              .from('patients')
-              .upsert({
-                user_id: userId,
-                full_name,
-                name: full_name,
-                email
-              }, { onConflict: 'user_id' })
-              .select();
+              try {
+                await supabase
+                  .from('patients')
+                  .upsert({
+                    user_id: userId,
+                    full_name,
+                    name: full_name,
+                    email,
+                    gender: null
+                  }, { onConflict: 'user_id' })
+                  .select();
+              } catch (err) {
+                console.warn('ensure patients (existing) upsert failed, attempting update:', err?.message || err);
+                try {
+                  await supabase.from('patients').update({ full_name, name: full_name, email, gender: null }).eq('user_id', userId);
+                } catch (uErr) {
+                  console.warn('ensure patients (existing) update fallback failed:', uErr?.message || uErr);
+                }
+              }
           } catch (err) {
             console.warn('ensure patients (existing) upsert failed, attempting update:', err?.message || err);
             try {
@@ -2262,6 +2273,7 @@ function ProfilePage() {
     age: "",
     dob: "",
     address: "",
+    gender: "",
     patientId: null
   });
   const [loading, setLoading] = useState(true);
@@ -2330,6 +2342,7 @@ function ProfilePage() {
       phone: normalizedPhone,
       age: normalizedAge != null ? String(normalizedAge) : "",
       dob: normalizedDob,
+      gender: row?.gender || row?.sex || "",
       address: row?.address || "",
       patientId: normalizedPatientId
     };
@@ -2362,6 +2375,11 @@ function ProfilePage() {
     const resolvedDob = source.dob ?? source.date_of_birth ?? source.birth_date ?? source.birthdate ?? profileData.dob;
     if (!preserveExisting || resolvedDob) {
       payload.date_of_birth = resolvedDob || null;
+    }
+
+    const resolvedGender = source.gender ?? source.sex ?? profileData.gender;
+    if (!preserveExisting || (resolvedGender !== undefined && resolvedGender !== null)) {
+      payload.gender = resolvedGender || null;
     }
 
     if (!preserveExisting || Number.isFinite(parsedAge)) {
@@ -2597,6 +2615,8 @@ function ProfilePage() {
         phone: profileData.phone,
         date_of_birth: profileData.dob,
         address: profileData.address
+        ,
+        gender: profileData.gender || null
       };
 
       const { error } = await supabase
@@ -2628,6 +2648,7 @@ function ProfilePage() {
           phone: profileData.phone || null,
           address: profileData.address || null,
           date_of_birth: profileData.dob || null,
+          gender: profileData.gender || null,
           age: profileData.age ? (Number.isFinite(Number(profileData.age)) ? Number(profileData.age) : null) : null
         };
         try {
