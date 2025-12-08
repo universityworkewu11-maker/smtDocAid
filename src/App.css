@@ -2097,10 +2097,10 @@ main {
 }
 
 /* Horizontal layout - Question and Transcript side by side on wide screens */
-@media (min-width: 1200px) {
+@media (min-width: 1000px) {
   .interview-workspace {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1.1fr 0.9fr;
     gap: var(--space-24);
     align-items: start;
   }
@@ -2134,10 +2134,10 @@ main {
   }
 }
 
-/* Ultra-wide layout - More aggressive horizontal layout */
-@media (min-width: 1600px) {
+/* Ultra-wide layout - Aggressive horizontal layout */
+@media (min-width: 1200px) {
   .interview-workspace {
-    grid-template-columns: 1.2fr 0.8fr;
+    grid-template-columns: 1.3fr 0.7fr;
     gap: var(--space-32);
   }
 
@@ -2154,17 +2154,39 @@ main {
   }
 }
 
-/* Extremely wide screens - Maximum utilization */
-@media (min-width: 1920px) {
+/* Maximum wide screens - Extreme utilization */
+@media (min-width: 1400px) {
   .interview-workspace {
-    grid-template-columns: 1.5fr 0.7fr;
+    grid-template-columns: 1.6fr 0.4fr;
     gap: var(--space-40);
-    max-width: 1800px;
-    margin: 0 auto;
   }
 
   .interview-report-section {
     margin-top: var(--space-32);
+  }
+}
+
+/* Ultra-maximum screens - Absolute maximum utilization */
+@media (min-width: 1600px) {
+  .interview-workspace {
+    grid-template-columns: 2fr 0.3fr;
+    gap: var(--space-48);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-40);
+  }
+}
+
+/* Insanely wide screens - No limits */
+@media (min-width: 2000px) {
+  .interview-workspace {
+    grid-template-columns: 2.5fr 0.2fr;
+    gap: var(--space-56);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-48);
   }
 }
 
