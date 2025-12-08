@@ -2658,11 +2658,18 @@ function ProfilePage() {
           age: profileData.age ? (Number.isFinite(Number(profileData.age)) ? Number(profileData.age) : null) : null
         };
         try {
-          const { error: patientsErr } = await supabase.from('patients').upsert(patientsPayload, { onConflict: 'user_id' });
+          const { data: patientsData, error: patientsErr, status, statusText } = await supabase
+            .from('patients')
+            .upsert(patientsPayload, { onConflict: 'user_id' })
+            .select();
+
+          console.debug('patients.upsert (profile save) result:', { patientsData, patientsErr, status, statusText });
+
           if (patientsErr) {
             console.warn('patients upsert (profile save) returned error, attempting update:', patientsErr);
             try {
-              await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id);
+              const { data: updated, error: updateErr } = await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id).select();
+              console.debug('patients.update (profile save) result:', { updated, updateErr });
             } catch (uE) {
               console.warn('patients update (profile save) fallback failed:', uE?.message || uE);
             }
@@ -2670,7 +2677,8 @@ function ProfilePage() {
         } catch (eUp) {
           console.warn('patients upsert (profile save) exception, attempting update fallback:', eUp?.message || eUp);
           try {
-            await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id);
+            const { data: updated, error: updateErr } = await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id).select();
+            console.debug('patients.update (profile save) exception-fallback result:', { updated, updateErr });
           } catch (uEx) {
             console.warn('patients update (profile save) fallback failed:', uEx?.message || uEx);
           }
