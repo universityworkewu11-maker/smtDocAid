@@ -343,15 +343,24 @@ function AuthProvider({ children }) {
           const email = userRes?.user?.email || null;
           const meta = userRes?.user?.user_metadata || {};
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
-          await supabase
-            .from('patients')
-            .upsert({
-              user_id: userId,
-              full_name,
-              name: full_name,
-              email
-            })
-            .select();
+          try {
+            await supabase
+              .from('patients')
+              .upsert({
+                user_id: userId,
+                full_name,
+                name: full_name,
+                email
+              }, { onConflict: 'user_id' })
+              .select();
+          } catch (err) {
+            console.warn('ensure patients (existing) upsert failed, attempting update:', err?.message || err);
+            try {
+              await supabase.from('patients').update({ full_name, name: full_name, email }).eq('user_id', userId);
+            } catch (uErr) {
+              console.warn('ensure patients (existing) update fallback failed:', uErr?.message || uErr);
+            }
+          }
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
         }
@@ -2365,10 +2374,15 @@ function ProfilePage() {
     try {
       await supabase
         .from('patients')
-        .upsert(payload)
+        .upsert(payload, { onConflict: 'user_id' })
         .select();
     } catch (e) {
-      console.warn('patients upsert failed:', e?.message || e);
+      console.warn('patients upsert failed, attempting update fallback:', e?.message || e);
+      try {
+        await supabase.from('patients').update(payload).eq('user_id', payload.user_id);
+      } catch (uErr) {
+        console.warn('patients update fallback failed:', uErr?.message || uErr);
+      }
     }
   };
 
@@ -2616,9 +2630,23 @@ function ProfilePage() {
           date_of_birth: profileData.dob || null,
           age: profileData.age ? (Number.isFinite(Number(profileData.age)) ? Number(profileData.age) : null) : null
         };
-        const { error: patientsErr } = await supabase.from('patients').upsert(patientsPayload);
-        if (patientsErr) {
-          console.warn('patients upsert (profile save) failed:', patientsErr);
+        try {
+          const { error: patientsErr } = await supabase.from('patients').upsert(patientsPayload, { onConflict: 'user_id' });
+          if (patientsErr) {
+            console.warn('patients upsert (profile save) returned error, attempting update:', patientsErr);
+            try {
+              await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id);
+            } catch (uE) {
+              console.warn('patients update (profile save) fallback failed:', uE?.message || uE);
+            }
+          }
+        } catch (eUp) {
+          console.warn('patients upsert (profile save) exception, attempting update fallback:', eUp?.message || eUp);
+          try {
+            await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id);
+          } catch (uEx) {
+            console.warn('patients update (profile save) fallback failed:', uEx?.message || uEx);
+          }
         }
       } catch (patientsEx) {
         console.warn('patients upsert (profile save) exception:', patientsEx);
