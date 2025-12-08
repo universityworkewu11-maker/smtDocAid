@@ -2485,12 +2485,12 @@ function ProfilePage() {
                 const { data: userRes } = await supabase.auth.getUser();
                 const email = userRes?.user?.email || null;
                 const meta = userRes?.user?.user_metadata || {};
-                const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
+                const full_name = auth.profile?.full_name || meta.full_name || (email ? email.split('@')[0] : null);
                 try {
                   const { data: ensuredPatients, error: ensuredPatientsErr } = await supabase
                     .from('patients')
                     .upsert({
-                      user_id: userId,
+                      user_id: auth.session.user.id,
                       full_name,
                       name: full_name,
                       email
