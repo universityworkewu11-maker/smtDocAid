@@ -72,27 +72,15 @@ function PatientProfilePage() {
         throw new Error('User not authenticated');
       }
 
-      const [patientResponse, profileResponse] = await Promise.all([
-        supabase
-          .from('patients')
-          .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,updated_at,created_at')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        supabase
-          .from('patient_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle()
-      ]);
+      const { data: patientResponse, error: patientErr } = await supabase
+        .from('patients')
+        .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,updated_at,created_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (patientResponse.error && patientResponse.error.code !== 'PGRST116') {
-        throw patientResponse.error;
-      }
-      if (profileResponse.error && profileResponse.error.code !== 'PGRST116') {
-        throw profileResponse.error;
-      }
+      if (patientErr && patientErr.code !== 'PGRST116') throw patientErr;
 
-      let resolvedPatient = patientResponse.data || null;
+      let resolvedPatient = patientResponse || null;
       if (!resolvedPatient) {
         const fallbackName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
         const basePayload = {
@@ -110,10 +98,9 @@ function PatientProfilePage() {
         resolvedPatient = insertedPatient;
       }
 
-      const resolvedProfile = profileResponse.data || null;
-      const merged = mergePatientRecords(resolvedPatient, resolvedProfile, user);
+      const merged = mergePatientRecords(resolvedPatient, null, user);
       setPatientRow(resolvedPatient);
-      setProfileRow(resolvedProfile);
+      setProfileRow(null);
       setPatientData(merged);
       setFormData(merged);
     } catch (err) {
@@ -189,17 +176,13 @@ function PatientProfilePage() {
         profilePayload.id = profileRow.id;
       }
 
-      const { data: savedProfile, error: profileError } = await supabase
-        .from('patient_profiles')
-        .upsert(profilePayload, { onConflict: 'user_id' })
-        .select()
-        .single();
-
-      if (profileError) throw profileError;
-
-      const merged = mergePatientRecords(savedPatient, savedProfile, user);
+      // Do not write to legacy `patient_profiles` here; store core patient fields
+      // in `patients` only to avoid missing-column errors. If extended profile
+      // storage is required, add a migration to create the `patient_profiles`
+      // fields or a new table for medical details.
+      const merged = mergePatientRecords(savedPatient, null, user);
       setPatientRow(savedPatient);
-      setProfileRow(savedProfile);
+      setProfileRow(null);
       setPatientData(merged);
       setFormData(merged);
       setEditing(false);

@@ -88,27 +88,15 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
       }
 
       try {
-        const [patientResponse, profileResponse] = await Promise.all([
-          supabase
-            .from('patients')
-            .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,created_at,updated_at')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('patient_profiles')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle()
-        ]);
+        const { data: patientData, error: patientErr } = await supabase
+          .from('patients')
+          .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,created_at,updated_at')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-        if (patientResponse.error && patientResponse.error.code !== 'PGRST116') {
-          throw patientResponse.error;
-        }
-        if (profileResponse.error && profileResponse.error.code !== 'PGRST116') {
-          throw profileResponse.error;
-        }
+        if (patientErr && patientErr.code !== 'PGRST116') throw patientErr;
 
-        let resolvedPatient = patientResponse.data || null;
+        let resolvedPatient = patientData || null;
         if (!resolvedPatient) {
           const fallbackName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
           const basePayload = {
@@ -126,12 +114,11 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
           resolvedPatient = insertedPatient;
         }
 
-        const resolvedProfile = profileResponse.data || null;
         setPatientRow(resolvedPatient);
-        setProfileRow(resolvedProfile);
+        setProfileRow(null);
         setPatientData(prev => ({
           ...prev,
-          ...buildComponentState(resolvedPatient, resolvedProfile)
+          ...buildComponentState(resolvedPatient, null)
         }));
       } catch (err) {
         console.error('Error loading patient data:', err);
@@ -182,40 +169,16 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
 
       if (patientError) throw patientError;
 
-      const ensuredPatientId = profileRow?.patient_id || patientData.patientId || generatePatientId();
-      const profilePayload = {
-        user_id: user.id,
-        patient_id: ensuredPatientId,
-        name: canonicalName,
-        gender: patientData.gender || null,
-        age: patientData.age || calculateAge(patientData.dateOfBirth),
-        date_of_birth: patientData.dateOfBirth || null,
-        phone: patientData.phone || null,
-        address: patientData.address || null,
-        emergency_contact: patientData.emergencyContact || null,
-        medical_history: patientData.medicalHistory || null,
-        allergies: patientData.allergies || null,
-        medications: patientData.medications || null,
-        updated_at: new Date().toISOString()
-      };
-
-      if (profileRow?.id) {
-        profilePayload.id = profileRow.id;
-      }
-
-      const { data: savedProfile, error: profileError } = await supabase
-        .from('patient_profiles')
-        .upsert(profilePayload, { onConflict: 'user_id' })
-        .select()
-        .single();
-
-      if (profileError) throw profileError;
+      // We no longer write to legacy `patient_profiles` here. If you need
+      // extended fields (medical history, allergies, medications), create
+      // a dedicated table or ensure the schema exists. For now store core
+      // fields in `patients` and keep UI state in memory.
 
       setPatientRow(savedPatient);
-      setProfileRow(savedProfile);
+      setProfileRow(null);
       setPatientData(prev => ({
         ...prev,
-        ...buildComponentState(savedPatient, savedProfile)
+        ...buildComponentState(savedPatient, null)
       }));
       setEditing(false);
       if (onUpdateProfile) {
