@@ -2389,12 +2389,19 @@ function ProfilePage() {
       payload.device_status = source.device_status;
     }
     try {
-      await supabase
+      // Use ON CONFLICT on user_id so we merge rows for the same authenticated user
+      const { data: upsertData, error: upsertError } = await supabase
         .from('patients')
-        .upsert(payload)
+        .upsert(payload, { onConflict: 'user_id' })
         .select();
+
+      if (upsertError) {
+        console.error('patients upsert error:', upsertError);
+      } else {
+        console.debug('patients upsert success:', upsertData);
+      }
     } catch (e) {
-      console.warn('patients upsert failed:', e?.message || e);
+      console.warn('patients upsert failed (exception):', e?.message || e);
     }
   };
 
@@ -2570,6 +2577,7 @@ function ProfilePage() {
         }, { preserveExisting: true });
       } else {
         // Fallback to basic profile data if creation failed
+        console.error('patient_profiles insert failed:', { newProfile, error });
         setProfileData({
           fullName: auth.profile?.full_name || "",
           email: auth.session.user.email || "",
@@ -2618,12 +2626,15 @@ function ProfilePage() {
         gender: profileData.gender || null
       };
 
-      const { error } = await supabase
+      const { data: ppUpsertData, error: ppUpsertError } = await supabase
         .from('patient_profiles')
-        .upsert(patientProfileData);
+        .upsert(patientProfileData, { onConflict: 'user_id' })
+        .select();
 
-      if (error) {
-        console.error('Patient profile update failed:', error);
+      if (ppUpsertError) {
+        console.error('Patient profile upsert failed:', ppUpsertError, ppUpsertData);
+      } else {
+        console.debug('Patient profile upsert success:', ppUpsertData);
       }
 
       await syncPublicPatient({
