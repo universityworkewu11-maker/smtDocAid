@@ -45,10 +45,12 @@ execute function public.set_updated_at();
 alter table public.doctors enable row level security;
 
 -- Allow doctors to read/update their own record; admins/full access can be granted separately.
+drop policy if exists "Doctors can view own record" on public.doctors;
 create policy "Doctors can view own record" on public.doctors
   for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Doctors can update own record" on public.doctors;
 create policy "Doctors can update own record" on public.doctors
   for update
   using (auth.uid() = user_id);
