@@ -106,8 +106,6 @@ const DoctorNotificationsPage = () => {
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        // set notifications into state
-        setNotifications(data || []);
         .eq('id', notificationId);
 
       if (error) throw error;
