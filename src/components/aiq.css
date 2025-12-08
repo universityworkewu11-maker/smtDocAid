@@ -46,6 +46,13 @@
 .aiq-subcard { margin-top:12px }
 .aiq-report-preview { background:#0f172a; color:#f8fafc; padding:12px; border-radius:6px; max-height:220px; overflow:auto }
 
+/* Strong override when inside global card rules that force colors */
+.card .aiq-report-preview,
+.card.aiq-report-container .aiq-report-preview {
+  background: #0f172a !important;
+  color: #ffffff !important;
+}
+
 .aiq-doctor-grid { display:grid; grid-template-columns: repeat(1, 1fr); gap:8px; max-height:360px; overflow:auto }
 @media(min-width:760px){ .aiq-doctor-grid { grid-template-columns: repeat(1, 1fr); } }
 .aiq-doctor-card-option { display:flex; gap:10px; align-items:flex-start; padding:10px; border-radius:8px; border:1px solid rgba(15,23,42,0.04); cursor:pointer }
