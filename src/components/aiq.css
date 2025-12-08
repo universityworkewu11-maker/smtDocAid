@@ -18,23 +18,10 @@
 
 /* Layout polish: center content, consistent spacing */
 .aiq-page {
-  max-width: 1100px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding-left: 18px;
   padding-right: 18px;
-}
-
-/* Keep AI Questionnaires page max-width more conservative */
-@media (min-width: 1280px) {
-  .aiq-page {
-    max-width: 1300px;
-  }
-}
-
-@media (min-width: 1440px) {
-  .aiq-page {
-    max-width: 1400px;
-  }
 }
 .aiq-page .card { margin-bottom: 16px; }
 .aiq-main-grid { display: grid; grid-template-columns: 1fr minmax(320px, 360px); gap: 18px; align-items: start; }
