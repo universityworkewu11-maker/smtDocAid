@@ -168,6 +168,7 @@ function AIQuestionnairesPage() {
   const [interview, setInterview] = useState(loadInitialInterview);
   const [iAnswer, setIAnswer] = useState('');
   const [iLoading, setILoading] = useState({ start: false, next: false, report: false });
+  const [reportExpanded, setReportExpanded] = useState(false);
   const [doctors, setDoctors] = useState([]);
   const [doctorSearch, setDoctorSearch] = useState('');
   const [selectedDoctors, setSelectedDoctors] = useState(loadInitialSelectedDoctors);
@@ -588,6 +589,8 @@ function AIQuestionnairesPage() {
         persistInterview(nextState);
         return nextState;
       });
+      // Auto-expand when a report is generated
+      setReportExpanded(true);
       if (selectedDoctors.length > 0) {
         await saveReportAndNotify(enrichedReport, { from: 'interview', turns: interview.turns, context: contextData });
       }
