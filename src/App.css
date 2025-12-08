@@ -2060,31 +2060,45 @@ main {
 
 /* Wide screen layout */
 @media (min-width: 1024px) {
- .interview-workspace {
-   grid-template-columns: 2fr 1fr;
-   gap: var(--space-8);
- }
+  .interview-workspace {
+    grid-template-columns: 2.5fr 1.5fr;
+    gap: var(--space-10);
+  }
 
- .interview-main {
-   grid-column: 1;
- }
+  .interview-main {
+    grid-column: 1;
+  }
 
- .interview-sidebar {
-   grid-column: 2;
- }
+  .interview-sidebar {
+    grid-column: 2;
+  }
 
- .interview-question-section {
-   order: 1;
- }
+  .interview-question-section {
+    order: 1;
+  }
 
- .interview-transcript-section {
-   order: 1;
- }
+  .interview-transcript-section {
+    order: 1;
+  }
 
- .interview-report-section {
-   grid-column: 1 / -1;
-   order: 2;
- }
+  .interview-report-section {
+    grid-column: 1 / -1;
+    order: 2;
+  }
+}
+
+@media (min-width: 1280px) {
+  .interview-workspace {
+    grid-template-columns: 3fr 2fr;
+    gap: var(--space-12);
+  }
+}
+
+@media (min-width: 1440px) {
+  .interview-workspace {
+    grid-template-columns: 3.5fr 2.5fr;
+    gap: var(--space-16);
+  }
 }
 
 .transcript {
