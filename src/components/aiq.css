@@ -27,6 +27,16 @@
 .aiq-main-grid { display: grid; grid-template-columns: 1fr minmax(320px, 360px); gap: 18px; align-items: start; }
 .aiq-primary-stack { min-width: 0; }
 .aiq-support-stack { width: min(360px, 34vw); display:flex; flex-direction:column; gap:12px }
+/* Ensure support column cards stack vertically and take full width */
+.aiq-support-stack { align-items: stretch; }
+.aiq-support-stack > .card { width: 100%; box-sizing: border-box; }
+
+/* Make toolbar input and controls fill the card width */
+.aiq-doctor-toolbar .form-input, .aiq-doctor-toolbar input.form-input { width: 100%; }
+
+/* Ensure doctor grid is single-column and options are stacked vertically */
+.aiq-doctor-grid { grid-template-columns: 1fr !important; }
+.aiq-doctor-card-option { width: 100%; }
 
 /* Ensure report preview is full width and legible */
 .aiq-report-preview { width: 100%; box-sizing: border-box; font-size: 0.95rem; line-height: 1.6; }
