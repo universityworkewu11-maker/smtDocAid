@@ -27,13 +27,25 @@
 /* Wide screen max-width adjustments */
 @media (min-width: 1280px) {
   .aiq-page {
-    max-width: 1400px;
+    max-width: 1600px;
   }
 }
 
 @media (min-width: 1440px) {
   .aiq-page {
-    max-width: 1600px;
+    max-width: 1800px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .aiq-page {
+    max-width: 2000px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .aiq-page {
+    max-width: 2200px;
   }
 }
 .aiq-page .card { margin-bottom: 16px; }
