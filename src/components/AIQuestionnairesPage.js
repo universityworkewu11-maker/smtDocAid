@@ -830,7 +830,19 @@ function AIQuestionnairesPage() {
                 </div>
                 {interview.report ? (
                   <>
-                    <pre className="aiq-report-preview">{interview.report}</pre>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <small className="muted">Generated report</small>
+                      <div>
+                        <button
+                          className="btn btn-light"
+                          onClick={() => setReportExpanded((v) => !v)}
+                          style={{ marginRight: 8 }}
+                        >
+                          {reportExpanded ? 'Collapse' : 'Expand'}
+                        </button>
+                      </div>
+                    </div>
+                    <pre className={`aiq-report-preview ${reportExpanded ? 'expanded' : ''}`}>{interview.report}</pre>
                     <p className="muted">Use the Share panel to send this report (with context) to your doctors.</p>
                   </>
                 ) : (
