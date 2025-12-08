@@ -137,7 +137,7 @@ body {
   position: relative;
   z-index: 10;
   min-height: 100vh;
-  padding: var(--space-6) 0;
+  padding: var(--space-6);
 }
 
 /* Modern Header */
