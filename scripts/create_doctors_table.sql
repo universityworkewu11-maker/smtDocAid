@@ -53,3 +53,7 @@ create policy "Doctors can update own record" on public.doctors
   using (auth.uid() = user_id);
 
 -- Optional: allow service role (via RLS bypass) or add insert policy if you expect self-service signup.
+drop policy if exists "Doctors can insert own record" on public.doctors;
+create policy "Doctors can insert own record" on public.doctors
+  for insert
+  with check (auth.uid() = user_id);

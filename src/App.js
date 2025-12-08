@@ -981,8 +981,20 @@ function SignupPage() {
           full_name: fullName, 
           role 
         });
-        // If signing up as a doctor, also create a public doctor profile row so patients can find them immediately
+        // If signing up as a doctor, create a public `doctors` row so patients can discover them.
         if (role === 'doctor') {
+          try {
+            // Upsert canonical doctors table used across the app
+            await supabase.from('doctors').upsert({
+              user_id: userId,
+              name: fullName,
+              email
+            }, { onConflict: 'user_id' });
+          } catch (e) {
+            console.warn('doctors upsert failed (signup):', e?.message || e);
+          }
+
+          // Keep legacy doctor_profiles in sync if present
           try {
             await supabase.from('doctor_profiles').upsert({
               user_id: userId,
@@ -990,7 +1002,7 @@ function SignupPage() {
               email
             });
           } catch (e) {
-            console.warn('doctor_profiles upsert failed (signup):', e?.message || e);
+            console.warn('doctor_profiles upsert failed (signup legacy):', e?.message || e);
           }
         }
       }
