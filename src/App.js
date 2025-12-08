@@ -1004,13 +1004,24 @@ function SignupPage() {
         // If signing up as a doctor, also create a public doctor profile row so patients can find them immediately
         if (role === 'doctor') {
           try {
-            await supabase.from('doctors').upsert({
+            const { data: doctorData, error: doctorErr } = await supabase.from('doctors').upsert({
               user_id: userId,
               name: fullName,
               email
-            });
+            }, { onConflict: 'user_id' }).select();
+            if (doctorErr) throw doctorErr;
+            console.debug('doctors.upsert (signup) result:', { doctorData });
           } catch (e) {
-            console.warn('doctors upsert failed (signup):', e?.message || e);
+            console.warn('doctors upsert failed (signup), falling back to doctor_profiles:', e?.message || e);
+            try {
+              await supabase.from('doctor_profiles').upsert({
+                user_id: userId,
+                full_name: fullName,
+                email: email
+              });
+            } catch (fallbackErr) {
+              console.warn('doctor_profiles fallback upsert failed (signup):', fallbackErr?.message || fallbackErr);
+            }
           }
         }
       }
