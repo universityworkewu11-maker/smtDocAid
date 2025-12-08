@@ -313,12 +313,34 @@ function AIQuestionnairesPage() {
 
   const fetchDoctors = useCallback(async () => {
     try {
+      // Diagnostic: ensure user is authenticated before fetching doctors
+      const { data: authData } = await supabase.auth.getUser();
+      const authUser = authData?.user;
+      if (!authUser) {
+        console.warn('fetchDoctors: no authenticated user; aborting doctor list fetch');
+        setDoctors([]);
+        setError('Please sign in to view available doctors');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('doctors')
         .select('id, user_id, name, email, specialist, bio, updated_at')
         .order('updated_at', { ascending: false })
         .limit(100);
-      if (error) throw error;
+      console.debug('fetchDoctors result', { data, error });
+      if (error) {
+        // Surface RLS/permission errors clearly
+        console.error('fetchDoctors error:', error);
+        setDoctors([]);
+        setError(error.message || 'Failed to load doctors');
+        return;
+      }
+      if (!Array.isArray(data) || data.length === 0) {
+        setDoctors([]);
+        setError('No doctors available at the moment');
+        return;
+      }
       setDoctors(data || []);
       setError('');
     } catch (fetchError) {
