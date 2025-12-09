@@ -56,6 +56,7 @@ async function extractPlain(buffer) {
 async function extractImage(buffer, mimeType) {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required for image OCR');
   const base64 = buffer.toString('base64');
+  // Use content types supported by the OpenAI chat API: use 'text' and 'image_url'
   const payload = {
     model: SUMMARY_MODEL,
     messages: [
@@ -66,9 +67,9 @@ async function extractImage(buffer, mimeType) {
       {
         role: 'user',
         content: [
-          { type: 'input_text', text: 'Extract text verbatim.' },
+          { type: 'text', text: 'Extract text verbatim.' },
           {
-            type: 'input_image',
+            type: 'image_url',
             image_url: `data:${mimeType};base64,${base64}`
           }
         ]
