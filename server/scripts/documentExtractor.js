@@ -116,6 +116,8 @@ async function summarizeText(content, title) {
 
 async function processDocument(doc) {
   try {
+    // eslint-disable-next-line no-console
+    console.log(`[doc-extractor] Start processing ${doc.id} (mime=${doc.mime_type})`);
     await supabase
       .from('documents')
       .update({ extraction_status: 'processing', extraction_error: null })
