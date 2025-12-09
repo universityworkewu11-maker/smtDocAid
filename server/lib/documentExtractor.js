@@ -94,7 +94,8 @@ async function processDocument(supabase, doc) {
     else if ((doc.mime_type || '').includes('text') || (doc.mime_type || '').includes('json')) text = await extractPlain(buffer);
     else text = await extractPlain(buffer);
 
-    const normalized = text.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
+    const safeText = (text || '').toString();
+    const normalized = safeText.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
     const summary = await summarizeText(normalized, doc.original_name);
 
     await supabase.from('documents').update({ extracted_text: normalized || null, extraction_summary: summary || null, extraction_status: 'complete', extraction_error: null, last_extracted_at: new Date().toISOString() }).eq('id', doc.id);
