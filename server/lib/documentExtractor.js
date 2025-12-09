@@ -105,8 +105,18 @@ async function processDocument(supabase, doc) {
     await supabase.from('documents').update({ extracted_text: normalized || null, extraction_summary: summary || null, extraction_status: 'complete', extraction_error: null, last_extracted_at: new Date().toISOString() }).eq('id', doc.id);
     return { id: doc.id, status: 'complete' };
   } catch (err) {
-    await supabase.from('documents').update({ extraction_status: 'failed', extraction_error: err.message }).eq('id', doc.id);
-    return { id: doc.id, status: 'failed', error: err.message };
+    // Persist a helpful error message + trimmed stack to the DB so the UI can show details
+    const msg = err?.message || String(err);
+    const stack = err?.stack ? String(err.stack).slice(0, 1500) : null;
+    const combined = stack ? `${msg}\n${stack}` : msg;
+    try {
+      await supabase.from('documents').update({ extraction_status: 'failed', extraction_error: combined }).eq('id', doc.id);
+    } catch (dbErr) {
+      // If DB write fails, at least log both errors to server logs
+      console.error('Failed to persist extraction_error to documents table', dbErr);
+    }
+    console.error('processDocument error', err);
+    return { id: doc.id, status: 'failed', error: msg };
   }
 }
 
