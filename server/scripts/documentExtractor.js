@@ -70,7 +70,7 @@ async function extractImage(buffer, mimeType) {
           { type: 'text', text: 'Extract text verbatim.' },
           {
             type: 'image_url',
-            image_url: `data:${mimeType};base64,${base64}`
+            image_url: { url: `data:${mimeType};base64,${base64}` }
           }
         ]
       }
