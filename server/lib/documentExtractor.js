@@ -33,6 +33,7 @@ async function fetchPendingDocuments(supabase) {
 
 async function downloadDocument(supabase, doc) {
   const bucket = doc.storage_bucket || process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
+  if (!doc.storage_path) throw new Error('Missing storage_path on document row');
   const { data, error } = await supabase.storage.from(bucket).download(doc.storage_path);
   if (error) throw error;
   const arrayBuffer = await data.arrayBuffer();
