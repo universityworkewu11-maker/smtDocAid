@@ -73,6 +73,24 @@ app.get('/api/health', (req, res) => {
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
 });
 
+// Internal: quick env presence check (protected by INTERNAL_SECRET)
+app.get('/internal/env', (req, res) => {
+	setCorsHeaders(req, res);
+	const secret = process.env.INTERNAL_SECRET;
+	const provided = req.get('x-internal-secret') || req.query?.secret;
+	if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
+	try {
+		return res.json({ ok: true, env: {
+			SUPABASE_URL: !!process.env.SUPABASE_URL,
+			SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+			OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+			INTERNAL_SECRET: !!process.env.INTERNAL_SECRET
+		}});
+	} catch (err) {
+		return res.status(500).json({ ok: false, error: String(err) });
+	}
+});
+
 // Internal: trigger one extraction batch (protected by INTERNAL_SECRET)
 app.post('/internal/extract-documents', async (req, res) => {
 	setCorsHeaders(req, res);
