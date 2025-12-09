@@ -147,8 +147,10 @@ app.post('/api/v1/documents/:id/extract', async (req, res) => {
 		console.log(`[extract-doc] finished extraction for doc=${docId} result=${JSON.stringify(result).slice(0,200)}`);
 		return res.json({ ok: true, result });
 	} catch (err) {
-		console.error('extract-document error', err?.message || err);
-		return res.status(500).json({ ok: false, error: err?.message || String(err) });
+		// Log full error object (including stack) for debugging in Vercel logs
+		console.error('extract-document error', err);
+		const msg = err?.message || String(err);
+		return res.status(500).json({ ok: false, error: msg });
 	}
 });
 
