@@ -52,11 +52,12 @@ async function extractPlain(buffer) {
 async function extractImage(buffer, mimeType) {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required for image OCR');
   const base64 = buffer.toString('base64');
+  // Use content types supported by the OpenAI chat API: use 'text' and 'image_url'
   const payload = {
     model: SUMMARY_MODEL,
     messages: [
       { role: 'system', content: 'Extract all medically relevant text from this clinical document image. Return plain text only.' },
-      { role: 'user', content: [{ type: 'input_text', text: 'Extract text verbatim.' }, { type: 'input_image', image_url: `data:${mimeType};base64,${base64}` }] }
+      { role: 'user', content: [{ type: 'text', text: 'Extract text verbatim.' }, { type: 'image_url', image_url: `data:${mimeType};base64,${base64}` }] }
     ]
   };
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
