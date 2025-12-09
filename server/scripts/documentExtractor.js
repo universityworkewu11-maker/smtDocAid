@@ -133,7 +133,8 @@ async function processDocument(doc) {
       text = await extractPlain(buffer);
     }
 
-    const normalized = text.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
+    const safeText = (text || '').toString();
+    const normalized = safeText.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
     const summary = await summarizeText(normalized, doc.original_name);
 
     await supabase
