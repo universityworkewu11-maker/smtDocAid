@@ -136,6 +136,34 @@ const UploadDocumentsPage = () => {
             .single();
           if (docError) throw docError;
           setPreviousUploads(prev => [mapDocumentRow(insertedDocument), ...prev]);
+
+          // Trigger server-side extraction for this document (best-effort).
+          // Use the client's current access token so the server can validate the caller.
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (token && insertedDocument?.id) {
+              const backend = process.env.REACT_APP_BACKEND_URL || '';
+              const url = `${backend.replace(/\/$/, '')}/api/v1/documents/${insertedDocument.id}/extract`;
+              const resp = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({})
+              });
+              if (!resp.ok) {
+                const txt = await resp.text().catch(() => '');
+                console.warn('Extraction trigger failed', resp.status, txt);
+                // record a trigger error on the document row so user can see status
+                await supabase.from('documents').update({ extraction_error: `trigger_failed: ${resp.status}` }).eq('id', insertedDocument.id);
+              }
+            }
+          } catch (triggerErr) {
+            console.warn('Failed to call extraction endpoint:', triggerErr);
+            try { await supabase.from('documents').update({ extraction_error: `trigger_call_error: ${String(triggerErr)}` }).eq('id', insertedDocument.id); } catch (_) {}
+          }
         } catch (docInsertError) {
           console.error('Failed to record document metadata:', docInsertError);
         }
