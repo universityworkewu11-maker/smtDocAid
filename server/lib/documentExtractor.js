@@ -105,6 +105,17 @@ async function processDocument(supabase, doc) {
   }
 }
 
+export async function runExtractionForDocument(docId) {
+  const supabase = makeClient();
+  const { data: doc, error } = await supabase
+    .from('documents')
+    .select('id, user_id, storage_bucket, storage_path, mime_type, original_name, extraction_status, uploaded_at')
+    .eq('id', docId)
+    .single();
+  if (error || !doc) throw new Error('Document not found');
+  return await processDocument(supabase, doc);
+}
+
 export async function runExtractionBatch() {
   const supabase = makeClient();
   const pending = await fetchPendingDocuments(supabase);
@@ -119,4 +130,4 @@ export async function runExtractionBatch() {
   return { processed: results };
 }
 
-export default { runExtractionBatch };
+export default { runExtractionBatch, runExtractionForDocument };
