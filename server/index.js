@@ -155,6 +155,39 @@ app.post('/api/v1/documents/:id/extract', async (req, res) => {
 	}
 });
 
+// Internal: dry-run download of a single document to verify storage access (protected)
+app.post('/internal/documents/:id/dry-run', async (req, res) => {
+	setCorsHeaders(req, res);
+	const secret = process.env.INTERNAL_SECRET;
+	const provided = req.get('x-internal-secret') || req.body?.secret;
+	if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
+	try {
+		const { createClient } = await import('@supabase/supabase-js');
+		const SUPABASE_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+		const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
+		if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server missing Supabase configuration' });
+		const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+		const docId = req.params.id;
+		const { data: doc, error: docErr } = await admin.from('documents').select('id, storage_bucket, storage_path, mime_type, size_bytes').eq('id', docId).single();
+		if (docErr || !doc) return res.status(404).json({ error: 'Document not found' });
+		if (!doc.storage_path) return res.status(400).json({ error: 'Missing storage_path on document row' });
+
+		const bucket = doc.storage_bucket || process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
+		const { data: file, error: downloadErr } = await admin.storage.from(bucket).download(doc.storage_path);
+		if (downloadErr) {
+			console.error('dry-run download failed', downloadErr);
+			return res.status(500).json({ error: 'Download failed', detail: downloadErr.message || downloadErr });
+		}
+		const arrayBuffer = await file.arrayBuffer();
+		const buf = Buffer.from(arrayBuffer);
+		return res.json({ ok: true, doc: { id: docId, mime: doc.mime_type || null, size: doc.size_bytes || null }, downloadedBytes: buf.length });
+	} catch (err) {
+		console.error('dry-run error', err);
+		return res.status(500).json({ ok: false, error: err?.message || String(err) });
+	}
+});
+
 // Chat proxy: POST /api/v1/ai/chat { messages: [...], model?: string, temperature?: number, max_tokens?: number }
 app.post('/api/v1/ai/chat', async (req, res) => {
 	setCorsHeaders(req, res);
