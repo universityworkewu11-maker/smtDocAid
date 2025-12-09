@@ -57,7 +57,7 @@ async function extractImage(buffer, mimeType) {
     model: SUMMARY_MODEL,
     messages: [
       { role: 'system', content: 'Extract all medically relevant text from this clinical document image. Return plain text only.' },
-      { role: 'user', content: [{ type: 'text', text: 'Extract text verbatim.' }, { type: 'image_url', image_url: `data:${mimeType};base64,${base64}` }] }
+      { role: 'user', content: [{ type: 'text', text: 'Extract text verbatim.' }, { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }] }
     ]
   };
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
