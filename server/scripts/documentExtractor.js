@@ -160,12 +160,13 @@ async function processDocument(doc) {
     // eslint-disable-next-line no-console
     console.log(`[doc-extractor] Processed ${doc.id}`);
   } catch (err) {
+    const message = err && err.message ? err.message : String(err);
     await supabase
       .from('documents')
-      .update({ extraction_status: 'failed', extraction_error: err.message })
+      .update({ extraction_status: 'failed', extraction_error: message })
       .eq('id', doc.id);
     // eslint-disable-next-line no-console
-    console.error(`[doc-extractor] Failed ${doc.id}:`, err.message);
+    console.error(`[doc-extractor] Failed ${doc.id}:`, err.stack || message);
   }
 }
 
