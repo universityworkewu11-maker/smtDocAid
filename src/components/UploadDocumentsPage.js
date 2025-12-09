@@ -135,16 +135,27 @@ const UploadDocumentsPage = () => {
             .select('*')
             .single();
           if (docError) throw docError;
+          // Add the inserted document to UI list
           setPreviousUploads(prev => [mapDocumentRow(insertedDocument), ...prev]);
+
+          // Immediately mark document as processing (best-effort) so UI reflects work in progress
+          try {
+            await supabase.from('documents').update({ extraction_status: 'processing', extraction_error: null }).eq('id', insertedDocument.id);
+            // update local UI state to show processing status without waiting for reload
+            setPreviousUploads(prev => prev.map(d => (d.id === insertedDocument.id ? { ...d, status: 'processing' } : d)));
+          } catch (markErr) {
+            console.warn('Failed to mark document as processing:', markErr);
+          }
 
           // Trigger server-side extraction for this document (best-effort).
           // Use the client's current access token so the server can validate the caller.
           try {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
+            const backend = process.env.REACT_APP_BACKEND_URL || '';
+            const url = `${backend.replace(/\/$/, '')}/api/v1/documents/${insertedDocument.id}/extract`;
+            console.log('[upload] triggering extraction', { url, tokenPresent: !!token });
             if (token && insertedDocument?.id) {
-              const backend = process.env.REACT_APP_BACKEND_URL || '';
-              const url = `${backend.replace(/\/$/, '')}/api/v1/documents/${insertedDocument.id}/extract`;
               const resp = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -158,11 +169,16 @@ const UploadDocumentsPage = () => {
                 console.warn('Extraction trigger failed', resp.status, txt);
                 // record a trigger error on the document row so user can see status
                 await supabase.from('documents').update({ extraction_error: `trigger_failed: ${resp.status}` }).eq('id', insertedDocument.id);
+                // also reflect failure in UI
+                setPreviousUploads(prev => prev.map(d => (d.id === insertedDocument.id ? { ...d, status: 'failed' } : d)));
               }
+            } else {
+              console.warn('No access token available; skipping extraction trigger');
             }
           } catch (triggerErr) {
             console.warn('Failed to call extraction endpoint:', triggerErr);
             try { await supabase.from('documents').update({ extraction_error: `trigger_call_error: ${String(triggerErr)}` }).eq('id', insertedDocument.id); } catch (_) {}
+            try { setPreviousUploads(prev => prev.map(d => (d.id === insertedDocument.id ? { ...d, status: 'failed' } : d))); } catch (_) {}
           }
         } catch (docInsertError) {
           console.error('Failed to record document metadata:', docInsertError);
