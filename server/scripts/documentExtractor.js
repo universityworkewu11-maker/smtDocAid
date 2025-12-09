@@ -120,6 +120,15 @@ async function processDocument(doc) {
   try {
     // eslint-disable-next-line no-console
     console.log(`[doc-extractor] Start processing ${doc.id} (mime=${doc.mime_type})`);
+
+    // If the document row doesn't include a storage path, skip it so the
+    // extractor can continue to other pending documents. Leaving the row
+    // unchanged (still `pending`) makes it easier to find and repair later.
+    if (!doc.storage_path) {
+      // eslint-disable-next-line no-console
+      console.warn(`[doc-extractor] Skipping ${doc.id} — missing storage_path`);
+      return;
+    }
     await supabase
       .from('documents')
       .update({ extraction_status: 'processing', extraction_error: null })
