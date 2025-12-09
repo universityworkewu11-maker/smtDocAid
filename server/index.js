@@ -4,7 +4,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import fetch from 'cross-fetch';
-import { runExtractionBatch, runExtractionForDocument } from './lib/documentExtractor.js';
+import { runExtractionBatch } from './lib/documentExtractor.js';
 
 // Use global fetch if available; otherwise fall back to cross-fetch (avoid top-level await for Node compatibility)
 const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetch;
@@ -53,16 +53,6 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENA
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-2024-11-20';
 const DEFAULT_ASSISTANT_ID = process.env.ASSISTANT_ID || '';
 
-// Startup diagnostics: log presence (not values) of critical server envs so Vercel logs show config
-try {
-	console.log('[startup] env_presence', {
-		SUPABASE_URL: !!process.env.SUPABASE_URL,
-		SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-		OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
-		INTERNAL_SECRET: !!process.env.INTERNAL_SECRET
-	});
-} catch (e) { /* ignore */ }
-
 // Health under both /api/health and /health for compatibility
 app.get('/health', (req, res) => {
 	setCorsHeaders(req, res);
@@ -71,24 +61,6 @@ app.get('/health', (req, res) => {
 app.get('/api/health', (req, res) => {
 	setCorsHeaders(req, res);
 	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
-});
-
-// Internal: quick env presence check (protected by INTERNAL_SECRET)
-app.get('/internal/env', (req, res) => {
-	setCorsHeaders(req, res);
-	const secret = process.env.INTERNAL_SECRET;
-	const provided = req.get('x-internal-secret') || req.query?.secret;
-	if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
-	try {
-		return res.json({ ok: true, env: {
-			SUPABASE_URL: !!process.env.SUPABASE_URL,
-			SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-			OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
-			INTERNAL_SECRET: !!process.env.INTERNAL_SECRET
-		}});
-	} catch (err) {
-		return res.status(500).json({ ok: false, error: String(err) });
-	}
 });
 
 // Internal: trigger one extraction batch (protected by INTERNAL_SECRET)
@@ -101,89 +73,6 @@ app.post('/internal/extract-documents', async (req, res) => {
 		const result = await runExtractionBatch();
 		return res.json({ ok: true, result });
 	} catch (err) {
-		return res.status(500).json({ ok: false, error: err?.message || String(err) });
-	}
-});
-
-// Trigger extraction for a single document (called by frontend after upload)
-app.post('/api/v1/documents/:id/extract', async (req, res) => {
-	setCorsHeaders(req, res);
-	try {
-		// Expect Bearer token from client (Supabase access token)
-		const auth = req.get('authorization') || '';
-		const token = auth.split(' ')[1] || null;
-		// Diagnostic logging (do not log secret token itself)
-		console.log(`[extract-doc] doc=${req.params.id} authHeader=${auth ? 'present' : 'missing'} tokenPresent=${!!token}`);
-		if (!token) return res.status(401).json({ error: 'Missing Authorization token' });
-
-		// Use the service-role client to validate the token and inspect the document
-			const { createClient } = await import('@supabase/supabase-js');
-			// Accept frontend-style env names as a fallback in case Vercel has REACT_APP_* variables set
-			const SUPABASE_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-			const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
-			if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server missing Supabase configuration' });
-			const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-
-		// Validate token to get user identity
-		const authRes = await admin.auth.getUser(token);
-		const user = authRes?.data?.user;
-		console.log(`[extract-doc] auth.getUser => user=${user ? user.id : 'none'}`);
-		if (!user) return res.status(401).json({ error: 'Invalid session token' });
-
-		// Verify doc belongs to user
-		const docId = req.params.id;
-		const { data: docRow, error: docErr } = await admin.from('documents').select('id, user_id').eq('id', docId).single();
-		if (docErr || !docRow) {
-			console.log(`[extract-doc] doc lookup failed doc=${docId} err=${docErr?.message || 'none'}`);
-			return res.status(404).json({ error: 'Document not found' });
-		}
-		if (docRow.user_id !== user.id) {
-			console.log(`[extract-doc] forbidden: doc.user=${docRow.user_id} caller=${user.id}`);
-			return res.status(403).json({ error: 'Forbidden' });
-		}
-
-		console.log(`[extract-doc] starting extraction for doc=${docId} user=${user.id}`);
-		// Run extraction for this document
-		const result = await runExtractionForDocument(docId);
-		console.log(`[extract-doc] finished extraction for doc=${docId} result=${JSON.stringify(result).slice(0,200)}`);
-		return res.json({ ok: true, result });
-	} catch (err) {
-		// Log full error object (including stack) for debugging in Vercel logs
-		console.error('extract-document error', err);
-		const msg = err?.message || String(err);
-		return res.status(500).json({ ok: false, error: msg });
-	}
-});
-
-// Internal: dry-run download of a single document to verify storage access (protected)
-app.post('/internal/documents/:id/dry-run', async (req, res) => {
-	setCorsHeaders(req, res);
-	const secret = process.env.INTERNAL_SECRET;
-	const provided = req.get('x-internal-secret') || req.body?.secret;
-	if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
-	try {
-		const { createClient } = await import('@supabase/supabase-js');
-		const SUPABASE_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-		const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
-		if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server missing Supabase configuration' });
-		const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-
-		const docId = req.params.id;
-		const { data: doc, error: docErr } = await admin.from('documents').select('id, storage_bucket, storage_path, mime_type, size_bytes').eq('id', docId).single();
-		if (docErr || !doc) return res.status(404).json({ error: 'Document not found' });
-		if (!doc.storage_path) return res.status(400).json({ error: 'Missing storage_path on document row' });
-
-		const bucket = doc.storage_bucket || process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-		const { data: file, error: downloadErr } = await admin.storage.from(bucket).download(doc.storage_path);
-		if (downloadErr) {
-			console.error('dry-run download failed', downloadErr);
-			return res.status(500).json({ error: 'Download failed', detail: downloadErr.message || downloadErr });
-		}
-		const arrayBuffer = await file.arrayBuffer();
-		const buf = Buffer.from(arrayBuffer);
-		return res.json({ ok: true, doc: { id: docId, mime: doc.mime_type || null, size: doc.size_bytes || null }, downloadedBytes: buf.length });
-	} catch (err) {
-		console.error('dry-run error', err);
 		return res.status(500).json({ ok: false, error: err?.message || String(err) });
 	}
 });

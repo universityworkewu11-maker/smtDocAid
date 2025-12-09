@@ -2,11 +2,9 @@ import fetch from 'cross-fetch';
 import { createClient } from '@supabase/supabase-js';
 import pdfParse from 'pdf-parse';
 
-// Allow either `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` or their frontend-style
-// counterparts `REACT_APP_SUPABASE_URL` / `REACT_APP_SUPABASE_SERVICE_ROLE_KEY`.
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
 const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
   OPENAI_API_KEY,
   DOCUMENT_EXTRACTION_BATCH = '3'
 } = process.env;
@@ -35,7 +33,6 @@ async function fetchPendingDocuments(supabase) {
 
 async function downloadDocument(supabase, doc) {
   const bucket = doc.storage_bucket || process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-  if (!doc.storage_path) throw new Error('Missing storage_path on document row');
   const { data, error } = await supabase.storage.from(bucket).download(doc.storage_path);
   if (error) throw error;
   const arrayBuffer = await data.arrayBuffer();
@@ -54,12 +51,11 @@ async function extractPlain(buffer) {
 async function extractImage(buffer, mimeType) {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY required for image OCR');
   const base64 = buffer.toString('base64');
-  // Use content types supported by the OpenAI chat API: use 'text' and 'image_url'
   const payload = {
     model: SUMMARY_MODEL,
     messages: [
       { role: 'system', content: 'Extract all medically relevant text from this clinical document image. Return plain text only.' },
-      { role: 'user', content: [{ type: 'text', text: 'Extract text verbatim.' }, { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }] }
+      { role: 'user', content: [{ type: 'input_text', text: 'Extract text verbatim.' }, { type: 'input_image', image_url: `data:${mimeType};base64,${base64}` }] }
     ]
   };
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -98,25 +94,14 @@ async function processDocument(supabase, doc) {
     else if ((doc.mime_type || '').includes('text') || (doc.mime_type || '').includes('json')) text = await extractPlain(buffer);
     else text = await extractPlain(buffer);
 
-    const safeText = (text || '').toString();
-    const normalized = safeText.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
+    const normalized = text.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
     const summary = await summarizeText(normalized, doc.original_name);
 
     await supabase.from('documents').update({ extracted_text: normalized || null, extraction_summary: summary || null, extraction_status: 'complete', extraction_error: null, last_extracted_at: new Date().toISOString() }).eq('id', doc.id);
     return { id: doc.id, status: 'complete' };
   } catch (err) {
-    // Persist a helpful error message + trimmed stack to the DB so the UI can show details
-    const msg = err?.message || String(err);
-    const stack = err?.stack ? String(err.stack).slice(0, 1500) : null;
-    const combined = stack ? `${msg}\n${stack}` : msg;
-    try {
-      await supabase.from('documents').update({ extraction_status: 'failed', extraction_error: combined }).eq('id', doc.id);
-    } catch (dbErr) {
-      // If DB write fails, at least log both errors to server logs
-      console.error('Failed to persist extraction_error to documents table', dbErr);
-    }
-    console.error('processDocument error', err);
-    return { id: doc.id, status: 'failed', error: msg };
+    await supabase.from('documents').update({ extraction_status: 'failed', extraction_error: err.message }).eq('id', doc.id);
+    return { id: doc.id, status: 'failed', error: err.message };
   }
 }
 
@@ -134,17 +119,4 @@ export async function runExtractionBatch() {
   return { processed: results };
 }
 
-export async function runExtractionForDocument(docId) {
-  const supabase = makeClient();
-  const { data: doc, error } = await supabase
-    .from('documents')
-    .select('id, user_id, storage_bucket, storage_path, mime_type, original_name, extraction_status, uploaded_at')
-    .eq('id', docId)
-    .single();
-  if (error) throw error;
-  if (!doc) throw new Error('document not found');
-  // processDocument updates the document row status and returns result
-  return processDocument(supabase, doc);
-}
-
-export default { runExtractionBatch, runExtractionForDocument };
+export default { runExtractionBatch };
