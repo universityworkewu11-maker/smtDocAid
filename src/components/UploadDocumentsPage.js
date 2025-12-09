@@ -152,9 +152,15 @@ const UploadDocumentsPage = () => {
           try {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
-            const backend = process.env.REACT_APP_BACKEND_URL || '';
-            const url = `${backend.replace(/\/$/, '')}/api/v1/documents/${insertedDocument.id}/extract`;
-            console.log('[upload] triggering extraction', { url, tokenPresent: !!token });
+            // Normalize backend URL: allow values with or without scheme in env.
+            let backend = process.env.REACT_APP_BACKEND_URL || '';
+            if (backend && !/^https?:\/\//i.test(backend)) {
+              // If user set hostname without scheme, assume https
+              backend = `https://${backend}`;
+            }
+            // If backend not set, fall back to same-origin so relative path works in local/dev
+            const url = backend ? `${backend.replace(/\/$/, '')}/api/v1/documents/${insertedDocument.id}/extract` : `${window.location.origin}/api/v1/documents/${insertedDocument.id}/extract`;
+            console.log('[upload] triggering extraction', { url, tokenPresent: !!token, backendEnv: process.env.REACT_APP_BACKEND_URL });
             if (token && insertedDocument?.id) {
               const resp = await fetch(url, {
                 method: 'POST',
