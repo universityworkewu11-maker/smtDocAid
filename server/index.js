@@ -53,6 +53,16 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENA
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-2024-11-20';
 const DEFAULT_ASSISTANT_ID = process.env.ASSISTANT_ID || '';
 
+// Startup diagnostics: log presence (not values) of critical server envs so Vercel logs show config
+try {
+	console.log('[startup] env_presence', {
+		SUPABASE_URL: !!process.env.SUPABASE_URL,
+		SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+		OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+		INTERNAL_SECRET: !!process.env.INTERNAL_SECRET
+	});
+} catch (e) { /* ignore */ }
+
 // Health under both /api/health and /health for compatibility
 app.get('/health', (req, res) => {
 	setCorsHeaders(req, res);
