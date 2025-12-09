@@ -122,6 +122,10 @@ async function processDocument(doc) {
       .eq('id', doc.id);
 
     const buffer = await downloadDocument(doc);
+    // log basic diagnostic info about the downloaded buffer
+    // (helps debug cases where download returned empty/invalid data)
+    // eslint-disable-next-line no-console
+    console.log(`[doc-extractor] Downloaded ${doc.id}: mime=${doc.mime_type} bufferIsBuffer=${Buffer.isBuffer(buffer)} bufferLen=${buffer ? buffer.length : 0}`);
     let text = '';
     if ((doc.mime_type || '').includes('pdf')) {
       text = await extractPdf(buffer);
@@ -133,6 +137,9 @@ async function processDocument(doc) {
       text = await extractPlain(buffer);
     }
 
+    // diagnostic: show what was extracted (type/length) to help trace null/replace issues
+    // eslint-disable-next-line no-console
+    console.log(`[doc-extractor] Extracted text for ${doc.id}: type=${typeof text} len=${text ? (String(text).length) : 0}`);
     const safeText = (text || '').toString();
     const normalized = safeText.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
     const summary = await summarizeText(normalized, doc.original_name);
