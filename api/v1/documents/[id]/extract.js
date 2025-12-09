@@ -1,5 +1,3 @@
-import { runExtractionForDocument } from '../../../../server/lib/documentExtractor.js';
-
 // CORS helper for Vercel serverless functions
 function handleCors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', 'https://smt-doc-aid.vercel.app');
@@ -57,6 +55,7 @@ export default async function handler(req, res) {
 
     console.log(`[extract-doc] starting extraction for doc=${docId} user=${user.id}`);
     // Run extraction for this document
+    const { runExtractionForDocument } = await import('../../../../server/lib/documentExtractor.js');
     const result = await runExtractionForDocument(docId);
     console.log(`[extract-doc] finished extraction for doc=${docId} result=${JSON.stringify(result).slice(0,200)}`);
     return res.json({ ok: true, result });
