@@ -4,7 +4,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import fetch from 'cross-fetch';
-import { runExtractionBatch } from './lib/documentExtractor.js';
+import { runExtractionBatch, runExtractionForDocument } from './lib/documentExtractor.js';
 
 // Use global fetch if available; otherwise fall back to cross-fetch (avoid top-level await for Node compatibility)
 const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetch;
@@ -73,6 +73,42 @@ app.post('/internal/extract-documents', async (req, res) => {
 		const result = await runExtractionBatch();
 		return res.json({ ok: true, result });
 	} catch (err) {
+		return res.status(500).json({ ok: false, error: err?.message || String(err) });
+	}
+});
+
+// Trigger extraction for a single document (called by frontend after upload)
+app.post('/api/v1/documents/:id/extract', async (req, res) => {
+	setCorsHeaders(req, res);
+	try {
+		// Expect Bearer token from client (Supabase access token)
+		const auth = req.get('authorization') || '';
+		const token = auth.split(' ')[1] || null;
+		if (!token) return res.status(401).json({ error: 'Missing Authorization token' });
+
+		// Use the service-role client to validate the token and inspect the document
+		const { createClient } = await import('@supabase/supabase-js');
+		const SUPABASE_URL = process.env.SUPABASE_URL;
+		const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+		if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server missing Supabase configuration' });
+		const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+		// Validate token to get user identity
+		const authRes = await admin.auth.getUser(token);
+		const user = authRes?.data?.user;
+		if (!user) return res.status(401).json({ error: 'Invalid session token' });
+
+		// Verify doc belongs to user
+		const docId = req.params.id;
+		const { data: docRow, error: docErr } = await admin.from('documents').select('id, user_id').eq('id', docId).single();
+		if (docErr || !docRow) return res.status(404).json({ error: 'Document not found' });
+		if (docRow.user_id !== user.id) return res.status(403).json({ error: 'Forbidden' });
+
+		// Run extraction for this document
+		const result = await runExtractionForDocument(docId);
+		return res.json({ ok: true, result });
+	} catch (err) {
+		console.error('extract-document error', err?.message || err);
 		return res.status(500).json({ ok: false, error: err?.message || String(err) });
 	}
 });
