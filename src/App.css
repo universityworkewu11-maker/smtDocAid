@@ -2100,7 +2100,8 @@ main {
 @media (min-width: 1000px) {
   .interview-workspace {
     display: grid;
-    grid-template-columns: 1.1fr 0.9fr;
+    /* Make the interview/main section substantially larger than the sidebar */
+    grid-template-columns: 3fr 0.2fr;
     gap: var(--space-24);
     align-items: start;
   }
@@ -2137,7 +2138,7 @@ main {
 /* Ultra-wide layout - Aggressive horizontal layout */
 @media (min-width: 1200px) {
   .interview-workspace {
-    grid-template-columns: 1.3fr 0.7fr;
+    grid-template-columns: 3.5fr 0.15fr;
     gap: var(--space-32);
   }
 
@@ -2157,7 +2158,7 @@ main {
 /* Maximum wide screens - Extreme utilization */
 @media (min-width: 1400px) {
   .interview-workspace {
-    grid-template-columns: 1.6fr 0.4fr;
+    grid-template-columns: 4fr 0.1fr;
     gap: var(--space-40);
   }
 
@@ -2169,7 +2170,7 @@ main {
 /* Ultra-maximum screens - Absolute maximum utilization */
 @media (min-width: 1600px) {
   .interview-workspace {
-    grid-template-columns: 2.5fr 0.2fr;
+    grid-template-columns: 5fr 0.08fr;
     gap: var(--space-48);
   }
 
@@ -2181,7 +2182,7 @@ main {
 /* Insanely wide screens - Extreme right push */
 @media (min-width: 2000px) {
   .interview-workspace {
-    grid-template-columns: 3fr 0.15fr;
+    grid-template-columns: 6fr 0.05fr;
     gap: var(--space-56);
   }
 
@@ -2193,7 +2194,7 @@ main {
 /* Ultra-insanely wide screens - Maximum right push */
 @media (min-width: 2400px) {
   .interview-workspace {
-    grid-template-columns: 4fr 0.1fr;
+    grid-template-columns: 8fr 0.02fr;
     gap: var(--space-64);
   }
 
