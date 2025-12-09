@@ -117,11 +117,12 @@ app.post('/api/v1/documents/:id/extract', async (req, res) => {
 		if (!token) return res.status(401).json({ error: 'Missing Authorization token' });
 
 		// Use the service-role client to validate the token and inspect the document
-		const { createClient } = await import('@supabase/supabase-js');
-		const SUPABASE_URL = process.env.SUPABASE_URL;
-		const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-		if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server missing Supabase configuration' });
-		const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+			const { createClient } = await import('@supabase/supabase-js');
+			// Accept frontend-style env names as a fallback in case Vercel has REACT_APP_* variables set
+			const SUPABASE_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+			const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
+			if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Server missing Supabase configuration' });
+			const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 		// Validate token to get user identity
 		const authRes = await admin.auth.getUser(token);
