@@ -84,6 +84,8 @@ app.post('/api/v1/documents/:id/extract', async (req, res) => {
 		// Expect Bearer token from client (Supabase access token)
 		const auth = req.get('authorization') || '';
 		const token = auth.split(' ')[1] || null;
+		// Diagnostic logging (do not log secret token itself)
+		console.log(`[extract-doc] doc=${req.params.id} authHeader=${auth ? 'present' : 'missing'} tokenPresent=${!!token}`);
 		if (!token) return res.status(401).json({ error: 'Missing Authorization token' });
 
 		// Use the service-role client to validate the token and inspect the document
@@ -96,16 +98,25 @@ app.post('/api/v1/documents/:id/extract', async (req, res) => {
 		// Validate token to get user identity
 		const authRes = await admin.auth.getUser(token);
 		const user = authRes?.data?.user;
+		console.log(`[extract-doc] auth.getUser => user=${user ? user.id : 'none'}`);
 		if (!user) return res.status(401).json({ error: 'Invalid session token' });
 
 		// Verify doc belongs to user
 		const docId = req.params.id;
 		const { data: docRow, error: docErr } = await admin.from('documents').select('id, user_id').eq('id', docId).single();
-		if (docErr || !docRow) return res.status(404).json({ error: 'Document not found' });
-		if (docRow.user_id !== user.id) return res.status(403).json({ error: 'Forbidden' });
+		if (docErr || !docRow) {
+			console.log(`[extract-doc] doc lookup failed doc=${docId} err=${docErr?.message || 'none'}`);
+			return res.status(404).json({ error: 'Document not found' });
+		}
+		if (docRow.user_id !== user.id) {
+			console.log(`[extract-doc] forbidden: doc.user=${docRow.user_id} caller=${user.id}`);
+			return res.status(403).json({ error: 'Forbidden' });
+		}
 
+		console.log(`[extract-doc] starting extraction for doc=${docId} user=${user.id}`);
 		// Run extraction for this document
 		const result = await runExtractionForDocument(docId);
+		console.log(`[extract-doc] finished extraction for doc=${docId} result=${JSON.stringify(result).slice(0,200)}`);
 		return res.json({ ok: true, result });
 	} catch (err) {
 		console.error('extract-document error', err?.message || err);
