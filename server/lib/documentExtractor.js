@@ -122,4 +122,17 @@ export async function runExtractionBatch() {
   return { processed: results };
 }
 
-export default { runExtractionBatch };
+export async function runExtractionForDocument(docId) {
+  const supabase = makeClient();
+  const { data: doc, error } = await supabase
+    .from('documents')
+    .select('id, user_id, storage_bucket, storage_path, mime_type, original_name, extraction_status, uploaded_at')
+    .eq('id', docId)
+    .single();
+  if (error) throw error;
+  if (!doc) throw new Error('document not found');
+  // processDocument updates the document row status and returns result
+  return processDocument(supabase, doc);
+}
+
+export default { runExtractionBatch, runExtractionForDocument };
