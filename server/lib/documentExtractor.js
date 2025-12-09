@@ -2,9 +2,11 @@ import fetch from 'cross-fetch';
 import { createClient } from '@supabase/supabase-js';
 import pdfParse from 'pdf-parse';
 
+// Allow either `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` or their frontend-style
+// counterparts `REACT_APP_SUPABASE_URL` / `REACT_APP_SUPABASE_SERVICE_ROLE_KEY`.
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
 const {
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
   OPENAI_API_KEY,
   DOCUMENT_EXTRACTION_BATCH = '3'
 } = process.env;
