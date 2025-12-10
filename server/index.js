@@ -4,7 +4,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import fetch from 'cross-fetch';
-import pkg from '../api/lib/documentExtractor.js';
+import pkg from '../api/documentExtractor.js';
 const { runExtractionBatch } = pkg;
 
 // Use global fetch if available; otherwise fall back to cross-fetch (avoid top-level await for Node compatibility)

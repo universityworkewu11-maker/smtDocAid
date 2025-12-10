@@ -55,7 +55,7 @@ export default async function handler(req, res) {
 
     console.log(`[extract-doc] starting extraction for doc=${docId} user=${user.id}`);
     // Run extraction for this document
-    const { runExtractionForDocument } = await import('../../../lib/documentExtractor.js');
+    const { runExtractionForDocument } = await import('../../documentExtractor.js');
     const result = await runExtractionForDocument(docId);
     console.log(`[extract-doc] finished extraction for doc=${docId} result=${JSON.stringify(result).slice(0,200)}`);
     return res.json({ ok: true, result });
