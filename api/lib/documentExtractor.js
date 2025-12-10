@@ -1,6 +1,6 @@
-const fetch = require('cross-fetch');
 const { createClient } = require('@supabase/supabase-js');
 const pdfParse = require('pdf-parse');
+const fetch = globalThis.fetch;
 
 const {
   SUPABASE_URL,
