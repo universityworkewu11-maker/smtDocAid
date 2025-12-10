@@ -551,7 +551,7 @@ main {
   display: block;
   margin-bottom: var(--space-2);
   font-weight: 600;
-  color: var(--white);
+  color: var(--gray-700);
   font-size: var(--font-size-sm);
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -562,28 +562,27 @@ main {
 .form-group textarea {
   width: 100%;
   padding: var(--space-4);
-  border: 2px solid var(--glass-border);
+  border: 2px solid var(--gray-300);
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-base);
-  background: var(--glass-bg);
-  backdrop-filter: blur(10px);
-  color: var(--white);
+  background: var(--white);
+  color: var(--gray-800);
   transition: var(--transition-base);
   font-family: var(--font-family);
 }
 
 .form-group input::placeholder,
 .form-group textarea::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--gray-500);
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--primary-light);
+  border-color: var(--primary);
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), var(--shadow-lg);
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--white);
   transform: translateY(-2px);
 }
 
