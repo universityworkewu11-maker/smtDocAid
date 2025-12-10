@@ -1,4 +1,3 @@
-const pdfParse = require('pdf-parse');
 const fetch = globalThis.fetch;
 
 const {
@@ -40,6 +39,7 @@ async function downloadDocument(supabase, doc) {
 }
 
 async function extractPdf(buffer) {
+  const pdfParse = (await import('pdf-parse')).default;
   const parsed = await pdfParse(buffer);
   return parsed?.text || '';
 }
