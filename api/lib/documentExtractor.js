@@ -1,6 +1,6 @@
-import fetch from 'cross-fetch';
-import { createClient } from '@supabase/supabase-js';
-import pdfParse from 'pdf-parse';
+const fetch = require('cross-fetch');
+const { createClient } = require('@supabase/supabase-js');
+const pdfParse = require('pdf-parse');
 
 const {
   SUPABASE_URL,
@@ -105,7 +105,7 @@ async function processDocument(supabase, doc) {
   }
 }
 
-export async function runExtractionForDocument(docId) {
+async function runExtractionForDocument(docId) {
   const supabase = makeClient();
   const { data: doc, error } = await supabase
     .from('documents')
@@ -116,7 +116,7 @@ export async function runExtractionForDocument(docId) {
   return await processDocument(supabase, doc);
 }
 
-export async function runExtractionBatch() {
+async function runExtractionBatch() {
   const supabase = makeClient();
   const pending = await fetchPendingDocuments(supabase);
   if (!pending.length) return { processed: [], message: 'No pending documents' };
@@ -130,4 +130,4 @@ export async function runExtractionBatch() {
   return { processed: results };
 }
 
-export default { runExtractionBatch, runExtractionForDocument };
+module.exports = { runExtractionBatch, runExtractionForDocument };
