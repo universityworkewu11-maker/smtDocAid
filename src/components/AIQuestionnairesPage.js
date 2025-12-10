@@ -716,6 +716,9 @@ function AIQuestionnairesPage() {
             <button className="btn btn-secondary btn-lg" onClick={() => scrollToSection('aiq-interview')}>
               Go to Interview Workspace
             </button>
+            <button className="btn btn-outline btn-lg" onClick={() => navigate('/patient/documents')}>
+              View Documents
+            </button>
             <div className="aiq-language-switch">
               <label htmlFor="interview-language" className="aiq-label" style={{ marginBottom: 4 }}>
                 Interview language
@@ -1011,21 +1014,6 @@ function AIQuestionnairesPage() {
                 </div>
               </div>
 
-              <div className="aiq-context-group">
-                <strong>Uploaded Documents</strong>
-                {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
-                  <ul className="aiq-upload-list">
-                    {contextData.uploads.map((upload, index) => (
-                      <li key={`${upload.name || 'upload'}-${index}`}>
-                        <div><strong>{upload.name || upload}</strong> {upload.status && <span className="muted">({upload.status})</span>}</div>
-                        {upload.summary && <small className="muted">{upload.summary}</small>}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="muted">No uploads</div>
-                )}
-              </div>
 
               <div className="aiq-button-row">
                 <button className="btn btn-light" onClick={refreshContext} disabled={contextLoading}>

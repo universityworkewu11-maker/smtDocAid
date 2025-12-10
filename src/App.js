@@ -17,6 +17,7 @@ import HealthBackground from './components/HealthBackground';
 import SensorIconsBackground from './components/SensorIconsBackground';
 import VitalsPage from './components/VitalsPage';
 import UploadDocumentsPage from './components/UploadDocumentsPage';
+import UploadedDocumentsPage from './components/UploadedDocumentsPage';
 import DoctorPatientView from './components/DoctorPatientView';
 import DoctorProfilePage from './components/DoctorProfilePage';
 import DoctorDirectoryPage from './components/DoctorDirectoryPage';
@@ -3424,6 +3425,11 @@ function App() {
               <Route path="/patient/uploads" element={
                 <ProtectedRoute role="patient">
                   <UploadDocumentsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/patient/documents" element={
+                <ProtectedRoute role="patient">
+                  <UploadedDocumentsPage />
                 </ProtectedRoute>
               } />
               <Route path="/patient/profile" element={
