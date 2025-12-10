@@ -1,4 +1,3 @@
-const { createClient } = require('@supabase/supabase-js');
 const pdfParse = require('pdf-parse');
 const fetch = globalThis.fetch;
 
@@ -13,10 +12,11 @@ const BATCH_SIZE = Number.parseInt(DOCUMENT_EXTRACTION_BATCH, 10) || 3;
 const MAX_TEXT_LENGTH = 12000;
 const SUMMARY_MODEL = process.env.DOCUMENT_SUMMARY_MODEL || 'gpt-4o-mini';
 
-function makeClient() {
+async function makeClient() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   }
+  const { createClient } = await import('@supabase/supabase-js');
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 }
 
@@ -106,7 +106,7 @@ async function processDocument(supabase, doc) {
 }
 
 async function runExtractionForDocument(docId) {
-  const supabase = makeClient();
+  const supabase = await makeClient();
   const { data: doc, error } = await supabase
     .from('documents')
     .select('id, user_id, storage_bucket, storage_path, mime_type, original_name, extraction_status, uploaded_at')
@@ -117,7 +117,7 @@ async function runExtractionForDocument(docId) {
 }
 
 async function runExtractionBatch() {
-  const supabase = makeClient();
+  const supabase = await makeClient();
   const pending = await fetchPendingDocuments(supabase);
   if (!pending.length) return { processed: [], message: 'No pending documents' };
   const results = [];
