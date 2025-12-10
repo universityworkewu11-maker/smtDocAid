@@ -337,7 +337,7 @@ function AIQuestionnairesPage() {
         const vitalsRaw = window.localStorage.getItem('vitals_data');
         if (vitalsRaw) {
           const parsed = JSON.parse(vitalsRaw);
-          if (Array.isArray(parsed)) snapshot.vitals = parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) snapshot.vitals = [parsed[parsed.length - 1]];
         }
       } catch (_) {}
       try {
@@ -379,7 +379,7 @@ function AIQuestionnairesPage() {
             .select('*')
             .eq('user_id', uid)
             .order('uploaded_at', { ascending: false })
-            .limit(25);
+            .limit(1);
           if (docsError) throw docsError;
           if (Array.isArray(docs) && docs.length) {
             snapshot.uploads = docs.map((doc) => ({
