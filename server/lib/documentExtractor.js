@@ -79,14 +79,24 @@ async function extractPdf(buffer) {
   if (typeof globalThis.pdfjsLib === 'undefined') {
     // Provide a minimal shape that pdf-parse/pdf.js may check at import-time.
     try {
-      globalThis.pdfjsLib = { GlobalWorkerOptions: { workerSrc: '' } };
+      globalThis.pdfjsLib = globalThis.pdfjsLib || {};
+      globalThis.pdfjsLib.GlobalWorkerOptions = globalThis.pdfjsLib.GlobalWorkerOptions || {};
+      // Provide a non-empty workerSrc and explicitly disable worker usage so
+      // pdf.js won't attempt to spawn a WebWorker in a Node environment.
+      globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc = globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc || 'about:blank';
+      globalThis.pdfjsLib.disableWorker = true;
     } catch (_) {}
   }
   if (typeof globalThis.PDFJS === 'undefined') {
     try {
-      globalThis.PDFJS = { GlobalWorkerOptions: { workerSrc: '' } };
+      globalThis.PDFJS = globalThis.PDFJS || {};
+      globalThis.PDFJS.GlobalWorkerOptions = globalThis.PDFJS.GlobalWorkerOptions || {};
+      globalThis.PDFJS.GlobalWorkerOptions.workerSrc = globalThis.PDFJS.GlobalWorkerOptions.workerSrc || 'about:blank';
+      globalThis.PDFJS.disableWorker = true;
     } catch (_) {}
   }
+  // Diagnostic: confirm shim presence in logs
+  try { console.log('[documentExtractor] pdf.js shim applied: workerSrc=', globalThis.pdfjsLib?.GlobalWorkerOptions?.workerSrc, 'disableWorker=', globalThis.pdfjsLib?.disableWorker); } catch (_) {}
 
   // Import pdf-parse dynamically so the DOMMatrix shim above exists
   // before pdf.js initializes.
