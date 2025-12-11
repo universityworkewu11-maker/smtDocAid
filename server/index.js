@@ -9,7 +9,7 @@ const { runExtractionBatch } = pkg;
 
 // Polyfill DOMMatrix for pdf-parse in Node.js environment
 if (typeof globalThis.DOMMatrix === 'undefined') {
-  globalThis.DOMMatrix = class DOMMatrix {
+  const DOMMatrixPolyfill = class DOMMatrix {
     constructor(init) {
       if (typeof init === 'string') {
         // Parse transform string like "matrix(a,b,c,d,e,f)"
@@ -53,6 +53,8 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
       return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`;
     }
   };
+  globalThis.DOMMatrix = DOMMatrixPolyfill;
+  global.DOMMatrix = DOMMatrixPolyfill;
 }
 
 // Use global fetch if available; otherwise fall back to cross-fetch (avoid top-level await for Node compatibility)
