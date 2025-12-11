@@ -78,6 +78,22 @@ app.post('/internal/extract-documents', async (req, res) => {
 	}
 });
 
+// Extract specific document by ID
+app.post('/api/v1/documents/:id/extract', async (req, res) => {
+	setCorsHeaders(req, res);
+	try {
+		const { id } = req.params;
+		if (!id) return res.status(400).json({ ok: false, error: 'Document ID required' });
+
+		const { runExtractionForDocument } = pkg;
+		const result = await runExtractionForDocument(id);
+		return res.json({ ok: true, result });
+	} catch (err) {
+		console.error('[extract-document]', err);
+		return res.status(500).json({ ok: false, error: err?.message || String(err) });
+	}
+});
+
 // Chat proxy: POST /api/v1/ai/chat { messages: [...], model?: string, temperature?: number, max_tokens?: number }
 app.post('/api/v1/ai/chat', async (req, res) => {
 	setCorsHeaders(req, res);

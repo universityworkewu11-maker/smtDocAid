@@ -20,6 +20,17 @@ function makeClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 }
 
+// Debug logging for environment variables (only in development)
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[documentExtractor] Environment check:', {
+    hasSupabaseUrl: Boolean(SUPABASE_URL),
+    hasSupabaseKey: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+    hasOpenAIKey: Boolean(OPENAI_API_KEY),
+    batchSize: BATCH_SIZE,
+    summaryModel: SUMMARY_MODEL
+  });
+}
+
 async function fetchPendingDocuments(supabase) {
   const { data, error } = await supabase
     .from('documents')
@@ -86,20 +97,45 @@ async function summarizeText(content, title) {
 
 async function processDocument(supabase, doc) {
   try {
+    console.log(`[documentExtractor] Processing document ${doc.id}: ${doc.original_name} (${doc.mime_type})`);
     await supabase.from('documents').update({ extraction_status: 'processing', extraction_error: null }).eq('id', doc.id);
     const buffer = await downloadDocument(supabase, doc);
+    console.log(`[documentExtractor] Downloaded ${buffer.length} bytes for ${doc.id}`);
+
     let text = '';
-    if ((doc.mime_type || '').includes('pdf')) text = await extractPdf(buffer);
-    else if ((doc.mime_type || '').startsWith('image/')) text = await extractImage(buffer, doc.mime_type);
-    else if ((doc.mime_type || '').includes('text') || (doc.mime_type || '').includes('json')) text = await extractPlain(buffer);
-    else text = await extractPlain(buffer);
+    if ((doc.mime_type || '').includes('pdf')) {
+      console.log(`[documentExtractor] Extracting PDF for ${doc.id}`);
+      text = await extractPdf(buffer);
+    } else if ((doc.mime_type || '').startsWith('image/')) {
+      console.log(`[documentExtractor] Extracting image (OCR) for ${doc.id}`);
+      text = await extractImage(buffer, doc.mime_type);
+    } else if ((doc.mime_type || '').includes('text') || (doc.mime_type || '').includes('json')) {
+      console.log(`[documentExtractor] Extracting plain text for ${doc.id}`);
+      text = await extractPlain(buffer);
+    } else {
+      console.log(`[documentExtractor] Extracting as plain text (fallback) for ${doc.id}`);
+      text = await extractPlain(buffer);
+    }
 
+    console.log(`[documentExtractor] Extracted ${text.length} characters for ${doc.id}`);
     const normalized = text.replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
-    const summary = await summarizeText(normalized, doc.original_name);
+    console.log(`[documentExtractor] Normalized to ${normalized.length} characters for ${doc.id}`);
 
-    await supabase.from('documents').update({ extracted_text: normalized || null, extraction_summary: summary || null, extraction_status: 'complete', extraction_error: null, last_extracted_at: new Date().toISOString() }).eq('id', doc.id);
+    const summary = await summarizeText(normalized, doc.original_name);
+    console.log(`[documentExtractor] Generated summary for ${doc.id}`);
+
+    await supabase.from('documents').update({
+      extracted_text: normalized || null,
+      extraction_summary: summary || null,
+      extraction_status: 'complete',
+      extraction_error: null,
+      last_extracted_at: new Date().toISOString()
+    }).eq('id', doc.id);
+
+    console.log(`[documentExtractor] Completed processing for ${doc.id}`);
     return { id: doc.id, status: 'complete' };
   } catch (err) {
+    console.error(`[documentExtractor] Error processing ${doc.id}:`, err.message);
     await supabase.from('documents').update({ extraction_status: 'failed', extraction_error: err.message }).eq('id', doc.id);
     return { id: doc.id, status: 'failed', error: err.message };
   }
@@ -117,16 +153,20 @@ export async function runExtractionForDocument(docId) {
 }
 
 export async function runExtractionBatch() {
+  console.log('[documentExtractor] Starting extraction batch');
   const supabase = makeClient();
   const pending = await fetchPendingDocuments(supabase);
+  console.log(`[documentExtractor] Found ${pending.length} pending documents`);
   if (!pending.length) return { processed: [], message: 'No pending documents' };
   const results = [];
   for (const doc of pending) {
     // sequential processing to avoid heavy parallel API usage
     // eslint-disable-next-line no-await-in-loop
+    console.log(`[documentExtractor] Processing document ${doc.id}`);
     const res = await processDocument(supabase, doc);
     results.push(res);
   }
+  console.log(`[documentExtractor] Batch completed, processed ${results.length} documents`);
   return { processed: results };
 }
 
