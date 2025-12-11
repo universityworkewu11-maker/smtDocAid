@@ -114,19 +114,54 @@ app.use((req, _res, next) => {
 });
 app.use(express.json({ limit: '1mb' }));
 
+// Environment validation
+const requiredEnvVars = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'OPENAI_API_KEY'
+];
+
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.error('[server] Missing required environment variables:', missingVars);
+  console.error('[server] Please set these environment variables before starting the server');
+  process.exit(1);
+}
+
 const PORT = process.env.PORT || 5001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY || '';
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-2024-11-20';
 const DEFAULT_ASSISTANT_ID = process.env.ASSISTANT_ID || '';
 
+// Log environment status (without exposing secrets)
+console.log('[server] Environment check:', {
+  hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+  hasSupabaseKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+  hasOpenAIKey: Boolean(OPENAI_API_KEY),
+  port: PORT,
+  model: DEFAULT_MODEL
+});
+
 // Health under both /api/health and /health for compatibility
 app.get('/health', (req, res) => {
 	setCorsHeaders(req, res);
-	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
+	res.json({
+		ok: true,
+		provider: 'openai',
+		hasKey: Boolean(OPENAI_API_KEY),
+		hasSupabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+		environment: process.env.NODE_ENV || 'development'
+	});
 });
 app.get('/api/health', (req, res) => {
 	setCorsHeaders(req, res);
-	res.json({ ok: true, provider: 'openai', hasKey: Boolean(OPENAI_API_KEY) });
+	res.json({
+		ok: true,
+		provider: 'openai',
+		hasKey: Boolean(OPENAI_API_KEY),
+		hasSupabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+		environment: process.env.NODE_ENV || 'development'
+	});
 });
 
 // Internal: trigger one extraction batch (protected by INTERNAL_SECRET)
@@ -150,12 +185,32 @@ app.post('/api/v1/documents/:id/extract', async (req, res) => {
 		const { id } = req.params;
 		if (!id) return res.status(400).json({ ok: false, error: 'Document ID required' });
 
+		// Check if required environment variables are present
+		const envCheck = {
+			tokenPresent: Boolean(req.headers.authorization || req.headers['x-api-key']),
+			backendEnv: process.env.NODE_ENV || 'undefined',
+			hasSupabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+			hasOpenAI: Boolean(OPENAI_API_KEY)
+		};
+
+		console.log(`[extract-document] Starting extraction for ${id}, env check:`, envCheck);
+
 		const { runExtractionForDocument } = pkg;
 		const result = await runExtractionForDocument(id);
-		return res.json({ ok: true, result });
+		console.log(`[extract-document] Completed extraction for ${id}:`, result);
+		return res.json({ ok: true, result, envCheck });
 	} catch (err) {
 		console.error('[extract-document]', err);
-		return res.status(500).json({ ok: false, error: err?.message || String(err) });
+		return res.status(500).json({
+			ok: false,
+			error: err?.message || String(err),
+			envCheck: {
+				tokenPresent: Boolean(req.headers.authorization || req.headers['x-api-key']),
+				backendEnv: process.env.NODE_ENV || 'undefined',
+				hasSupabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
+				hasOpenAI: Boolean(OPENAI_API_KEY)
+			}
+		});
 	}
 });
 
