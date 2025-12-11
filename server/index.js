@@ -1,9 +1,66 @@
 // Polyfill DOMMatrix for pdf-parse in Node.js environment
-import dommatrixPkg from 'dommatrix';
-const { DOMMatrix } = dommatrixPkg;
 if (typeof globalThis.DOMMatrix === 'undefined') {
-  globalThis.DOMMatrix = DOMMatrix;
-  global.DOMMatrix = DOMMatrix;
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor(init) {
+      this.m11 = 1; this.m12 = 0; this.m13 = 0; this.m14 = 0;
+      this.m21 = 0; this.m22 = 1; this.m23 = 0; this.m24 = 0;
+      this.m31 = 0; this.m32 = 0; this.m33 = 1; this.m34 = 0;
+      this.m41 = 0; this.m42 = 0; this.m43 = 0; this.m44 = 1;
+
+      if (init) {
+        if (typeof init === 'string') {
+          // Parse matrix string like "matrix(a,b,c,d,e,f)"
+          const match = init.match(/matrix\(([^)]+)\)/);
+          if (match) {
+            const values = match[1].split(',').map(v => parseFloat(v.trim()));
+            this.m11 = values[0] || 1;
+            this.m12 = values[1] || 0;
+            this.m21 = values[2] || 0;
+            this.m22 = values[3] || 1;
+            this.m41 = values[4] || 0;
+            this.m42 = values[5] || 0;
+          }
+        } else if (Array.isArray(init)) {
+          [this.m11, this.m12, this.m21, this.m22, this.m41, this.m42] = init;
+        }
+      }
+    }
+
+    get a() { return this.m11; }
+    get b() { return this.m12; }
+    get c() { return this.m21; }
+    get d() { return this.m22; }
+    get e() { return this.m41; }
+    get f() { return this.m42; }
+
+    translate(x, y) {
+      this.m41 += x;
+      this.m42 += y;
+      return this;
+    }
+
+    scale(x, y = x) {
+      this.m11 *= x;
+      this.m22 *= y;
+      return this;
+    }
+
+    rotate(angle) {
+      const cos = Math.cos(angle * Math.PI / 180);
+      const sin = Math.sin(angle * Math.PI / 180);
+      const { m11, m12, m21, m22 } = this;
+      this.m11 = m11 * cos + m21 * sin;
+      this.m12 = m12 * cos + m22 * sin;
+      this.m21 = -m11 * sin + m21 * cos;
+      this.m22 = -m12 * sin + m22 * cos;
+      return this;
+    }
+
+    toString() {
+      return `matrix(${this.m11}, ${this.m12}, ${this.m21}, ${this.m22}, ${this.m41}, ${this.m42})`;
+    }
+  };
+  global.DOMMatrix = globalThis.DOMMatrix;
 }
 
 import dotenv from 'dotenv';
