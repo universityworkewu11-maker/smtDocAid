@@ -1014,6 +1014,19 @@ function AIQuestionnairesPage() {
                 </div>
               </div>
 
+              <div className="aiq-context-group">
+                <strong>Latest Document</strong>
+                <div className="aiq-context-list">
+                  {Array.isArray(contextData.uploads) && contextData.uploads.length > 0 ? (
+                    <div>
+                      <span>{contextData.uploads[0].name || 'Document'}</span>
+                      <span>{truncate(contextData.uploads[0].summary || contextData.uploads[0].extractedText || '', 50)}</span>
+                    </div>
+                  ) : (
+                    <div className="muted">No recent documents</div>
+                  )}
+                </div>
+              </div>
 
               <div className="aiq-button-row">
                 <button className="btn btn-light" onClick={refreshContext} disabled={contextLoading}>
