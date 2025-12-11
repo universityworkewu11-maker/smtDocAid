@@ -1,6 +1,25 @@
 import fetch from 'cross-fetch';
 import { createClient } from '@supabase/supabase-js';
-import pdfParse from 'pdf-parse';
+
+// Polyfill DOMMatrix for environments (Node runtimes / serverless) that
+// don't provide Web DOM geometry APIs. pdf.js (used by `pdf-parse`)
+// may reference `DOMMatrix` at import time, so we provide a minimal shim
+// here and use a dynamic import for `pdf-parse` so the shim is in place
+// before pdf.js initializes.
+if (typeof global.DOMMatrix === 'undefined') {
+  // Minimal DOMMatrix shim that satisfies pdf.js presence checks.
+  // Full math operations are rarely required for text extraction; if
+  // pdf.js needs actual transform math, consider using a fuller polyfill
+  // or upgrading to a Node runtime with Web APIs (Node 20+).
+  global.DOMMatrix = class DOMMatrix {
+    constructor() {
+      // no-op; we only need the constructor to exist for pdf.js
+    }
+    toFloat32Array() {
+      return new Float32Array(16);
+    }
+  };
+}
 
 const {
   SUPABASE_URL,
@@ -51,6 +70,27 @@ async function downloadDocument(supabase, doc) {
 }
 
 async function extractPdf(buffer) {
+  // Ensure pdf.js doesn't require a browser workerSrc. Some builds of
+  // pdf.js check for a worker path and throw "No PDFJS.workerSrc specified".
+  // Provide minimal global options and disable worker usage via env flag.
+  try {
+    process.env.PDFJS_DISABLE_WORKER = process.env.PDFJS_DISABLE_WORKER || 'true';
+  } catch (_) {}
+  if (typeof globalThis.pdfjsLib === 'undefined') {
+    // Provide a minimal shape that pdf-parse/pdf.js may check at import-time.
+    try {
+      globalThis.pdfjsLib = { GlobalWorkerOptions: { workerSrc: '' } };
+    } catch (_) {}
+  }
+  if (typeof globalThis.PDFJS === 'undefined') {
+    try {
+      globalThis.PDFJS = { GlobalWorkerOptions: { workerSrc: '' } };
+    } catch (_) {}
+  }
+
+  // Import pdf-parse dynamically so the DOMMatrix shim above exists
+  // before pdf.js initializes.
+  const { default: pdfParse } = await import('pdf-parse');
   const parsed = await pdfParse(buffer);
   return parsed?.text || '';
 }
