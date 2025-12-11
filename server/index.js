@@ -1,12 +1,3 @@
-import dotenv from 'dotenv';
-dotenv.config();
-// Minimal Express server for OpenAI proxy
-import express from 'express';
-import cors from 'cors';
-import fetch from 'cross-fetch';
-import pkg from './lib/documentExtractor.js';
-const { runExtractionBatch } = pkg;
-
 // Polyfill DOMMatrix for pdf-parse in Node.js environment
 if (typeof globalThis.DOMMatrix === 'undefined') {
   const DOMMatrixPolyfill = class DOMMatrix {
@@ -56,6 +47,15 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
   globalThis.DOMMatrix = DOMMatrixPolyfill;
   global.DOMMatrix = DOMMatrixPolyfill;
 }
+
+import dotenv from 'dotenv';
+dotenv.config();
+// Minimal Express server for OpenAI proxy
+import express from 'express';
+import cors from 'cors';
+import fetch from 'cross-fetch';
+import pkg from './lib/documentExtractor.js';
+const { runExtractionBatch } = pkg;
 
 // Use global fetch if available; otherwise fall back to cross-fetch (avoid top-level await for Node compatibility)
 const fetchFn = typeof globalThis.fetch === 'function' ? globalThis.fetch : fetch;
