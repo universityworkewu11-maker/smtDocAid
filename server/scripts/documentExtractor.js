@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import fetch from 'cross-fetch';
 import { createClient } from '@supabase/supabase-js';
-import pdfParse from 'pdf-parse';
 
 const {
   SUPABASE_URL,
@@ -45,6 +44,14 @@ async function downloadDocument(doc) {
 }
 
 async function extractPdf(buffer) {
+  // Ensure a minimal DOMMatrix exists before loading pdf-parse (pdf.js expects it)
+  if (typeof global.DOMMatrix === 'undefined') {
+    // Minimal shim — pdf.js only needs the constructor to exist in many environments.
+    // If pdf.js needs more, consider using a fuller polyfill or Node 20.
+    // eslint-disable-next-line no-global-assign
+    global.DOMMatrix = function DOMMatrix() {};
+  }
+  const { default: pdfParse } = await import('pdf-parse');
   const parsed = await pdfParse(buffer);
   return parsed?.text || '';
 }

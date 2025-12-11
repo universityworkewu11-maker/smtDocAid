@@ -2,6 +2,10 @@
 // Simple utility to test pdf-parse extraction locally
 const fs = require('fs');
 const path = require('path');
+// Ensure DOMMatrix exists in Node for pdf.js (used by pdf-parse)
+if (typeof global.DOMMatrix === 'undefined') {
+  global.DOMMatrix = function DOMMatrix() {};
+}
 const pdf = require('pdf-parse');
 
 async function run() {
