@@ -248,6 +248,8 @@ function buildInterviewSystemPrompt(language = 'en') {
 		: 'Use clear, plain English that a patient can understand.';
 	return (
 		`You are a clinical intake assistant. Ask one question at a time to collect relevant information for a doctor. ${languageDirective}\n` +
+		'- Review the provided context including patient demographics, vitals, and any uploaded documents (extracted text and summaries).\n' +
+		'- Use the document content to inform your questions - ask about details mentioned in the documents or follow up on findings.\n' +
 		'- Always return ONLY valid JSON with keys: {"question":"<string>","done":false}.\n' +
 		'- If you have enough information, return {"question":"","done":true}.\n' +
 		'- Keep questions short, clear, and medically relevant.\n' +
@@ -281,7 +283,7 @@ app.post('/api/v1/ai/interview/start', async (req, res) => {
 			{ role: 'system', content: buildInterviewSystemPrompt(lang) },
 			{ role: 'user', content: JSON.stringify({ context: context || {}, instruction: 'Begin interview now.' }) }
 		];
-		const content = await openaiChat(history, { temperature: 0.4, max_tokens: 200 });
+		const content = await openaiChat(history, { temperature: 0.4, max_tokens: 1000 });
 		const data = parseJSON(content, {});
 		const question = typeof data?.question === 'string' && data.question.trim() ? data.question.trim() : 'What brings you in today?';
 		const done = Boolean(data?.done);
@@ -317,7 +319,7 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 		sess.history.push({ role: 'user', content: String(answer || '').trim() });
 		sess.turns = (sess.turns || 0) + 1;
 		const limitReached = sess.turns >= 15;
-		const content = await openaiChat(sess.history, { temperature: 0.5, max_tokens: 200 });
+		const content = await openaiChat(sess.history, { temperature: 0.5, max_tokens: 1000 });
 		const data = parseJSON(content, {});
 		const question = typeof data?.question === 'string' ? data.question.trim() : '';
 		const doneSignal = Boolean(data?.done);
