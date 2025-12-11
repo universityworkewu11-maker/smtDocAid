@@ -1,51 +1,8 @@
 // Polyfill DOMMatrix for pdf-parse in Node.js environment
+import { DOMMatrix } from 'dommatrix';
 if (typeof globalThis.DOMMatrix === 'undefined') {
-  const DOMMatrixPolyfill = class DOMMatrix {
-    constructor(init) {
-      if (typeof init === 'string') {
-        // Parse transform string like "matrix(a,b,c,d,e,f)"
-        const match = init.match(/matrix\(([^)]+)\)/);
-        if (match) {
-          const values = match[1].split(',').map(v => parseFloat(v.trim()));
-          this.a = values[0] || 1;
-          this.b = values[1] || 0;
-          this.c = values[2] || 0;
-          this.d = values[3] || 1;
-          this.e = values[4] || 0;
-          this.f = values[5] || 0;
-        } else {
-          this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
-        }
-      } else {
-        this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
-      }
-    }
-    translate(x, y) {
-      this.e += x;
-      this.f += y;
-      return this;
-    }
-    scale(x, y) {
-      this.a *= x;
-      this.d *= y || x;
-      return this;
-    }
-    rotate(angle) {
-      const cos = Math.cos(angle * Math.PI / 180);
-      const sin = Math.sin(angle * Math.PI / 180);
-      const { a, b, c, d } = this;
-      this.a = a * cos + c * sin;
-      this.b = b * cos + d * sin;
-      this.c = -a * sin + c * cos;
-      this.d = -b * sin + d * cos;
-      return this;
-    }
-    toString() {
-      return `matrix(${this.a}, ${this.b}, ${this.c}, ${this.d}, ${this.e}, ${this.f})`;
-    }
-  };
-  globalThis.DOMMatrix = DOMMatrixPolyfill;
-  global.DOMMatrix = DOMMatrixPolyfill;
+  globalThis.DOMMatrix = DOMMatrix;
+  global.DOMMatrix = DOMMatrix;
 }
 
 import dotenv from 'dotenv';
