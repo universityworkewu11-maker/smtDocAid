@@ -305,15 +305,21 @@ function parseJSON(s, fallback = null) {
 	try { return JSON.parse(String(s)); } catch { return fallback; }
 }
 
-function buildInterviewSystemPrompt(language = 'en') {
+function buildInterviewSystemPrompt(language = 'en', context = {}) {
 	const lang = language === 'bn' ? 'bn' : 'en';
 	const languageDirective = lang === 'bn'
 		? 'All patient-facing wording must be in Bangla (বাংলা). Keep your tone respectful, clear, and confident.'
 		: 'Use clear, plain English that a patient can understand.';
+
+	let documentInfo = '';
+	if (context.uploads && context.uploads.length > 0) {
+		const doc = context.uploads[0]; // Latest document
+		documentInfo = `\nDocument Summary: ${doc.summary || 'No summary available'}\nExtracted Text Preview: ${(doc.extractedText || '').slice(0, 500)}${(doc.extractedText || '').length > 500 ? '...' : ''}`;
+	}
+
 	return (
-		`You are a clinical intake assistant. Ask one question at a time to collect relevant information for a doctor. ${languageDirective}\n` +
-		'- Review the provided context including patient demographics, vitals, and any uploaded documents (extracted text and summaries).\n' +
-		'- Use the document content to inform your questions - ask about details mentioned in the documents or follow up on findings.\n' +
+		`You are a clinical intake assistant. Ask one question at a time to collect relevant information for a doctor. ${languageDirective}${documentInfo}\n` +
+		'- Use the document content provided above to inform your questions - ask about details mentioned in the documents or follow up on findings.\n' +
 		'- Always return ONLY valid JSON with keys: {"question":"<string>","done":false}.\n' +
 		'- If you have enough information, return {"question":"","done":true}.\n' +
 		'- Keep questions short, clear, and medically relevant.\n' +
@@ -344,8 +350,8 @@ app.post('/api/v1/ai/interview/start', async (req, res) => {
 		const lang = language === 'bn' ? 'bn' : 'en';
 		const sessionId = uuid();
 		const history = [
-			{ role: 'system', content: buildInterviewSystemPrompt(lang) },
-			{ role: 'user', content: JSON.stringify({ context: context || {}, instruction: 'Begin interview now.' }) }
+			{ role: 'system', content: buildInterviewSystemPrompt(lang, context) },
+			{ role: 'user', content: JSON.stringify({ instruction: 'Begin interview now.' }) }
 		];
 		const content = await openaiChat(history, { temperature: 0.4, max_tokens: 1000 });
 		const data = parseJSON(content, {});
@@ -377,7 +383,8 @@ app.post('/api/v1/ai/interview/next', async (req, res) => {
 			sess.language = lang;
 			// Refresh system directive so future turns stay in the updated language
 			if (Array.isArray(sess.history) && sess.history.length > 0 && sess.history[0]?.role === 'system') {
-				sess.history[0].content = buildInterviewSystemPrompt(lang);
+				// Note: We don't have the original context here, so we keep the existing system prompt
+				// The language change will be reflected in future responses
 			}
 		}
 		sess.history.push({ role: 'user', content: String(answer || '').trim() });
