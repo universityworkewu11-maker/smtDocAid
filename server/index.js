@@ -1,5 +1,6 @@
 // Polyfill DOMMatrix for pdf-parse in Node.js environment
-import { DOMMatrix } from 'dommatrix';
+import dommatrixPkg from 'dommatrix';
+const { DOMMatrix } = dommatrixPkg;
 if (typeof globalThis.DOMMatrix === 'undefined') {
   globalThis.DOMMatrix = DOMMatrix;
   global.DOMMatrix = DOMMatrix;
