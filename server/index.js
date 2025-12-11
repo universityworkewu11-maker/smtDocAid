@@ -61,6 +61,10 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
     }
   };
   global.DOMMatrix = globalThis.DOMMatrix;
+  if (typeof globalThis.window === 'undefined') {
+    globalThis.window = {};
+  }
+  globalThis.window.DOMMatrix = globalThis.DOMMatrix;
 }
 
 import dotenv from 'dotenv';
