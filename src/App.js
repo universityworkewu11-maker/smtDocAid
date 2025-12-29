@@ -2991,13 +2991,34 @@ function DoctorPortal() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { data: shareRows, error: shareErr } = await supabase
-        .from('notifications')
-        .select('patient_id, created_at')
-        .eq('doctor_id', user.id)
-        .eq('type', 'report_shared')
-        .order('created_at', { ascending: false })
-        .limit(500);
+      // Some older notifications used doctors.id instead of auth.uid() for doctor_id.
+      // Match both so the doctor dashboard stays compatible.
+      const { data: doctorRow } = await supabase
+        .from('doctors')
+        .select('id, user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const doctorIdForQuery = doctorRow?.id || null;
+
+      let shareRows = null;
+      let shareErr = null;
+      if (doctorIdForQuery) {
+        ({ data: shareRows, error: shareErr } = await supabase
+          .from('notifications')
+          .select('patient_id, created_at')
+          .eq('type', 'report_shared')
+          .or(`doctor_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}`)
+          .order('created_at', { ascending: false })
+          .limit(500));
+      } else {
+        ({ data: shareRows, error: shareErr } = await supabase
+          .from('notifications')
+          .select('patient_id, created_at')
+          .eq('doctor_id', user.id)
+          .eq('type', 'report_shared')
+          .order('created_at', { ascending: false })
+          .limit(500));
+      }
       if (shareErr) throw shareErr;
 
       const sharedIds = Array.from(new Set((shareRows || []).map(row => row.patient_id).filter(Boolean)));
@@ -3008,20 +3029,56 @@ function DoctorPortal() {
         return;
       }
 
-      const { data: patientRows, error: patientErr } = await supabase
-        .from('patients')
-        .select('user_id, full_name, name, updated_at, created_at')
-        .in('user_id', sharedIds);
-      if (patientErr) throw patientErr;
+      // Fetch patient profiles. Prefer matching by patients.user_id (auth uid).
+      // Fallback: some deployments may have notifications.patient_id set to patients.id.
+      let patientRows = [];
+      try {
+        const { data, error: patientErr } = await supabase
+          .from('patients')
+          .select('id, user_id, full_name, name, updated_at, created_at, email')
+          .in('user_id', sharedIds);
+        if (patientErr) throw patientErr;
+        patientRows = data || [];
+      } catch (_) {
+        patientRows = [];
+      }
+      if (!patientRows.length) {
+        try {
+          const { data, error: patientErr2 } = await supabase
+            .from('patients')
+            .select('id, user_id, full_name, name, updated_at, created_at, email')
+            .in('id', sharedIds);
+          if (patientErr2) throw patientErr2;
+          patientRows = data || [];
+        } catch (_) {
+          patientRows = [];
+        }
+      }
+
+      // Build a map so we can still show patients even if their profile row is missing.
+      const byUserId = new Map((patientRows || []).filter(r => r?.user_id).map(r => [r.user_id, r]));
+      const byId = new Map((patientRows || []).filter(r => r?.id).map(r => [r.id, r]));
 
       const diagMap = await fetchLatestDiagnosesMap(sharedIds);
       const enriched = [];
-      for (const r of (patientRows || [])) {
-        const lastTime = await fetchLatestVitalsTime(r.user_id);
-        const latest = diagMap.get(r.user_id);
+
+      // Optional cache for friendly names (set by other screens)
+      let cachedNameMap = {};
+      try {
+        cachedNameMap = JSON.parse(window.localStorage.getItem('patientNamesMap') || '{}') || {};
+      } catch (_) {
+        cachedNameMap = {};
+      }
+
+      for (const pid of sharedIds) {
+        const row = byUserId.get(pid) || byId.get(pid) || null;
+        const effectiveUserId = row?.user_id || pid;
+        const lastTime = await fetchLatestVitalsTime(effectiveUserId);
+        const latest = diagMap.get(effectiveUserId) || diagMap.get(pid);
+        const fallbackName = cachedNameMap[String(effectiveUserId)] || cachedNameMap[String(pid)] || null;
         enriched.push({
-          user_id: r.user_id,
-          name: r.full_name || r.name || `(UID ${String(r.user_id).slice(0, 8)}...)`,
+          user_id: effectiveUserId,
+          name: row?.full_name || row?.name || fallbackName || `(UID ${String(effectiveUserId).slice(0, 8)}...)`,
           condition: latest ? `Latest report ${latest.ai_generated ? '(AI)' : ''}` : '--',
           risk: typeof latest?.severity === 'string' ? latest.severity.toLowerCase() : 'low',
           lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '--'
