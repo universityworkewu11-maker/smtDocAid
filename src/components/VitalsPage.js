@@ -1,11 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
 // Supabase client imported from centralized module
 
+const stripTrailingSlash = (url = '') => url.replace(/\/$/, '');
+
 const VitalsPage = () => {
   const navigate = useNavigate();
+  const serverBase = useMemo(() => {
+    const envBase = stripTrailingSlash(process.env.REACT_APP_SERVER_BASE || process.env.REACT_APP_SERVER_URL || '');
+    if (envBase) return envBase;
+    if (typeof window !== 'undefined') return stripTrailingSlash(window.location.origin);
+    return '';
+  }, []);
   const [currentStep, setCurrentStep] = useState(0);
   const [vitalsData, setVitalsData] = useState({
     temperature: { value: null, status: 'pending', timestamp: null, confirmed: false },
@@ -112,40 +120,41 @@ const VitalsPage = () => {
   }, []);
 
   // Raspberry Pi API integration
-  const takeVitalReading = async (vitalType, pinNumber) => {
+  const takeVitalReading = async (vitalType) => {
     setIsLoading(true);
     setError('');
 
     try {
-      // Fetch specific vital from Raspberry Pi API
-      const endpointMap = {
-        temperature: `/api/read/temperature?pin=${pinNumber}`,
-        heartRate: `/api/read/heartRate?pin=${pinNumber}`,
-        spo2: `/api/read/spo2?pin=${pinNumber}`
-      };
-      const response = await fetch(`http://10.60.194.209:7000${endpointMap[vitalType]}`);
+      const url = `${serverBase || ''}/api/vitals`;
+      const response = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
       if (!response.ok) {
-        throw new Error('Failed to fetch vitals from Raspberry Pi server');
+        throw new Error('Failed to fetch vitals from ingestion server');
       }
       const data = await response.json();
 
-      // Extract value based on vitalType
+      // Server stores latest Raspi payload; map to UI keys
+      const rawMap = {
+        temperature: data.temperature ?? data.object_temp_C ?? null,
+        heartRate: data.heartRate ?? data.heart_rate ?? data.heart_rate_bpm ?? null,
+        spo2: data.spo2 ?? data.spo2_percent ?? null
+      };
+
       let value = null;
+      const raw = rawMap[vitalType];
+
       if (vitalType === 'temperature') {
-        const c = toFiniteNumber(data.object_temp_C);
-        // API indicates Celsius; UI displays Fahrenheit
-        value = c === null ? null : Math.round((((c * 9) / 5) + 32) * 10) / 10;
-      } else if (vitalType === 'heartRate') {
-        value = toFiniteNumber(data.heart_rate_bpm);
-      } else if (vitalType === 'spo2') {
-        value = toFiniteNumber(data.spo2_percent);
+        const n = toFiniteNumber(raw);
+        if (n !== null) {
+          // Heuristic: values in 20–50 are almost certainly °C, 80–110 likely already °F
+          const f = n <= 60 ? (((n * 9) / 5) + 32) : n;
+          value = Math.round(f * 10) / 10;
+        }
+      } else {
+        value = toFiniteNumber(raw);
       }
 
-      // Normalize invalid numbers
-      if (value !== null && !Number.isFinite(value)) value = null;
-
-      // If value is null or undefined, use random mock values within normal range
       if (value === null || value === undefined) {
+        setError(`No ${vitalType} reading available yet. Using a mock value.`);
         value = generateMockValue(vitalType);
       }
 
@@ -205,21 +214,49 @@ const VitalsPage = () => {
     }));
   };
 
+  const skipCurrentVital = () => {
+    setVitalsData(prev => ({
+      ...prev,
+      [currentVital.key]: {
+        value: null,
+        status: 'skipped',
+        timestamp: new Date().toISOString(),
+        confirmed: true
+      }
+    }));
+
+    if (currentStep < vitalsConfig.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
-      case 'confirmed': return 'var(--success)';
-      case 'measured': return 'var(--warning)';
-      case 'error': return 'var(--danger)';
-      default: return 'var(--gray-400)';
+      case 'confirmed':
+        return 'var(--success)';
+      case 'measured':
+        return 'var(--warning)';
+      case 'error':
+        return 'var(--danger)';
+      case 'skipped':
+        return 'var(--gray-500)';
+      default:
+        return 'var(--gray-400)';
     }
   };
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'confirmed': return 'Confirmed';
-      case 'measured': return 'Ready to Confirm';
-      case 'error': return 'Error';
-      default: return 'Not Measured';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'measured':
+        return 'Ready to Confirm';
+      case 'error':
+        return 'Error';
+      case 'skipped':
+        return 'Skipped';
+      default:
+        return 'Not Measured';
     }
   };
 
@@ -227,9 +264,27 @@ const VitalsPage = () => {
     return value >= range.min && value <= range.max;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     // Store vitals data and navigate to next step
     localStorage.setItem('vitalsData', JSON.stringify(vitalsData));
+
+    // Upload vitals to backend
+    try {
+      const uploadUrl = `${serverBase || ''}/api/vitals`;
+      const vitalsToUpload = {
+        temperature: vitalsData.temperature.value,
+        heartRate: vitalsData.heartRate.value,
+        spo2: vitalsData.spo2.value
+      };
+      await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vitalsToUpload)
+      });
+    } catch (error) {
+      console.error('Failed to upload vitals:', error);
+    }
+
     navigate('/patient/uploads');
   };
 
@@ -332,7 +387,7 @@ const VitalsPage = () => {
             <div className="vital-actions">
               <button
                 className="btn btn-primary"
-                onClick={() => takeVitalReading(currentVital.key, currentVital.pin)}
+                onClick={() => takeVitalReading(currentVital.key)}
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -359,6 +414,11 @@ const VitalsPage = () => {
               )}
               {vitalsData[currentVital.key]?.status === 'pending' && !isLoading && (
                 <div className="muted" style={{marginTop:12}}>No reading yet. Click "Take {currentVital.name}".</div>
+              )}
+              {vitalsData[currentVital.key]?.status === 'error' && !isLoading && (
+                <button className="btn btn-outline" onClick={skipCurrentVital} style={{ marginTop: 12 }}>
+                  Skip this vital for now
+                </button>
               )}
               {isLoading && (
                 <div className="skeleton animate" style={{height:56, marginTop:16, borderRadius:'0.75rem'}} />

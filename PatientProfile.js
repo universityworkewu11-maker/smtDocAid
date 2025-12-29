@@ -20,10 +20,19 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [patientRow, setPatientRow] = useState(null);
+  const [profileRow, setProfileRow] = useState(null);
   
   const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
   const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const derivePatientName = () => {
+    if (patientData.name) return patientData.name;
+    if (user?.user_metadata?.full_name) return user.user_metadata.full_name;
+    if (user?.email) return user.email.split('@')[0];
+    return '';
+  };
 
   // Generate auto patient ID
   const generatePatientId = () => {
@@ -47,64 +56,70 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
     return age.toString();
   };
 
+  const buildComponentState = (patientRecord, profileRecord) => {
+    const canonicalName = patientRecord?.full_name || patientRecord?.name || profileRecord?.name || derivePatientName();
+    const dob = patientRecord?.date_of_birth || profileRecord?.date_of_birth || '';
+    const gender = profileRecord?.gender || patientRecord?.gender || '';
+    const phone = patientRecord?.phone || profileRecord?.phone || '';
+    const address = profileRecord?.address || patientRecord?.address || '';
+    const patientId = profileRecord?.patient_id || patientRecord?.id || patientData.patientId;
+
+    return {
+      patientId: patientId || '',
+      name: canonicalName || '',
+      gender,
+      age: calculateAge(dob),
+      dateOfBirth: dob || '',
+      phone,
+      address,
+      emergencyContact: profileRecord?.emergency_contact || '',
+      medicalHistory: profileRecord?.medical_history || '',
+      allergies: profileRecord?.allergies || '',
+      medications: profileRecord?.medications || ''
+    };
+  };
+
   // Load patient data from Supabase
   useEffect(() => {
     const loadPatientData = async () => {
-      if (!user) return;
-      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const { data, error } = await supabase
-          .from('patient_profiles')
-          .select('*')
+        const { data: patientData, error: patientErr } = await supabase
+          .from('patients')
+          .select('id,user_id,full_name,name,email,phone,address,date_of_birth,gender,created_at,updated_at')
           .eq('user_id', user.id)
-          .single();
-        
-        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found
-          throw error;
-        }
-        
-        if (data) {
-          setPatientData({
-            patientId: data.patient_id,
-            name: data.name || '',
-            gender: data.gender || '',
-            age: data.age || '',
-            dateOfBirth: data.date_of_birth || '',
-            phone: data.phone || '',
-            address: data.address || '',
-            emergencyContact: data.emergency_contact || '',
-            medicalHistory: data.medical_history || '',
-            allergies: data.allergies || '',
-            medications: data.medications || ''
-          });
-        } else {
-          // Create new patient profile
-          const newPatientId = generatePatientId();
-          setPatientData(prev => ({
-            ...prev,
-            patientId: newPatientId
-          }));
-          
-          // Save new profile to database
-          const { error: insertError } = await supabase
-            .from('patient_profiles')
-            .insert([{
-              user_id: user.id,
-              patient_id: newPatientId,
-              name: '',
-              gender: '',
-              age: '',
-              date_of_birth: '',
-              phone: '',
-              address: '',
-              emergency_contact: '',
-              medical_history: '',
-              allergies: '',
-              medications: ''
-            }]);
-          
+          .maybeSingle();
+
+        if (patientErr && patientErr.code !== 'PGRST116') throw patientErr;
+
+        let resolvedPatient = patientData || null;
+        if (!resolvedPatient) {
+          const fallbackName = user.user_metadata?.full_name || user.email?.split('@')[0] || '';
+          const basePayload = {
+            user_id: user.id,
+            full_name: fallbackName,
+            name: fallbackName,
+            email: user.email
+          };
+          const { data: insertedPatient, error: insertError } = await supabase
+            .from('patients')
+            .upsert(basePayload, { onConflict: 'user_id' })
+            .select()
+            .single();
           if (insertError) throw insertError;
+          resolvedPatient = insertedPatient;
         }
+
+        setPatientRow(resolvedPatient);
+        setProfileRow(null);
+        setPatientData(prev => ({
+          ...prev,
+          ...buildComponentState(resolvedPatient, null)
+        }));
       } catch (err) {
         console.error('Error loading patient data:', err);
         setError('Failed to load patient profile');
@@ -112,7 +127,7 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
         setLoading(false);
       }
     };
-    
+
     loadPatientData();
   }, [user, supabase]);
 
@@ -133,27 +148,44 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
     setError('');
     
     try {
-      const { error } = await supabase
-        .from('patient_profiles')
-        .update({
-          name: patientData.name,
-          gender: patientData.gender,
-          age: patientData.age,
-          date_of_birth: patientData.dateOfBirth,
-          phone: patientData.phone,
-          address: patientData.address,
-          emergency_contact: patientData.emergencyContact,
-          medical_history: patientData.medicalHistory,
-          allergies: patientData.allergies,
-          medications: patientData.medications
-        })
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
+      const canonicalName = (patientData.name || '').trim() || derivePatientName();
+      const patientPayload = {
+        user_id: user.id,
+        full_name: canonicalName,
+        name: canonicalName,
+        email: user.email,
+        phone: patientData.phone || null,
+        address: patientData.address || null,
+        date_of_birth: patientData.dateOfBirth || null,
+        gender: patientData.gender || null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: savedPatient, error: patientError, status, statusText } = await supabase
+        .from('patients')
+        .upsert(patientPayload, { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      // Diagnostic logging to help surface why saves may silently fail
+      console.debug('patients.upsert response:', { savedPatient, patientError, status, statusText });
+
+      if (patientError) throw patientError;
+
+      // We no longer write to legacy `patient_profiles` here. If you need
+      // extended fields (medical history, allergies, medications), create
+      // a dedicated table or ensure the schema exists. For now store core
+      // fields in `patients` and keep UI state in memory.
+
+      setPatientRow(savedPatient);
+      setProfileRow(null);
+      setPatientData(prev => ({
+        ...prev,
+        ...buildComponentState(savedPatient, null)
+      }));
       setEditing(false);
       if (onUpdateProfile) {
-        onUpdateProfile(patientData);
+        onUpdateProfile({ ...patientData, ...buildComponentState(savedPatient, savedProfile) });
       }
     } catch (err) {
       console.error('Error saving patient data:', err);
@@ -165,8 +197,10 @@ const PatientProfile = ({ user, onUpdateProfile }) => {
 
   const handleCancel = () => {
     setEditing(false);
-    // Reload data to discard changes
-    window.location.reload();
+    setPatientData(prev => ({
+      ...prev,
+      ...buildComponentState(patientRow, profileRow)
+    }));
   };
 
   if (loading) {

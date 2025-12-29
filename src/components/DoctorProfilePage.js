@@ -26,12 +26,12 @@ const DoctorProfilePage = () => {
 				const uid = user?.id;
 				if (!uid) throw new Error('Not signed in');
 				const { data, error } = await supabase
-					.from('doctor_profiles')
+					.from('doctors')
 					.select('*')
 					.eq('user_id', uid)
 					.single();
 				if (error && error.code !== 'PGRST116') throw error; // ignore row not found
-				if (data) setProfile(prev => ({ ...prev, ...data }));
+				if (data) setProfile(prev => ({ ...prev, ...data, full_name: data.name || prev.full_name }));
 				else setProfile(prev => ({ ...prev, user_id: uid }));
 				// ensure email fallback from auth
 				if (!data?.email) {
@@ -54,22 +54,38 @@ const DoctorProfilePage = () => {
 			// Try to upsert extended columns; gracefully fallback if table lacks some
 			const payload = {
 				user_id: profile.user_id,
-				full_name: profile.full_name,
+				name: profile.full_name,
 				email: profile.email,
 				specialty: profile.specialty,
 				location: profile.location,
 				bio: profile.bio
 			};
-			let res = await supabase.from('doctor_profiles').upsert(payload).select().single();
+			// Primary attempt: upsert into canonical `doctors` table
+			let res = await supabase.from('doctors').upsert(payload).select().single();
 			if (res.error) {
-				// Fallback with minimal columns
-				const minimal = { user_id: profile.user_id, full_name: profile.full_name, email: profile.email };
-				res = await supabase.from('doctor_profiles').upsert(minimal).select().single();
-				if (res.error) throw res.error;
+				// If RLS or permission prevents writing to `doctors`, try legacy `doctor_profiles` as a fallback
+				console.warn('doctors upsert failed, attempting doctor_profiles fallback:', res.error);
+				try {
+					const legacyPayload = {
+						user_id: profile.user_id,
+						full_name: profile.full_name,
+						email: profile.email,
+						specialty: profile.specialty,
+						location: profile.location,
+						bio: profile.bio
+					};
+					const res2 = await supabase.from('doctor_profiles').upsert(legacyPayload).select().single();
+					if (res2.error) throw res2.error;
+					setProfile(prev => ({ ...prev, ...(res2.data || {}), full_name: res2.data.full_name || prev.full_name }));
+					return;
+				} catch (fallbackErr) {
+					// If fallback also fails, surface the original error
+					throw res.error || fallbackErr;
+				}
 			}
-			setProfile(prev => ({ ...prev, ...(res.data || {}) }));
+			setProfile(prev => ({ ...prev, ...(res.data || {}), full_name: res.data.name || prev.full_name }));
 		} catch (e) {
-			setError(e?.message || String(e));
+			setError(e?.message || String(e) || 'Failed to save profile. Ensure you are signed in and your project RLS allows profile updates.');
 		} finally {
 			setSaving(false);
 		}

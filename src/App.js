@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+﻿import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import supabase, { getSupabaseStatus } from './lib/supabaseClient';
 import {
@@ -17,6 +17,7 @@ import HealthBackground from './components/HealthBackground';
 import SensorIconsBackground from './components/SensorIconsBackground';
 import VitalsPage from './components/VitalsPage';
 import UploadDocumentsPage from './components/UploadDocumentsPage';
+import UploadedDocumentsPage from './components/UploadedDocumentsPage';
 import DoctorPatientView from './components/DoctorPatientView';
 import DoctorProfilePage from './components/DoctorProfilePage';
 import DoctorDirectoryPage from './components/DoctorDirectoryPage';
@@ -27,9 +28,6 @@ import DoctorNotificationsPage from './components/DoctorNotificationsPage';
 // Interview flow is integrated into QuestionnairePage; no separate page import
 
 // Config
-// Supabase client is centralized in lib/supabaseClient.js
-
-// AI backend config
 const SERVER_BASE = (() => {
   const env = (process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
   if (env) return env;
@@ -40,12 +38,10 @@ const SERVER_BASE = (() => {
   return '';
 })();
 
-// Supabase table config (allow overriding via .env)
 const TBL_REPORT = process.env.REACT_APP_TBL_REPORT || 'diagnoses';
 const TBL_QR = process.env.REACT_APP_TBL_QR || 'questionnaire_responses';
 
 async function openaiChat(messages) {
-  // Always call backend server to keep API key private
   const res = await fetch(`${SERVER_BASE}/api/v1/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +49,6 @@ async function openaiChat(messages) {
   });
   const text = await res.text();
   if (!res.ok) {
-    // Backend already masks invalid key messages
     throw new Error(text ? (JSON.parseSafe?.(text)?.error || text) : 'Server AI error');
   }
   try {
@@ -75,13 +70,6 @@ class MedicalAI {
 - Medications: ${patientData.medications || 'none'}
 - Context: ${JSON.stringify(context || {})}
 
-Provide structured analysis with:
-1. Differential Diagnosis (ranked)
-2. Recommended Tests
-3. Treatment Options
-4. Risk Assessment
-5. Follow-up Plan
-
 Use medical terminology but explain complex terms. Format as markdown.`;
 
     try {
@@ -91,20 +79,22 @@ Use medical terminology but explain complex terms. Format as markdown.`;
       ]);
 
       try {
-        await supabase.from(TBL_REPORT).insert([{
-          patient_id: patientData.patientId || null,
-          doctor_id: patientData.doctorId || null,
-          content: response,
-          ai_generated: true,
-          severity: this._determineSeverity(response),
-          metadata: {
-            vitals: patientData.vitals || {},
-            symptoms: patientData.symptoms || {},
-            context
+        await supabase.from(TBL_REPORT).insert([
+          {
+            patient_id: patientData.patientId || null,
+            doctor_id: patientData.doctorId || null,
+            content: response,
+            ai_generated: true,
+            severity: this._determineSeverity(response),
+            metadata: {
+              vitals: patientData.vitals || {},
+              symptoms: patientData.symptoms || {},
+              context
+            }
           }
-        }]);
-      } catch (e) {
-        console.warn('Failed to save diagnosis:', e.message);
+        ]);
+      } catch (storageError) {
+        console.warn('Failed to save diagnosis:', storageError?.message || storageError);
       }
 
       return response;
@@ -115,57 +105,80 @@ Use medical terminology but explain complex terms. Format as markdown.`;
   }
 
   static _getFallbackAnalysis(patientData) {
-    return `Demo Analysis (AI Unavailable)
-    
-**Differential Diagnosis**:
+    const vitals = JSON.stringify(patientData?.vitals || {}, null, 2);
+    const symptoms = JSON.stringify(patientData?.symptoms || {}, null, 2);
+    return `Demo Analysis (AI unavailable)
+
+**Differential Diagnosis**
 1. Viral Upper Respiratory Infection (40%)
 2. Dehydration (30%)
 3. Anxiety Disorder (20%)
 4. Other (10%)
 
-**Recommended Tests**:
-- Complete Blood Count (CBC)
-- Comprehensive Metabolic Panel (CMP)
-- COVID-19 test if febrile
+**Recommended Tests**
+- CBC and CMP
+- COVID-19/Influenza panel if febrile
+- Basic metabolic panel for hydration status
 
-**Treatment Options**:
-- Rest and hydration
-- Antipyretics if fever > 101°F
-- Follow-up in 3 days if symptoms persist
+**Treatment Suggestions**
+- Rest, oral hydration, antipyretics as needed
+- Follow-up with primary care within 72 hours if symptoms persist
 
-**Risk Assessment**: Low
-**Follow-up Plan**: Telehealth visit in 3 days
+Latest vitals snapshot:
+${vitals}
 
-Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
+Reported symptoms:
+${symptoms}`;
   }
 
   static async diagnose(patientData) {
     return this.analyzePatientData(patientData);
   }
 
-  static async generateQuestionnaire(patientContext) {
+  static async generateQuestionnaire(patientContext = {}) {
     try {
       const contextSummary = JSON.stringify(patientContext || {});
-      const systemPrompt = `You are a medical questionnaire generator. Using the provided patient context, generate a thorough clinical questionnaire designed to capture symptoms, vitals, relevant history, and document-relevant questions.\n\nSTRICT OUTPUT FORMAT (CRITICAL):\n- Return ONLY valid JSON.\n- Output must be ONLY a valid JSON array (no prose, no markdown, no backticks, no code fences).\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Each item MUST include exactly these fields: id (number), text (string), type (one of: "radio", "checkbox", "range", "text", "scale"), required (boolean).\n- Include an "options" (array of strings) ONLY when type is "radio" or "checkbox".\n- For type "range" or "scale", include numeric min and max fields.\n- Keep wording concise and clinically relevant.\n- Use the patient context to tailor a subset of questions.\n\nEXAMPLE (FORMAT ONLY, NOT CONTENT):\n[\n  {"id": 1, "text": "Chief complaint?", "type": "text", "required": true},\n  {"id": 2, "text": "Do you have a fever?", "type": "radio", "required": true, "options": ["Yes", "No"]}\n]\n\nReturn ONLY the JSON array. Do not include any text before or after.\n\nPatient context: ${contextSummary}`;
+      const systemPrompt = `You are a medical questionnaire generator. Using the provided patient context, generate a thorough clinical questionnaire designed to capture symptoms, vitals, relevant history, and document-relevant questions.
+
+STRICT OUTPUT FORMAT (CRITICAL):
+- Return ONLY valid JSON.
+- Output must be ONLY a valid JSON array (no prose, no markdown, no backticks, no code fences).
+- Use double quotes for all keys and string values.
+- Include at least 15 items.
+- Each item MUST include exactly these fields: id (number), text (string), type (one of: "radio", "checkbox", "range", "text", "scale"), required (boolean).
+- Include an "options" (array of strings) ONLY when type is "radio" or "checkbox".
+- For type "range" or "scale", include numeric min and max fields.
+- Keep wording concise and clinically relevant.
+- Use the patient context to tailor a subset of questions.
+
+Return ONLY the JSON array. Do not include any text before or after.
+
+Patient context: ${contextSummary}`;
 
       const response = await this._callAI([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: 'Return ONLY valid JSON. Output only the JSON array of questions as described. No commentary. No markdown or code fences.' }
       ]);
+
       try {
         return this._parseQuestionnaire(response);
       } catch (parseErr) {
-        // One-shot repair: ask the AI to convert to strict JSON array
-  const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):\n- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }\n- Use double quotes for all keys and string values.\n- Include at least 15 items.\n- Include options only for radio/checkbox.\n- Include min and max only for range/scale.`;
+        const repairInstr = `You will receive a draft questionnaire response that may contain prose or invalid JSON. Convert it into a VALID JSON array that follows this schema EXACTLY and return ONLY valid JSON (no prose, no markdown, no code fences):
+- Each item: { id:number, text:string, type:"radio"|"checkbox"|"range"|"text"|"scale", required:boolean, options?:string[], min?:number, max?:number }
+- Use double quotes for all keys and string values.
+- Include at least 15 items.
+- Include options only for radio/checkbox.
+- Include min and max only for range/scale.`;
+
         const repaired = await this._callAI([
           { role: 'system', content: repairInstr },
           { role: 'user', content: String(response || '') }
         ]);
         return this._parseQuestionnaire(repaired);
       }
-    } catch (e) {
-      console.error('Failed to generate questionnaire:', e);
-      const msg = e?.message || '';
+    } catch (generationError) {
+      console.error('Failed to generate questionnaire:', generationError);
+      const msg = generationError?.message || '';
       throw new Error(`AI questionnaire generation failed. ${msg}`.trim());
     }
   }
@@ -175,17 +188,13 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
       const sanitize = (s) => {
         if (!s) return '';
         let t = String(s);
-        // Strip code fences and headings
         t = t.replace(/```(?:json)?[\s\S]*?```/gi, (m) => m.replace(/```(?:json)?/i, '').replace(/```$/, ''));
-        t = t.replace(/^#+\s.*$/gm, ''); // remove markdown headers
-        // If contains a JSON array somewhere, slice to it
+        t = t.replace(/^#+\s.*$/gm, '');
         const first = t.indexOf('[');
         const last = t.lastIndexOf(']');
         if (first !== -1 && last !== -1 && last > first) t = t.slice(first, last + 1);
-        // Remove trailing commas before } or ]
         t = t.replace(/,\s*([}\]])/g, '$1');
-        // Normalize smart quotes
-        t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+        t = t.replace(/[\u201c\u201d]/g, '"').replace(/[\u2018\u2019]/g, "'");
         return t.trim();
       };
 
@@ -194,7 +203,6 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
       try {
         arr = JSON.parse(text);
       } catch {
-        // last resort: try to extract the largest JSON array again
         const m = text.match(/\[[\s\S]*\]/);
         if (m) {
           const cleaned = sanitize(m[0]);
@@ -207,7 +215,7 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
       if (!Array.isArray(arr)) throw new Error('Invalid questionnaire format');
 
       return arr.map((q, i) => {
-        const type = ['radio','checkbox','range','text','scale'].includes(q.type) ? q.type : 'text';
+        const type = ['radio', 'checkbox', 'range', 'text', 'scale'].includes(q.type) ? q.type : 'text';
         const base = {
           id: Number.isFinite(q.id) ? q.id : (parseInt(q.id, 10) || i + 1),
           text: String(q.text || `Question ${i + 1}`),
@@ -224,15 +232,13 @@ Latest vitals: ${JSON.stringify(patientData.vitals || {})}`;
         }
         return base;
       });
-    } catch (e) {
-      console.warn('Questionnaire parse failed:', e);
+    } catch (parseError) {
+      console.warn('Questionnaire parse failed:', parseError);
       throw new Error('Failed to parse AI-generated questionnaire. Please try again.');
     }
   }
 
-
   static async _callAI(messages) {
-    // Always route via backend
     return openaiChat(messages);
   }
 
@@ -310,25 +316,26 @@ function AuthProvider({ children }) {
         try {
           const { data: userRes } = await supabase.auth.getUser();
           const email = userRes?.user?.email || null;
-          await supabase.from('doctor_profiles').upsert({
+          await supabase.from('doctors').upsert({
             user_id: userId,
-            full_name: existing.full_name || (email ? email.split('@')[0] : null),
+            name: existing.full_name || (email ? email.split('@')[0] : null),
             email: email || null
           });
         } catch (e) {
-          console.warn('ensure doctor_profiles (existing) failed:', e?.message || e);
+          console.warn('ensure doctors (existing) failed:', e?.message || e);
         }
       } else if (existing.role === 'patient') {
         // Ensure a patient profile row exists for patients
         try {
           await supabase.from('patient_profiles').upsert({
-            user_id: userId,
-            full_name: existing.full_name || null,
-            phone: '',
-            address: '',
-            medical_history: '',
-            current_medications: ''
-          });
+              user_id: userId,
+              full_name: existing.full_name || null,
+              phone: '',
+              address: '',
+              medical_history: '',
+              current_medications: '',
+              gender: null
+            });
         } catch (e) {
           console.warn('ensure patient_profiles (existing) failed:', e?.message || e);
         }
@@ -338,12 +345,34 @@ function AuthProvider({ children }) {
           const email = userRes?.user?.email || null;
           const meta = userRes?.user?.user_metadata || {};
           const full_name = existing.full_name || meta.full_name || (email ? email.split('@')[0] : null);
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name,
-            name: full_name,
-            email
-          });
+          try {
+              try {
+                await supabase
+                  .from('patients')
+                  .upsert({
+                    user_id: userId,
+                    full_name,
+                    name: full_name,
+                    email,
+                    gender: null
+                  }, { onConflict: 'user_id' })
+                  .select();
+              } catch (err) {
+                console.warn('ensure patients (existing) upsert failed, attempting update:', err?.message || err);
+                try {
+                  await supabase.from('patients').update({ full_name, name: full_name, email, gender: null }).eq('user_id', userId);
+                } catch (uErr) {
+                  console.warn('ensure patients (existing) update fallback failed:', uErr?.message || uErr);
+                }
+              }
+          } catch (err) {
+            console.warn('ensure patients (existing) upsert failed, attempting update:', err?.message || err);
+            try {
+              await supabase.from('patients').update({ full_name, name: full_name, email }).eq('user_id', userId);
+            } catch (uErr) {
+              console.warn('ensure patients (existing) update fallback failed:', uErr?.message || uErr);
+            }
+          }
         } catch (e) {
           console.warn('ensure patients (existing) failed:', e?.message || e);
         }
@@ -372,9 +401,9 @@ function AuthProvider({ children }) {
     // Ensure doctor has a public profile row after creating profile
     try {
       if ((upserted?.role || role) === 'doctor') {
-        await supabase.from('doctor_profiles').upsert({
+        await supabase.from('doctors').upsert({
           user_id: userId,
-          full_name: upserted?.full_name || full_name,
+          name: upserted?.full_name || full_name,
           email
         });
       } else if ((upserted?.role || role) === 'patient') {
@@ -388,18 +417,21 @@ function AuthProvider({ children }) {
         });
         // Also upsert into public.patients with email for quick access and filtering
         try {
-          await supabase.from('patients').upsert({
-            user_id: userId,
-            full_name: upserted?.full_name || full_name,
-            name: upserted?.full_name || full_name,
-            email
-          });
+          await supabase
+            .from('patients')
+            .upsert({
+              user_id: userId,
+              full_name: upserted?.full_name || full_name,
+              name: upserted?.full_name || full_name,
+              email
+            })
+            .select();
         } catch (e) {
           console.warn('ensure patients (created) failed:', e?.message || e);
         }
       }
     } catch (e) {
-      console.warn('ensure doctor_profiles (created) failed:', e?.message || e);
+      console.warn('ensure doctors (created) failed:', e?.message || e);
     }
 
     return upserted;
@@ -535,7 +567,7 @@ function Header() {
       <a href="#main" className="skip-link">Skip to content</a>
       <div className="header-content">
         <Link to="/" className="logo" title="Go to Home">
-          <span className="logo-icon" aria-hidden>🏥</span>
+          <span className="logo-icon" aria-hidden>SD</span>
           <span className="sr-only">SmartDocAid Home</span>
           SmartDocAid
         </Link>
@@ -563,7 +595,7 @@ function Header() {
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             onClick={toggle}
           >
-            {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
+            {theme === 'dark' ? 'Dark Theme' : 'Light Theme'}
           </button>
           <button
             className="btn btn-outline"
@@ -571,7 +603,7 @@ function Header() {
             title={animEnabled ? 'Disable animations' : 'Enable animations'}
             onClick={() => setAnimEnabled(a => !a)}
           >
-            {animEnabled ? '🌀 Anim On' : '💤 Anim Off'}
+            {animEnabled ? 'Anim On' : 'Anim Off'}
           </button>
           {auth.session ? (
             <div className="flex items-center space-x-4">
@@ -603,10 +635,10 @@ function HomePage() {
     <main className="route-screen">
       <section className="hero animate-fade-up">
         <h1 className="hero-title">
-          Experience <span className="hero-gradient">next‑gen healthcare</span>
+          Experience <span className="hero-gradient">next-gen healthcare</span>
         </h1>
         <p className="hero-subtitle">
-          One platform for patients, doctors, and admins — AI‑assisted, privacy‑first, and designed with care.
+          One platform for patients, doctors, and admins - AI-assisted, privacy-first, and designed with care.
         </p>
         <div className="hero-cta">
           <Link to="/signup" className="btn btn-primary">Create account</Link>
@@ -614,13 +646,13 @@ function HomePage() {
         </div>
         {auth.session && (
           <div className="mt-6 text-sm text-slate-600 dark:text-slate-300">
-            Signed in as <strong>{auth.profile?.full_name}</strong> · Role: <span className="badge">{auth.profile?.role}</span>
+            Signed in as <strong>{auth.profile?.full_name}</strong> | Role: <span className="badge">{auth.profile?.role}</span>
           </div>
         )}
         <div className="hero-stats">
           <div className="hero-stat"><div className="text-2xl font-extrabold">99.9%</div><div className="muted">Uptime</div></div>
-          <div className="hero-stat"><div className="text-2xl font-extrabold">HIPAA‑minded</div><div className="muted">Privacy</div></div>
-          <div className="hero-stat"><div className="text-2xl font-extrabold">AI‑assisted</div><div className="muted">Workflows</div></div>
+          <div className="hero-stat"><div className="text-2xl font-extrabold">HIPAA-minded</div><div className="muted">Privacy</div></div>
+          <div className="hero-stat"><div className="text-2xl font-extrabold">AI-assisted</div><div className="muted">Workflows</div></div>
         </div>
         <div className="hero-parallax-layer" aria-hidden="true">
           <div className="blob indigo"></div>
@@ -636,7 +668,7 @@ function HomePage() {
         </div>
         <div className="feature-card tilt">
           <h3>Doctor Portal</h3>
-          <p>See patient overviews, review AI‑generated reports, and add clinical feedback efficiently.</p>
+          <p>See patient overviews, review AI-generated reports, and add clinical feedback efficiently.</p>
           <div className="mt-4"><Link to="/doctor" className="btn btn-success">Enter Portal</Link></div>
         </div>
         <div className="feature-card tilt">
@@ -831,7 +863,7 @@ function LoginPage() {
             disabled={auxLoading.magic}
             title="Send a magic sign-in link to your email"
           >
-            {auxLoading.magic ? 'Sending…' : 'Login via Magic Link'}
+            {auxLoading.magic ? 'Sending...' : 'Login via Magic Link'}
           </button>
           <button
             className="btn btn-outline"
@@ -839,7 +871,7 @@ function LoginPage() {
             disabled={auxLoading.resend}
             title="Resend email confirmation"
           >
-            {auxLoading.resend ? 'Resending…' : 'Resend Confirmation Email'}
+            {auxLoading.resend ? 'Resending...' : 'Resend Confirmation Email'}
           </button>
           <button
             className="btn btn-outline"
@@ -847,7 +879,7 @@ function LoginPage() {
             disabled={auxLoading.reset}
             title="Send a password reset link to your email"
           >
-            {auxLoading.reset ? 'Sending…' : 'Forgot Password? Reset'}
+            {auxLoading.reset ? 'Sending...' : 'Forgot Password? Reset'}
           </button>
         </div>
         <p style={{textAlign: 'center', marginTop: '20px'}}>
@@ -899,7 +931,7 @@ function ResetPasswordPage() {
   }
 
   return (
-    <main>
+      <main>
       <div className="card form-container">
         <h2 className="card-title">Reset Password</h2>
         {error && <div className="alert alert-danger">{error}</div>}
@@ -930,7 +962,7 @@ function ResetPasswordPage() {
             className="btn btn-primary"
             style={{width: '100%', padding: '12px'}}
           >
-            {loading ? 'Updating…' : 'Update Password'}
+            {loading ? 'Updating...' : 'Update Password'}
           </button>
         </form>
       </div>
@@ -970,16 +1002,18 @@ function SignupPage() {
           full_name: fullName, 
           role 
         });
-        // If signing up as a doctor, also create a public doctor profile row so patients can find them immediately
+        // If signing up as a doctor, create a public doctor profile row so patients can find them immediately
         if (role === 'doctor') {
           try {
-            await supabase.from('doctor_profiles').upsert({
+            const { data: doctorData, error: doctorErr } = await supabase.from('doctors').upsert({
               user_id: userId,
-              full_name: fullName,
+              name: fullName,
               email
-            });
+            }, { onConflict: 'user_id' }).select();
+            if (doctorErr) throw doctorErr;
+            console.debug('doctors.upsert (signup) result:', { doctorData });
           } catch (e) {
-            console.warn('doctor_profiles upsert failed (signup):', e?.message || e);
+            console.warn('doctors upsert failed (signup):', e?.message || e);
           }
         }
       }
@@ -999,7 +1033,7 @@ function SignupPage() {
   }
 
   return (
-    <main>
+      <main>
       <div className="card form-container">
         <h2 className="card-title">Sign Up</h2>
         {error && <div className="alert alert-danger">{error}</div>}
@@ -1069,15 +1103,21 @@ function PatientPortal() {
   const patientId = user?.id || null;
   const [vitalsStatus, setVitalsStatus] = useState('offline'); // offline, measuring, measured
   const [vitalsTimestamp, setVitalsTimestamp] = useState(null);
+  const [latestVitals, setLatestVitals] = useState({ temperature: null, heartRate: null, spo2: null, timestamp: null });
   const [deviceStatus, setDeviceStatus] = useState('checking'); // checking | connected | offline | not-configured
+  const [feedbackNotes, setFeedbackNotes] = useState([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
 
   // Helper function to calculate data freshness
   const calculateDataFreshness = (timestamp) => {
     if (!timestamp) return 'old';
-    
-    const now = Date.now();
-    const diffInMinutes = (now - timestamp) / (1000 * 60);
-    
+
+    const ts = typeof timestamp === 'string' ? Date.parse(timestamp) : Number(timestamp);
+    if (!ts || Number.isNaN(ts)) return 'old';
+
+    const diffInMinutes = (Date.now() - ts) / (1000 * 60);
+
     if (diffInMinutes < 5) {
       return 'fresh';  // Less than 5 minutes old
     } else if (diffInMinutes < 30) {
@@ -1090,15 +1130,106 @@ function PatientPortal() {
   // Helper function to format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'Never';
-    
+
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (Number.isNaN(date.getTime())) return 'Never';
+    return date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   useEffect(() => {
     // Initialize status indicators when component mounts
     setVitalsStatus('offline');
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const coerceNumber = (value) => {
+      if (value === null || value === undefined || value === '') return null;
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      return Math.round(num * 10) / 10;
+    };
+
+    const applySnapshot = (snapshot) => {
+      if (!snapshot || !isMounted) return;
+      setLatestVitals((prev) => {
+        const merged = {
+          temperature: snapshot.temperature ?? prev.temperature ?? null,
+          heartRate: snapshot.heartRate ?? prev.heartRate ?? null,
+          spo2: snapshot.spo2 ?? prev.spo2 ?? null,
+          timestamp: snapshot.timestamp || prev.timestamp || null
+        };
+        const hasData = merged.temperature != null || merged.heartRate != null || merged.spo2 != null;
+        setVitalsStatus(hasData ? 'measured' : 'offline');
+        if (merged.timestamp) setVitalsTimestamp(merged.timestamp);
+        return merged;
+      });
+    };
+
+    const hydrateFromLocalStorage = () => {
+      if (typeof window === 'undefined') return;
+      const keys = ['vitalsData', 'vitals_data'];
+      for (const key of keys) {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (!parsed) continue;
+          if (Array.isArray(parsed)) {
+            const latest = parsed[parsed.length - 1];
+            if (!latest) continue;
+            applySnapshot({
+              temperature: coerceNumber(latest.temperature ?? latest.temp ?? latest.object_temp_F ?? latest.object_temp_C ?? latest.body_temp),
+              heartRate: coerceNumber(latest.heartRate ?? latest.heart_rate ?? latest.pulse),
+              spo2: coerceNumber(latest.spo2 ?? latest.spo2_percent ?? latest.oxygen),
+              timestamp: latest.timestamp || latest.time || null
+            });
+            return;
+          }
+          applySnapshot({
+            temperature: coerceNumber(parsed.temperature?.value ?? parsed.temperature ?? parsed.temp),
+            heartRate: coerceNumber(parsed.heartRate?.value ?? parsed.heartRate ?? parsed.heart_rate ?? parsed.pulse),
+            spo2: coerceNumber(parsed.spo2?.value ?? parsed.spo2 ?? parsed.spo2_percent ?? parsed.oxygen),
+            timestamp: parsed.temperature?.timestamp || parsed.heartRate?.timestamp || parsed.spo2?.timestamp || parsed.timestamp || null
+          });
+          return;
+        } catch (err) {
+          console.warn('Failed to parse cached vitals:', err);
+        }
+      }
+    };
+
+    hydrateFromLocalStorage();
+
+    if (patientId) {
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('vitals')
+            .select('temperature, heart_rate, spo2, created_at, updated_at')
+            .eq('user_id', patientId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const row = data[0];
+            applySnapshot({
+              temperature: coerceNumber(row.temperature),
+              heartRate: coerceNumber(row.heart_rate),
+              spo2: coerceNumber(row.spo2),
+              timestamp: row.created_at || row.updated_at || null
+            });
+          }
+        } catch (err) {
+          console.warn('Failed to load latest vitals:', err);
+        }
+      })();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId]);
 
   // Check Raspberry Pi device connectivity via /health endpoint
   const checkDevice = async () => {
@@ -1122,31 +1253,92 @@ function PatientPortal() {
     checkDevice();
   }, []);
 
+  const fetchDoctorFeedback = useCallback(async () => {
+    if (!patientId) return;
+    setFeedbackLoading(true);
+    setFeedbackError('');
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id,message,created_at,is_read')
+        .eq('patient_id', patientId)
+        .eq('type', 'doctor_feedback')
+        .order('created_at', { ascending: false })
+        .limit(15);
+      if (error) throw error;
+      const rows = (data || []).map(row => ({ ...row, wasUnread: !row.is_read }));
+      setFeedbackNotes(rows);
+      const unreadIds = rows.filter(row => row.wasUnread).map(row => row.id);
+      if (unreadIds.length) {
+        try {
+          await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
+        } catch (_) {}
+      }
+    } catch (err) {
+      setFeedbackError(err?.message || String(err));
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [patientId]);
+
+  useEffect(() => {
+    fetchDoctorFeedback();
+  }, [fetchDoctorFeedback]);
+
   // Removed inline health report generation from dashboard in favor of guided flow
 
+  const formatVitalValue = (value, unit) => {
+    if (value === null || value === undefined) return '—';
+    return `${value}${unit}`;
+  };
+
+  const freshnessState = calculateDataFreshness(vitalsTimestamp);
+  const freshnessLabel = {
+    fresh: 'Fresh (≤5m)',
+    stale: 'Stale (≤30m)',
+    old: 'Old (>30m)'
+  }[freshnessState] || 'No recent data';
+
   return (
-    <main>
+    <>
+      <main>
   <section className="hero animate-fade-up">
         <h1 className="hero-title">Patient Overview</h1>
-        <p className="hero-subtitle">Track real‑time vitals, complete assessments, and generate AI health insights.</p>
+        <p className="hero-subtitle">Track real-time vitals, complete assessments, and generate AI health insights.</p>
         <div className="hero-cta">
           <button onClick={() => navigate('/patient/vitals')} className="btn btn-primary" disabled={!user}>Start Assessment</button>
-          <Link to="/patient/questionnaire" className="btn btn-light">Questionnaire</Link>
         </div>
         {auth.profile?.full_name && (
           <div className="mt-6 text-sm text-slate-600 dark:text-slate-300 flex flex-wrap gap-2 items-center">
             <span>Signed in as <strong>{auth.profile.full_name}</strong></span>
             {patientId && <span className="badge">PID-{patientId.slice(0,8)}</span>}
             <span className={`badge ${deviceStatus === 'connected' ? 'success' : deviceStatus === 'offline' ? 'danger' : ''}`}>
-              {deviceStatus === 'checking' ? 'Checking device…' : deviceStatus === 'connected' ? 'Device connected' : deviceStatus === 'offline' ? 'Device offline' : 'Not configured'}
+              {deviceStatus === 'checking' ? 'Checking device...' : deviceStatus === 'connected' ? 'Device connected' : deviceStatus === 'offline' ? 'Device offline' : 'Not configured'}
+            </span>
+            <span className={`badge ${vitalsStatus === 'measured' ? 'success' : 'danger'}`}>
+              {vitalsStatus === 'measured' ? 'Vitals synced' : 'No recent vitals'}
             </span>
           </div>
         )}
         <div className="hero-stats">
-          <div className="hero-stat"><div className="text-xl font-semibold">Temp</div><div className="text-3xl font-extrabold">98.6°</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">Heart</div><div className="text-3xl font-extrabold">72 bpm</div></div>
-          <div className="hero-stat"><div className="text-xl font-semibold">SpO₂</div><div className="text-3xl font-extrabold">98%</div></div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">Temp</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.temperature, ' °F')}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">Heart</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.heartRate, ' bpm')}</div>
+          </div>
+          <div className="hero-stat">
+            <div className="text-xl font-semibold">SpO2</div>
+            <div className="text-3xl font-extrabold">{formatVitalValue(latestVitals.spo2, '%')}</div>
+          </div>
         </div>
+        <small className="muted" style={{ display: 'block', marginTop: '8px' }}>
+          {latestVitals.timestamp
+            ? `Last reading ${formatTimestamp(latestVitals.timestamp)} • ${vitalsStatus === 'measured' ? freshnessLabel : 'No recent data'}`
+            : 'No vitals recorded yet'}
+        </small>
         <div className="hero-parallax-layer" aria-hidden="true">
           <div className="blob indigo"></div>
           <div className="blob cyan"></div>
@@ -1158,11 +1350,6 @@ function PatientPortal() {
           <h3>Health Assessment</h3>
           <p>Guided flow collecting vitals, documents, and questionnaire answers for AI synthesis.</p>
           <div className="mt-4"><button onClick={() => navigate('/patient/vitals')} className="btn btn-primary" disabled={!user}>Begin</button></div>
-        </div>
-  <div className="feature-card tilt">
-          <h3>Questionnaire</h3>
-          <p>Adaptive interview and structured questions tailor insights to your current condition.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-light">Open</Link></div>
         </div>
   <div className="feature-card tilt">
           <h3>Documents</h3>
@@ -1179,18 +1366,40 @@ function PatientPortal() {
           <p>Keep demographics and background updated for more accurate recommendations.</p>
           <div className="mt-4"><Link to="/patient/profile" className="btn btn-light">Edit</Link></div>
         </div>
-        <div className="feature-card tilt">
-          <h3>AI Questionnaires</h3>
-          <p>Interactive AI-powered interviews with doctor selection and report sharing.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">Start AI Interview</Link></div>
-        </div>
-        <div className="feature-card tilt">
-          <h3>AI Reports</h3>
-          <p>View reports generated from your latest completed assessments and questionnaires.</p>
-          <div className="mt-4"><Link to="/patient/questionnaire" className="btn btn-primary">View</Link></div>
-        </div>
       </section>
+      <div className="card mt-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="card-title">Doctor Feedback</h3>
+            <p className="muted text-sm">Notes shared by your doctors after reviewing AI reports or questionnaires.</p>
+          </div>
+          <button className="btn btn-light" onClick={fetchDoctorFeedback} disabled={feedbackLoading}>
+            {feedbackLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+        {feedbackError && <div className="alert alert-danger mt-3">{feedbackError}</div>}
+        <div className="mt-4 space-y-3">
+          {feedbackLoading && feedbackNotes.length === 0 ? (
+            <div className="skeleton animate" style={{ height: 68, borderRadius: '0.75rem' }} />
+          ) : feedbackNotes.length > 0 ? (
+            feedbackNotes.map(note => (
+              <div key={note.id} className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-white/70 dark:bg-slate-900/40">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-sm text-slate-500 dark:text-slate-300">{new Date(note.created_at).toLocaleString()}</span>
+                  {note.wasUnread && <span className="badge success">New</span>}
+                </div>
+                <p className="mt-2 leading-relaxed">{note.message}</p>
+              </div>
+            ))
+          ) : (
+            <div className="alert alert-info mt-2">
+              No doctor feedback yet. Once a doctor reviews your shared reports, their notes will appear here.
+            </div>
+          )}
+        </div>
+      </div>
     </main>
+    </>
   );
 }
 
@@ -1377,30 +1586,50 @@ function QuestionnairePage() {
   // Fetch doctors (used for sharing reports)
   async function fetchDoctors() {
     try {
-      let data = [];
-      try {
-        const res = await supabase
-          .from('doctors')
-          .select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res.error) throw res.error;
-        data = res.data || [];
-      } catch (_) {
-        const res2 = await supabase
-          .from('doctor_profiles')
-          .select('id, user_id, full_name, email, specialty, location, city, bio, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-        if (res2.error) throw res2.error;
-        data = res2.data || [];
-      }
+      const { data, error } = await supabase
+        .from('doctors')
+        .select('id, user_id, name, email, specialty, bio, license_number, age, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
       setDoctors(data || []);
       try { setFilteredDoctors(data || []); } catch (_) {}
     } catch (err) {
       console.error('fetchDoctors error:', err);
+      setDoctors([]);
+      setFilteredDoctors([]);
     }
   }
+
+  useEffect(() => {
+    if (!Array.isArray(doctors) || doctors.length === 0) return;
+    if (!Array.isArray(selectedDoctors) || selectedDoctors.length === 0) return;
+
+    const doctorIdSet = new Set((doctors || []).map(doc => doc.id).filter(Boolean));
+    const legacyMap = new Map();
+    (doctors || []).forEach(doc => {
+      if (doc.user_id && doc.id) legacyMap.set(doc.user_id, doc.id);
+      if (doc.email && doc.id) legacyMap.set(doc.email, doc.id);
+    });
+
+    const normalized = [];
+    (selectedDoctors || []).forEach(entry => {
+      if (doctorIdSet.has(entry)) {
+        normalized.push(entry);
+        return;
+      }
+      if (legacyMap.has(entry)) {
+        normalized.push(legacyMap.get(entry));
+      }
+    });
+
+    const uniqueNormalized = Array.from(new Set(normalized));
+    const isSameLength = uniqueNormalized.length === selectedDoctors.length;
+    const isSameOrder = isSameLength && uniqueNormalized.every((val, idx) => val === selectedDoctors[idx]);
+    if (!isSameLength || !isSameOrder) {
+      setSelectedDoctors(uniqueNormalized);
+    }
+  }, [doctors, selectedDoctors]);
 
   // Keep filtered list in sync with query
   useEffect(() => {
@@ -1412,7 +1641,7 @@ function QuestionnairePage() {
       }
       const out = (doctors || []).filter(d => {
         const name = String(d.full_name || d.name || d.user_id || '').toLowerCase();
-        const spec = String(d.specialist || d.specialty || d.specialities || d.city || '').toLowerCase();
+        const spec = String(d.specialty || d.specialist || d.specialities || d.city || '').toLowerCase();
         const email = String(d.email || '').toLowerCase();
         return name.includes(q) || spec.includes(q) || email.includes(q);
       });
@@ -1483,14 +1712,25 @@ function QuestionnairePage() {
       } catch (_) { vitals = []; }
 
       try {
-        // attempt to list uploads from Supabase if auth available
         const uid = auth?.session?.user?.id;
         if (uid) {
-          const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-          const { data } = await supabase.storage.from(bucket).list(uid, { limit: 50 });
-          uploads = (data || []).map(i => i.name);
+          const { data } = await supabase
+            .from('documents')
+            .select('*')
+            .eq('user_id', uid)
+            .order('uploaded_at', { ascending: false })
+            .limit(50);
+          uploads = (data || []).map((doc) => ({
+            id: doc.id,
+            name: doc.original_name || doc.file_name || 'Document',
+            summary: doc.extraction_summary || null,
+            extractedText: doc.extracted_text || null,
+            status: doc.extraction_status || 'pending'
+          }));
         }
-      } catch (_) { uploads = []; }
+      } catch (_) {
+        uploads = [];
+      }
 
       try {
         const questions = await MedicalAI.generateQuestionnaire({ vitals, uploads });
@@ -1593,18 +1833,49 @@ function QuestionnairePage() {
     (async () => {
       try {
         // Enforce at least one input across the flow (vitals, uploads, or questionnaire answers)
-        const any = (() => {
+        const hasVitals = (() => {
           try {
             const vd = JSON.parse(window.localStorage.getItem('vitalsData') || window.localStorage.getItem('vitals_data') || 'null');
-            const anyVital = vd && ((vd.temperature && vd.temperature.value != null) || (vd.heartRate && vd.heartRate.value != null) || (vd.spo2 && vd.spo2.value != null));
-            const uploads = JSON.parse(window.localStorage.getItem('uploadedDocuments') || '[]');
-            const anyUpload = Array.isArray(uploads) && uploads.length > 0;
-            const ans = JSON.parse(window.localStorage.getItem('questionnaireAnswers') || '{}');
-            const anyAnswer = ans && Object.values(ans).some(v => Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''));
-            return Boolean(anyVital || anyUpload || anyAnswer);
-          } catch (_) { return false; }
+            return Boolean(vd && ((vd.temperature && vd.temperature.value != null) || (vd.heartRate && vd.heartRate.value != null) || (vd.spo2 && vd.spo2.value != null)));
+          } catch (_) {
+            return false;
+          }
         })();
-        if (!any) {
+
+        let hasUploads = false;
+        try {
+          const cachedUploads = JSON.parse(window.localStorage.getItem('uploadedDocuments') || '[]');
+          hasUploads = Array.isArray(cachedUploads) && cachedUploads.length > 0;
+        } catch (_) {
+          hasUploads = false;
+        }
+
+        if (!hasUploads) {
+          try {
+            const uid = auth?.session?.user?.id;
+            if (uid) {
+              const { data: docProbe } = await supabase
+                .from('documents')
+                .select('id')
+                .eq('user_id', uid)
+                .limit(1);
+              hasUploads = Array.isArray(docProbe) && docProbe.length > 0;
+            }
+          } catch (_) {
+            hasUploads = false;
+          }
+        }
+
+        const hasAnswers = (() => {
+          try {
+            const ans = JSON.parse(window.localStorage.getItem('questionnaireAnswers') || '{}') || {};
+            return Object.values(ans).some(v => Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''));
+          } catch (_) {
+            return false;
+          }
+        })();
+
+        if (!(hasVitals || hasUploads || hasAnswers)) {
           alert('Please provide at least one input (a vital, an upload, or an answer) before submitting.');
           return;
         }
@@ -1699,7 +1970,8 @@ function QuestionnairePage() {
   };
 
   return (
-    <main>
+    <>
+      <main>
         <div className="card questionnaire-container route-screen">
           <div style={{ maxWidth: 980, margin: '0 auto', padding: 20 }}>
         <div className="questionnaire-header">
@@ -1711,11 +1983,11 @@ function QuestionnairePage() {
           <button
             className="btn btn-primary btn-lg"
             onClick={startInterview}
-            disabled={iLoading.start || selectedDoctors.length === 0}
+            disabled={iLoading.start || selectedDoctors.length === 0 || doctors.length === 0}
             title={selectedDoctors.length === 0 ? "Please select at least one doctor first" : "Start Interview"}
             style={{ padding: '12px 28px', width: '100%', maxWidth: 420 }}
           >
-            {iLoading.start ? 'Starting…' : 'Start Interview'}
+            {iLoading.start ? 'Starting...' : 'Start Interview'}
           </button>
         </div>
 
@@ -1740,15 +2012,26 @@ function QuestionnairePage() {
                 <button className="btn btn-light" onClick={() => setDoctorQuery('')}>Clear</button>
               </div>
               <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-              {filteredDoctors.map(doctor => (
-                <label key={doctor.id || doctor.user_id} className="doctor-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id || doctor.user_id) ? '#f0f8ff' : 'transparent' }}>
+              {filteredDoctors.filter(doc => Boolean(doc.id)).map(doctor => (
+                <label
+                  key={doctor.id}
+                  className="doctor-option"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id) ? '#f0f8ff' : 'transparent' }}
+                >
                   <input
                     type="checkbox"
-                    checked={selectedDoctors.includes(doctor.id || doctor.user_id)}
+                    checked={selectedDoctors.includes(doctor.id)}
                     onChange={(e) => {
-                      const doctorId = doctor.id || doctor.user_id;
-                      if (e.target.checked) setSelectedDoctors(prev => [...prev, doctorId]);
-                      else setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                      const doctorId = doctor.id;
+                      if (!doctorId) return;
+                      if (e.target.checked) {
+                        setSelectedDoctors(prev => {
+                          if (prev.includes(doctorId)) return prev;
+                          return [...prev, doctorId];
+                        });
+                      } else {
+                        setSelectedDoctors(prev => prev.filter(id => id !== doctorId));
+                      }
                     }}
                   />
                   <div>
@@ -1778,7 +2061,7 @@ function QuestionnairePage() {
             {!interview.done ? (
               <>
                 <h3 className="card-title">Interview</h3>
-                <p style={{ fontSize: 18 }}>{interview.question || '…'}</p>
+                <p style={{ fontSize: 18 }}>{interview.question || '...'}</p>
                 <div className="form-group">
                   <input
                     className="form-input"
@@ -1789,7 +2072,7 @@ function QuestionnairePage() {
                   />
                 </div>
                 <button className="btn btn-primary" onClick={sendInterviewAnswer} disabled={iLoading.next || !iAnswer.trim()}>
-                  {iLoading.next ? 'Sending…' : 'Send Answer'}
+                  {iLoading.next ? 'Sending...' : 'Send Answer'}
                 </button>
               </>
             ) : (
@@ -1797,7 +2080,7 @@ function QuestionnairePage() {
                 <h3 className="card-title">Interview Complete</h3>
                 <p className="muted">Generate a final report based on your answers.</p>
                 <button className="btn btn-success" onClick={generateInterviewReport} disabled={iLoading.report}>
-                  {iLoading.report ? 'Generating…' : 'Generate Report'}
+                  {iLoading.report ? 'Generating...' : 'Generate Report'}
                 </button>
               </>
             )}
@@ -1824,7 +2107,7 @@ function QuestionnairePage() {
           <div className="empty-state">
             {loading.generate ? (
               <div className="card" style={{ maxWidth: 720, margin: '0 auto', textAlign: 'left' }}>
-                <h3 className="card-title">Generating Questionnaire…</h3>
+                <h3 className="card-title">Generating Questionnaire...</h3>
                 <div style={{ display:'grid', gap:16 }}>
                   {Array.from({ length: 5 }).map((_,i) => (
                     <div key={i} className="skeleton animate" style={{ height: 52, borderRadius: '0.75rem' }} />
@@ -1839,7 +2122,7 @@ function QuestionnairePage() {
           </div>
         ) : (!interview.sessionId && (
           <>
-            {/* Manual save removed — AI generates and (if configured) Test action persists automatically */}
+            {/* Manual save removed - AI generates and (if configured) Test action persists automatically */}
 
             <div className="progress-container">
               <div className="progress-info">
@@ -1917,6 +2200,7 @@ function QuestionnairePage() {
         )}
       </div>
     </main>
+    </>
   );
 }
 
@@ -1942,7 +2226,7 @@ function SensorDataPage() {
         <div className="dashboard-grid">
           <div className="dashboard-card">
             <h3>Current Temperature</h3>
-            <div className="value">98.6°F</div>
+            <div className="value">98.6 F</div>
           </div>
           <div className="dashboard-card">
             <h3>Current Heart Rate</h3>
@@ -1989,8 +2273,10 @@ function ProfilePage() {
     fullName: "",
     email: "",
     phone: "",
+    age: "",
     dob: "",
     address: "",
+    gender: "",
     patientId: null
   });
   const [loading, setLoading] = useState(true);
@@ -2027,35 +2313,223 @@ function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchPatientProfile = async () => {
-    if (!auth.session?.user?.id) return;
+  const computeAgeFromDob = (dob) => {
+    if (!dob) return null;
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age : null;
+  };
 
-    setLoading(true);
+  const normalizePhone = (row = {}) => {
+    return row.phone || row.contact || row.contact_number || row.phone_number || row.mobile || "";
+  };
+
+  const normalizeDob = (row = {}) => {
+    return row.date_of_birth || row.dob || row.birth_date || row.birthdate || "";
+  };
+
+  const mapPatientRowToProfileData = (row) => {
+    const normalizedDob = normalizeDob(row);
+    const normalizedAge = row?.age ?? row?.patient_age ?? computeAgeFromDob(normalizedDob);
+    const normalizedPhone = normalizePhone(row);
+    const normalizedPatientId = row?.patient_id || row?.id || null;
+    return {
+      fullName: row?.full_name || row?.name || auth.profile?.full_name || "",
+      email: row?.email || auth.session?.user?.email || "",
+      phone: normalizedPhone,
+      age: normalizedAge != null ? String(normalizedAge) : "",
+      dob: normalizedDob,
+      gender: row?.gender || row?.sex || "",
+      address: row?.address || "",
+      patientId: normalizedPatientId
+    };
+  };
+
+  const syncPublicPatient = async (source = {}, options = {}) => {
+    if (!auth.session?.user?.id) return;
+    const preserveExisting = options.preserveExisting ?? false;
+    const normalizedName = source.fullName || source.full_name || profileData.fullName || auth.profile?.full_name || "";
+    const normalizedAge = source.age ?? source.patient_age ?? profileData.age ?? "";
+    const parsedAge = normalizedAge === "" ? null : Number(normalizedAge);
+
+    const payload = {
+      user_id: auth.session.user.id,
+      full_name: normalizedName,
+      name: normalizedName,
+      email: source.email || profileData.email || auth.session.user.email || ""
+    };
+
+    const resolvedPhone = source.phone ?? source.contact ?? source.contact_number ?? source.phone_number ?? profileData.phone;
+    if (!preserveExisting || resolvedPhone) {
+      payload.phone = resolvedPhone || null;
+    }
+
+    const resolvedAddress = source.address ?? profileData.address;
+    if (!preserveExisting || resolvedAddress) {
+      payload.address = resolvedAddress || null;
+    }
+
+    const resolvedDob = source.dob ?? source.date_of_birth ?? source.birth_date ?? source.birthdate ?? profileData.dob;
+    if (!preserveExisting || resolvedDob) {
+      payload.date_of_birth = resolvedDob || null;
+    }
+
+    const resolvedGender = source.gender ?? source.sex ?? profileData.gender;
+    if (!preserveExisting || (resolvedGender !== undefined && resolvedGender !== null)) {
+      payload.gender = resolvedGender || null;
+    }
+
+    if (!preserveExisting || Number.isFinite(parsedAge)) {
+      payload.age = Number.isFinite(parsedAge) ? parsedAge : null;
+    }
+
+    if (source.device_status) {
+      payload.device_status = source.device_status;
+    }
     try {
-      // Fetch patient profile from patient_profiles table
+      await supabase
+        .from('patients')
+        .upsert(payload, { onConflict: 'user_id' })
+        .select();
+    } catch (e) {
+      console.warn('patients upsert failed, attempting update fallback:', e?.message || e);
+      try {
+        await supabase.from('patients').update(payload).eq('user_id', payload.user_id);
+      } catch (uErr) {
+        console.warn('patients update fallback failed:', uErr?.message || uErr);
+      }
+    }
+  };
+
+  const loadLegacyPatientProfile = async () => {
+    if (!auth.session?.user?.id) return false;
+    try {
       const { data: patientProfile, error } = await supabase
         .from('patient_profiles')
         .select('*')
         .eq('user_id', auth.session.user.id)
-        .single();
+        .maybeSingle();
 
       if (patientProfile && !error) {
+        const legacyDob = patientProfile.date_of_birth || "";
+        const legacyAge = patientProfile.age ?? computeAgeFromDob(legacyDob);
         setProfileData({
           fullName: patientProfile.full_name || auth.profile?.full_name || "",
           email: auth.session.user.email || "",
           phone: patientProfile.phone || "",
-          dob: patientProfile.date_of_birth || "",
+          age: legacyAge != null ? String(legacyAge) : "",
+          dob: legacyDob,
+          gender: patientProfile.gender || "",
           address: patientProfile.address || "",
-          patientId: patientProfile.id || null
+          patientId: patientProfile.patient_id || patientProfile.id || null
         });
-      } else {
-        // If no patient profile exists, create one
+        await syncPublicPatient({
+          fullName: patientProfile.full_name,
+          phone: patientProfile.phone,
+          address: patientProfile.address,
+          dob: patientProfile.date_of_birth,
+          gender: patientProfile.gender,
+          age: legacyAge,
+          patientId: patientProfile.patient_id || patientProfile.id || null
+        }, { preserveExisting: true });
+        return true;
+      }
+    } catch (legacyError) {
+      console.error('Error fetching patient profile (legacy table):', legacyError);
+    }
+    return false;
+  };
+
+  const fetchPatientRowViaRpc = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_patient_profile_for_current_user');
+      if (error) {
+        console.warn('RPC get_patient_profile_for_current_user failed:', error.message || error);
+        return null;
+      }
+      if (Array.isArray(data) && data.length) {
+        return data[0];
+      }
+    } catch (rpcErr) {
+      console.warn('RPC get_patient_profile_for_current_user exception:', rpcErr?.message || rpcErr);
+    }
+    return null;
+  };
+
+  const fetchPatientProfile = async () => {
+    if (!auth.session?.user?.id) return;
+
+    setLoading(true);
+    const selectColumns = 'id,user_id,full_name,name,email,phone,address,date_of_birth,age,device_status,gender';
+    const hydrateFromLegacy = async () => {
+      const loaded = await loadLegacyPatientProfile();
+      if (!loaded) {
         await createPatientProfile();
+      }
+    };
+
+    try {
+      let patientRow = null;
+      let error = null;
+
+      const { data: userMatch, error: userMatchError } = await supabase
+        .from('patients')
+        .select(selectColumns)
+        .eq('user_id', auth.session.user.id)
+        .maybeSingle();
+
+      patientRow = userMatch || null;
+      error = userMatchError || null;
+
+      if (!patientRow && auth.session?.user?.email) {
+        const { data: emailMatch, error: emailError } = await supabase
+          .from('patients')
+          .select(selectColumns)
+          .eq('email', auth.session.user.email)
+          .maybeSingle();
+
+        if (emailMatch) {
+          patientRow = emailMatch;
+          if (!patientRow.user_id) {
+            try {
+              await supabase
+                .from('patients')
+                .update({ user_id: auth.session.user.id })
+                .eq('id', patientRow.id);
+              patientRow.user_id = auth.session.user.id;
+            } catch (linkErr) {
+              console.warn('Failed to link patient row to user_id:', linkErr?.message || linkErr);
+            }
+          }
+        } else if (emailError && !error) {
+          error = emailError;
+        }
+      }
+
+      if (!patientRow) {
+        patientRow = await fetchPatientRowViaRpc();
+      }
+
+      if (patientRow) {
+        setProfileData(mapPatientRowToProfileData(patientRow));
+        if (patientRow.device_status) {
+          setDeviceStatus(patientRow.device_status);
+        }
+      } else {
+        if (error) {
+          console.warn('patients fetch error:', error.message || error);
+        }
+        await hydrateFromLegacy();
       }
     } catch (err) {
       console.error('Error fetching patient profile:', err);
-      // Try to create a patient profile if fetch failed
-      await createPatientProfile();
+      await hydrateFromLegacy();
     } finally {
       setLoading(false);
     }
@@ -2082,21 +2556,36 @@ function ProfilePage() {
         .single();
 
       if (newProfile && !error) {
+        const createdDob = newProfile.date_of_birth || "";
+        const createdAge = newProfile.age ?? computeAgeFromDob(createdDob);
         setProfileData({
           fullName: newProfile.full_name || "",
           email: auth.session.user.email || "",
           phone: newProfile.phone || "",
-          dob: newProfile.date_of_birth || "",
+          age: createdAge != null ? String(createdAge) : "",
+          dob: createdDob,
+          gender: newProfile.gender || "",
           address: newProfile.address || "",
-          patientId: newProfile.id || null
+          patientId: newProfile.patient_id || newProfile.id || null
         });
+        await syncPublicPatient({
+          fullName: newProfile.full_name,
+          phone: newProfile.phone,
+          address: newProfile.address,
+          dob: newProfile.date_of_birth,
+          gender: newProfile.gender,
+          age: createdAge,
+          patientId: newProfile.patient_id || newProfile.id || null
+        }, { preserveExisting: true });
       } else {
         // Fallback to basic profile data if creation failed
         setProfileData({
           fullName: auth.profile?.full_name || "",
           email: auth.session.user.email || "",
           phone: "",
+          age: "",
           dob: "",
+          gender: "",
           address: "",
           patientId: null
         });
@@ -2108,7 +2597,9 @@ function ProfilePage() {
         fullName: auth.profile?.full_name || "",
         email: auth.session.user.email || "",
         phone: "",
+        age: "",
         dob: "",
+        gender: "",
         address: "",
         patientId: null
       });
@@ -2133,6 +2624,8 @@ function ProfilePage() {
         phone: profileData.phone,
         date_of_birth: profileData.dob,
         address: profileData.address
+        ,
+        gender: profileData.gender || null
       };
 
       const { error } = await supabase
@@ -2143,18 +2636,58 @@ function ProfilePage() {
         console.error('Patient profile update failed:', error);
       }
 
-      // Mirror core fields into public.patients for unified patient listing
+      await syncPublicPatient({
+        fullName: profileData.fullName,
+        phone: profileData.phone,
+        address: profileData.address,
+        dob: profileData.dob,
+        age: profileData.age,
+        patientId: profileData.patientId
+      });
+
+      // Also attempt an explicit upsert into the canonical `patients` table so
+      // the UI-backed public row is updated immediately. This is a separate
+      // best-effort write in case RLS/policies allow it.
       try {
-        await supabase.from('patients').upsert({
+        const patientsPayload = {
           user_id: auth.session.user.id,
           full_name: profileData.fullName,
           name: profileData.fullName,
-          email: auth.session.user.email,
-          phone: profileData.phone,
-          address: profileData.address
-        });
-      } catch (e) {
-        console.warn('patients upsert failed:', e?.message || e);
+          email: profileData.email || auth.session.user.email || null,
+          phone: profileData.phone || null,
+          address: profileData.address || null,
+          date_of_birth: profileData.dob || null,
+          gender: profileData.gender || null,
+          age: profileData.age ? (Number.isFinite(Number(profileData.age)) ? Number(profileData.age) : null) : null
+        };
+        try {
+          const { data: patientsData, error: patientsErr, status, statusText } = await supabase
+            .from('patients')
+            .upsert(patientsPayload, { onConflict: 'user_id' })
+            .select();
+
+          console.debug('patients.upsert (profile save) result:', { patientsData, patientsErr, status, statusText });
+
+          if (patientsErr) {
+            console.warn('patients upsert (profile save) returned error, attempting update:', patientsErr);
+            try {
+              const { data: updated, error: updateErr } = await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id).select();
+              console.debug('patients.update (profile save) result:', { updated, updateErr });
+            } catch (uE) {
+              console.warn('patients update (profile save) fallback failed:', uE?.message || uE);
+            }
+          }
+        } catch (eUp) {
+          console.warn('patients upsert (profile save) exception, attempting update fallback:', eUp?.message || eUp);
+          try {
+            const { data: updated, error: updateErr } = await supabase.from('patients').update(patientsPayload).eq('user_id', patientsPayload.user_id).select();
+            console.debug('patients.update (profile save) exception-fallback result:', { updated, updateErr });
+          } catch (uEx) {
+            console.warn('patients update (profile save) fallback failed:', uEx?.message || uEx);
+          }
+        }
+      } catch (patientsEx) {
+        console.warn('patients upsert (profile save) exception:', patientsEx);
       }
 
       setEditing(false);
@@ -2164,6 +2697,16 @@ function ProfilePage() {
       setLoading(false);
     }
   };
+
+  const fallbackAgeFromDob = computeAgeFromDob(profileData.dob);
+  const displayAgeValue = profileData.age !== ""
+    ? String(profileData.age)
+    : (fallbackAgeFromDob != null ? String(fallbackAgeFromDob) : "");
+  const formattedPatientId = profileData.patientId
+    ? (String(profileData.patientId).startsWith('PID-')
+      ? String(profileData.patientId)
+      : `PID-${profileData.patientId}`)
+    : '';
 
   return (
     <main className="route-screen">
@@ -2218,7 +2761,7 @@ function ProfilePage() {
               <label className="form-label">Patient ID (PID)</label>
               <div className="form-display" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: '#2563eb' }}>
-                  {profileData.patientId ? `PID-${profileData.patientId}` : 'Not assigned yet'}
+                  {profileData.patientId ? formattedPatientId : 'Not assigned yet'}
                 </span>
                 {profileData.patientId && (
                   <button
@@ -2226,7 +2769,7 @@ function ProfilePage() {
                     className="btn btn-secondary"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(`PID-${profileData.patientId}`);
+                        await navigator.clipboard.writeText(formattedPatientId);
                         setCopied(true);
                         setTimeout(() => setCopied(false), 1500);
                       } catch (_) {}
@@ -2258,7 +2801,7 @@ function ProfilePage() {
             </div>
             
             <div className="form-group">
-              <label className="form-label">Phone</label>
+              <label className="form-label">Contact</label>
               {editing ? (
                 <input
                   type="tel"
@@ -2268,6 +2811,21 @@ function ProfilePage() {
                 />
               ) : (
                 <div className="form-display">{profileData.phone || 'Not set'}</div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Age</label>
+              {editing ? (
+                <input
+                  type="number"
+                  min="0"
+                  value={profileData.age}
+                  onChange={e => setProfileData({...profileData, age: e.target.value})}
+                  className="form-input"
+                />
+              ) : (
+                <div className="form-display">{displayAgeValue || 'Not set'}</div>
               )}
             </div>
             
@@ -2282,6 +2840,25 @@ function ProfilePage() {
                 />
               ) : (
                 <div className="form-display">{profileData.dob || 'Not set'}</div>
+              )}
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">Gender</label>
+              {editing ? (
+                <select
+                  value={profileData.gender || ''}
+                  onChange={e => setProfileData({...profileData, gender: e.target.value})}
+                  className="form-input"
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="prefer_not_say">Prefer not to say</option>
+                </select>
+              ) : (
+                <div className="form-display">{profileData.gender ? (profileData.gender.charAt(0).toUpperCase() + profileData.gender.slice(1).replace(/_/g,' ')) : 'Not set'}</div>
               )}
             </div>
             
@@ -2306,26 +2883,33 @@ function ProfilePage() {
 }
 
 function DoctorPortal() {
+  const auth = useAuth();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [usingService, setUsingService] = useState(false);
-  const [patientsCount, setPatientsCount] = useState(null);
-  const [patientsCountMeta, setPatientsCountMeta] = useState(null);
+  const [patientsCount, setPatientsCount] = useState(0);
+  const [lastSynced, setLastSynced] = useState(null);
+  const [feedbackTarget, setFeedbackTarget] = useState(null);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
+
+  const doctorDisplayName = auth?.profile?.full_name || auth?.session?.user?.user_metadata?.full_name || auth?.session?.user?.email || 'Doctor';
 
   const TBL_VITALS = process.env.REACT_APP_TBL_VITALS || 'vitals';
   const COL_TIME = process.env.REACT_APP_COL_TIME || 'time';
 
   const getRiskClass = (risk) => {
     switch (risk) {
-      case "high": return "badge-high";
-      case "medium": return "badge-medium";
-      case "low": return "badge-low";
-      default: return "";
+      case 'high': return 'badge-high';
+      case 'medium': return 'badge-medium';
+      case 'low':
+      default:
+        return 'badge-low';
     }
   };
 
-  const fetchLatestVitalsTime = async (userId) => {
+  const fetchLatestVitalsTime = useCallback(async (userId) => {
     try {
       let q = await supabase.from(TBL_VITALS).select('*').eq('user_id', userId).order(COL_TIME, { ascending: false }).limit(1);
       if (q.error && /column|Could not find/i.test(q.error.message)) {
@@ -2344,16 +2928,14 @@ function DoctorPortal() {
     } catch {
       return null;
     }
-  };
+  }, [TBL_VITALS, COL_TIME]);
 
-  // Batch fetch latest diagnosis per patient, returns a Map<user_id, {severity, created_at, ai_generated}>
-  const fetchLatestDiagnosesMap = async (userIds) => {
+  const fetchLatestDiagnosesMap = useCallback(async (userIds) => {
     const map = new Map();
     if (!Array.isArray(userIds) || !userIds.length) return map;
     try {
-      // Pull recent diagnoses for these users and reduce to the latest per patient
       const { data, error } = await supabase
-        .from(process.env.REACT_APP_TBL_REPORT || 'diagnoses')
+        .from(TBL_REPORT)
         .select('patient_id,severity,created_at,ai_generated')
         .in('patient_id', userIds)
         .order('created_at', { ascending: false })
@@ -2361,13 +2943,10 @@ function DoctorPortal() {
       if (error) throw error;
       for (const row of (data || [])) {
         const pid = row.patient_id;
-        if (!pid) continue;
-        if (!map.has(pid)) {
-          map.set(pid, { severity: (row.severity || 'low'), created_at: row.created_at, ai_generated: !!row.ai_generated });
-        }
+        if (!pid || map.has(pid)) continue;
+        map.set(pid, { severity: (row.severity || 'low'), created_at: row.created_at, ai_generated: !!row.ai_generated });
       }
     } catch (_) {}
-    // Secondary attempt: some rows might have been saved with internal patients.id instead of auth user_id
     if (map.size === 0) {
       try {
         const { data } = await supabase
@@ -2378,7 +2957,7 @@ function DoctorPortal() {
         const idToUser = new Map((data || []).map(r => [r.id, r.user_id]));
         if (idToUser.size) {
           const { data: d2 } = await supabase
-            .from(process.env.REACT_APP_TBL_REPORT || 'diagnoses')
+            .from(TBL_REPORT)
             .select('patient_id,severity,created_at,ai_generated')
             .in('patient_id', Array.from(idToUser.keys()))
             .order('created_at', { ascending: false })
@@ -2394,328 +2973,77 @@ function DoctorPortal() {
       } catch (_) {}
     }
     return map;
-  };
-
-  // Fetch patients from Supabase `patients` table (preferred DB source)
-  const fetchPatientsFromSupabase = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('user_id, full_name, name, updated_at, created_at')
-        .order('updated_at', { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      const rows = Array.isArray(data) ? data : [];
-      if (!rows.length) return false;
-
-      const userIds = rows.map(r => r.user_id).filter(Boolean);
-      const diagMap = await fetchLatestDiagnosesMap(userIds);
-      const list = [];
-      for (const r of rows) {
-        const lastTime = await fetchLatestVitalsTime(r.user_id);
-        const latest = diagMap.get(r.user_id);
-        const severity = latest?.severity || 'low';
-        list.push({
-          user_id: r.user_id,
-          name: r.full_name || r.name || `(UID ${String(r.user_id).slice(0, 8)}…)`,
-          condition: latest ? `Latest report ${latest.ai_generated ? '(AI)' : ''}` : '—',
-          risk: typeof severity === 'string' ? severity.toLowerCase() : 'low',
-          lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '—'
-        });
-      }
-      list.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
-      setPatients(list);
-      setUsingService(false);
-      try {
-        const map = Object.fromEntries((list || []).map(p => [String(p.user_id), p.name]));
-        window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
-      } catch (_) {}
-      // Prefer exact count from patients table
-      try {
-        if (patientsCount == null) {
-          const { count } = await supabase
-            .from('patients')
-            .select('id', { count: 'exact', head: true });
-          if (count || count === 0) setPatientsCount(Number(count));
-        }
-      } catch (_) {}
-      return true;
-    } catch (_) {
-      return false;
-    }
-  };
-
-  async function retryServiceFetch() {
-    try {
-  const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
-      const health = await fetch(`${BASE}/health`);
-      if (!health.ok) throw new Error('Service health not OK');
-
-      // Prefer the richer list; fall back to /patients
-      let list = [];
-      try {
-        const r1 = await fetch(`${BASE}/api/v1/patients-with-latest`);
-        if (r1.ok) {
-          const j1 = await r1.json();
-          if (j1?.ok && Array.isArray(j1.patients)) list = j1.patients;
-        }
-      } catch (_) {}
-      if (!list.length) {
-        const r2 = await fetch(`${BASE}/api/v1/patients`);
-        if (r2.ok) {
-          const j2 = await r2.json();
-          if (j2?.ok && Array.isArray(j2.patients)) list = j2.patients;
-        }
-      }
-      if (list.length) {
-        const baseList = list.map(p => ({
-          user_id: p.user_id,
-          name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-          condition: '—',
-          risk: 'low',
-          lastCheck: p.lastCheck ? new Date(p.lastCheck).toLocaleString() : '—'
-        }));
-        // Enrich with diagnoses severity if available
-        const ids = baseList.map(p => p.user_id).filter(Boolean);
-        const diagMap = await fetchLatestDiagnosesMap(ids);
-        const svcList = baseList.map(p => {
-          const latest = diagMap.get(p.user_id);
-          if (latest) {
-            return { ...p, condition: `Latest report ${latest.ai_generated ? '(AI)' : ''}`, risk: (latest.severity || 'low').toLowerCase() };
-          }
-          return p;
-        });
-        setPatients(svcList);
-        setUsingService(true);
-        try {
-          const map = Object.fromEntries(svcList.map(p => [String(p.user_id), p.name]));
-          window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
-        } catch (_) {}
-        return true;
-      }
-      throw new Error('Service returned empty list');
-    } catch (e) {
-      setError(e?.message || String(e));
-      return false;
-    }
-  }
-
-  async function refreshPatients() {
-    const ok = await retryServiceFetch();
-    if (!ok) {
-      await fetchPatientsFromSupabase();
-    }
-  }
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        // If a service endpoint is available, prefer it to bypass RLS and list all patients
-        try {
-          const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
-          const health = await fetch(`${BASE}/health`);
-          if (health.ok) {
-            setUsingService(true);
-            // Fetch total patients from profiles via service
-            let svcCount = null;
-            try {
-              const cRes = await fetch(`${BASE}/api/v1/patient-count`);
-              if (cRes.ok) {
-                const cJson = await cRes.json();
-                if (cJson?.ok) {
-                  svcCount = Number(cJson.count || 0);
-                  setPatientsCount(svcCount);
-                  setPatientsCountMeta(cJson.counts || null);
-                }
-              }
-            } catch (_) {}
-
-            // Try patients-with-latest first
-            let svcList = [];
-            try {
-              const resp = await fetch(`${BASE}/api/v1/patients-with-latest`);
-              if (resp.ok) {
-                const json = await resp.json();
-                if (json?.ok && Array.isArray(json.patients)) {
-                  svcList = json.patients.map(p => ({
-                    user_id: p.user_id,
-                    name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-                    condition: '\u2014',
-                    risk: 'low',
-                    lastCheck: p.lastCheck ? new Date(p.lastCheck).toLocaleString() : '\u2014'
-                  }));
-                }
-              }
-            } catch (_) {}
-
-            // If service count suggests more patients than we received, fall back to /patients
-            if ((svcCount != null) && (svcList.length < svcCount)) {
-              try {
-                const resp2 = await fetch(`${BASE}/api/v1/patients`);
-                if (resp2.ok) {
-                  const json2 = await resp2.json();
-                  if (json2?.ok && Array.isArray(json2.patients)) {
-                    const list2 = json2.patients.map(p => ({
-                      user_id: p.user_id,
-                      name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-                      condition: '—',
-                      risk: 'low',
-                      lastCheck: '—'
-                    }));
-                    if (list2.length > svcList.length) svcList = list2;
-                  }
-                }
-              } catch (_) {}
-            }
-
-            if (svcList.length) {
-              if (mounted) {
-                setPatients(svcList);
-                // Persist a simple map of user_id -> name for detail page fallback
-                try {
-                  const map = Object.fromEntries((svcList || []).map(p => [String(p.user_id), p.name]));
-                  window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
-                } catch (_) {}
-              }
-              // Early return: service provided list; avoid browser fallback that might be limited by RLS
-              return;
-            } else {
-              // If service is up but empty list, continue to browser fallback below
-              setUsingService(false);
-            }
-          }
-        } catch (_) {
-          // ignore service errors and fall back to Supabase
-        }
-
-        // Try dedicated patients table first
-        const okPatients = await fetchPatientsFromSupabase();
-        if (okPatients) {
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('patient_profiles')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(100);
-        if (error) throw error;
-        const ppList = Array.isArray(data) ? data : [];
-
-        // Also load profiles to include patients without a patient_profiles row
-        let profsAll = [];
-        try {
-          const { data: profs, error: pErr } = await supabase
-            .from('profiles')
-            .select('id,email,full_name,role')
-            .limit(500);
-          if (!pErr) profsAll = profs || [];
-        } catch (_) {}
-
-        // Build a map of candidates by user_id
-        const byId = new Map();
-        for (const p of ppList) {
-          if (!p?.user_id) continue;
-          byId.set(p.user_id, { source: 'patient_profiles', user_id: p.user_id, full_name: p.full_name, email: null, role: 'patient' });
-        }
-        for (const pr of profsAll) {
-          if (!pr?.id) continue;
-          // If role column exists and is not 'patient', skip adding as patient
-          if (typeof pr.role === 'string' && pr.role && pr.role.toLowerCase() !== 'patient') {
-            // Keep existing entry if already present from patient_profiles
-            if (!byId.has(pr.id)) continue;
-          }
-          if (!byId.has(pr.id)) {
-            byId.set(pr.id, { source: 'profiles', user_id: pr.id, full_name: pr.full_name, email: pr.email, role: pr.role || null });
-          } else {
-            const cur = byId.get(pr.id);
-            // Prefer profiles.full_name over patient_profiles.full_name
-            byId.set(pr.id, { ...cur, email: pr.email ?? cur.email, full_name: pr.full_name || cur.full_name });
-          }
-        }
-
-        // Enrich with latest vitals time and friendly name
-        const candidates = Array.from(byId.values());
-        const enriched = [];
-        for (const c of candidates) {
-          const lastTime = await fetchLatestVitalsTime(c.user_id);
-          enriched.push({
-            user_id: c.user_id,
-            name: c.full_name || c.email || `(UID ${String(c.user_id).slice(0, 8)}…)`,
-            condition: '—',
-            risk: 'low',
-            lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '—'
-          });
-        }
-        // Sort by lastCheck desc then name
-        enriched.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
-        let finalList = enriched;
-
-        // If we only received a small subset (likely due to RLS), try service fallback
-        if (finalList.length <= 1) {
-          try {
-            const BASE = (process.env.REACT_APP_VITALS_WRITER_URL || process.env.REACT_APP_SERVER_BASE || '').replace(/\/$/, '');
-            const resp = await fetch(`${BASE}/api/v1/patients-with-latest`);
-            if (resp.ok) {
-              const json = await resp.json();
-              if (json?.ok && Array.isArray(json.patients) && json.patients.length > finalList.length) {
-                finalList = json.patients.map(p => ({
-                  user_id: p.user_id,
-                  name: p.full_name || p.name || p.email || `(UID ${String(p.user_id).slice(0, 8)}…)`,
-                  condition: '—',
-                  risk: 'low',
-                  lastCheck: p.lastCheck ? new Date(p.lastCheck).toLocaleString() : '—'
-                }));
-                setUsingService(true);
-              }
-            } else {
-              // surface partial info
-              const txt = await resp.text().catch(() => '');
-              console.warn('Service patients fetch failed:', resp.status, txt);
-            }
-          } catch (svcErr) {
-            console.warn('Service patients fetch error:', svcErr?.message || svcErr);
-          }
-        }
-
-        if (mounted) setPatients(finalList);
-        // Persist a simple map of user_id -> name for detail page fallback
-        try {
-          const map = Object.fromEntries((finalList || []).map(p => [String(p.user_id), p.name]));
-          window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
-        } catch (_) {}
-
-        // Browser-side fallback: profiles count (role ilike 'patient') if service count not available
-        try {
-          if (patientsCount == null) {
-            // Prefer patients table count if exists; otherwise fall back to profiles role
-            let set = false;
-            try {
-              const { count: c } = await supabase.from('patients').select('id', { count: 'exact', head: true });
-              if (mounted && (c || c === 0)) { setPatientsCount(Number(c)); set = true; }
-            } catch (_) {}
-            if (!set) {
-              const { count: pCount } = await supabase
-                .from('profiles')
-                .select('id', { count: 'exact', head: true })
-                .ilike('role', 'patient');
-              if (mounted && (pCount || pCount === 0)) setPatientsCount(Number(pCount));
-            }
-          }
-        } catch (_) {}
-      } catch (e) {
-        if (mounted) setError(e?.message || String(e));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
   }, []);
 
-  // Severity summary dashboard
+  const loadSharedPatients = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: shareRows, error: shareErr } = await supabase
+        .from('notifications')
+        .select('patient_id, created_at')
+        .eq('doctor_id', user.id)
+        .eq('type', 'report_shared')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (shareErr) throw shareErr;
+
+      const sharedIds = Array.from(new Set((shareRows || []).map(row => row.patient_id).filter(Boolean)));
+      if (!sharedIds.length) {
+        setPatients([]);
+        setPatientsCount(0);
+        setLastSynced(new Date().toISOString());
+        return;
+      }
+
+      const { data: patientRows, error: patientErr } = await supabase
+        .from('patients')
+        .select('user_id, full_name, name, updated_at, created_at')
+        .in('user_id', sharedIds);
+      if (patientErr) throw patientErr;
+
+      const diagMap = await fetchLatestDiagnosesMap(sharedIds);
+      const enriched = [];
+      for (const r of (patientRows || [])) {
+        const lastTime = await fetchLatestVitalsTime(r.user_id);
+        const latest = diagMap.get(r.user_id);
+        enriched.push({
+          user_id: r.user_id,
+          name: r.full_name || r.name || `(UID ${String(r.user_id).slice(0, 8)}...)`,
+          condition: latest ? `Latest report ${latest.ai_generated ? '(AI)' : ''}` : '--',
+          risk: typeof latest?.severity === 'string' ? latest.severity.toLowerCase() : 'low',
+          lastCheck: lastTime ? new Date(lastTime).toLocaleString() : '--'
+        });
+      }
+
+      enriched.sort((a, b) => String(b.lastCheck).localeCompare(String(a.lastCheck)) || String(a.name).localeCompare(String(b.name)));
+      setPatients(enriched);
+      setPatientsCount(enriched.length);
+      setLastSynced(new Date().toISOString());
+      try {
+        const map = Object.fromEntries(enriched.map(p => [String(p.user_id), p.name]));
+        window.localStorage.setItem('patientNamesMap', JSON.stringify(map));
+      } catch (_) {}
+    } catch (e) {
+      setError(e?.message || String(e));
+      setPatients([]);
+      setPatientsCount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchLatestDiagnosesMap, fetchLatestVitalsTime]);
+
+  useEffect(() => {
+    loadSharedPatients();
+  }, [loadSharedPatients]);
+
+  const refreshPatients = () => {
+    loadSharedPatients();
+  };
+
   const severityCounts = patients.reduce((acc, p) => {
     if (p.risk === 'high') acc.high++;
     else if (p.risk === 'medium') acc.medium++;
@@ -2723,25 +3051,72 @@ function DoctorPortal() {
     return acc;
   }, { low: 0, medium: 0, high: 0 });
 
+  const openFeedbackForm = (patient) => {
+    setFeedbackTarget(patient);
+    setFeedbackMessage('');
+    setFeedbackStatus(null);
+  };
+
+  const closeFeedbackForm = () => {
+    if (feedbackSaving) return;
+    setFeedbackTarget(null);
+    setFeedbackMessage('');
+    setFeedbackStatus(null);
+  };
+
+  const submitFeedback = async (event) => {
+    event?.preventDefault?.();
+    if (!feedbackTarget) return;
+    const trimmed = feedbackMessage.trim();
+    if (!trimmed) {
+      setFeedbackStatus({ type: 'error', message: 'Please enter feedback before sending.' });
+      return;
+    }
+    setFeedbackSaving(true);
+    setFeedbackStatus(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const payload = {
+        doctor_id: user.id,
+        patient_id: feedbackTarget.user_id,
+        type: 'doctor_feedback',
+        message: `Feedback from ${doctorDisplayName}: ${trimmed}`,
+        is_read: false
+      };
+      const { error: insertError } = await supabase.from('notifications').insert(payload);
+      if (insertError) throw insertError;
+      setFeedbackStatus({ type: 'success', message: 'Feedback sent to patient.' });
+      setFeedbackMessage('');
+      setTimeout(() => {
+        closeFeedbackForm();
+      }, 800);
+    } catch (feedbackError) {
+      setFeedbackStatus({ type: 'error', message: feedbackError?.message || String(feedbackError) });
+    } finally {
+      setFeedbackSaving(false);
+    }
+  };
+
   return (
-    <main>
+    <>
+      <main>
       <section className="hero">
         <h1 className="hero-title">Doctor Dashboard</h1>
-        <p className="hero-subtitle">Patient overview, risk indicators, and quick access to clinical reviews.</p>
+        <p className="hero-subtitle">Only patients who explicitly shared their records appear in your panel.</p>
         <div className="hero-cta">
-          <button className="btn btn-light" onClick={refreshPatients}>Refresh Patients</button>
+          <button className="btn btn-light" onClick={refreshPatients} disabled={loading}>
+            {loading ? 'Syncing...' : 'Refresh Patients'}
+          </button>
         </div>
         <div className="hero-stats">
-          <div className="hero-stat"><div className="text-xl font-semibold">Total</div><div className="text-3xl font-extrabold">{patientsCount != null ? patientsCount : patients.length}</div></div>
+          <div className="hero-stat"><div className="text-xl font-semibold">Shared</div><div className="text-3xl font-extrabold">{patientsCount}</div></div>
           <div className="hero-stat"><div className="text-xl font-semibold">High Risk</div><div className="text-3xl font-extrabold">{severityCounts.high}</div></div>
           <div className="hero-stat"><div className="text-xl font-semibold">Medium Risk</div><div className="text-3xl font-extrabold">{severityCounts.medium}</div></div>
           <div className="hero-stat"><div className="text-xl font-semibold">Low Risk</div><div className="text-3xl font-extrabold">{severityCounts.low}</div></div>
         </div>
-        {usingService && (
-          <div className="alert alert-info mt-4">Using service endpoint to bypass RLS for listing patients.</div>
-        )}
-        {patientsCountMeta && (
-          <div className="muted mt-2 text-xs">profiles={patientsCountMeta.profilesRolePatient} · patient_profiles={patientsCountMeta.patientProfiles} · union={patientsCountMeta.unionDistinct}</div>
+        {lastSynced && (
+          <div className="muted mt-2 text-xs">Last synced {new Date(lastSynced).toLocaleString()}</div>
         )}
         {error && (<div className="alert alert-danger mt-2">{error}</div>)}
       </section>
@@ -2749,27 +3124,26 @@ function DoctorPortal() {
       <section className="feature-grid">
         <div className="feature-card">
           <h3>Patients</h3>
-          <p>Browse the latest patient list and open detailed views to add clinical notes.</p>
-          <div className="mt-4"><button className="btn btn-primary" onClick={refreshPatients}>Sync</button></div>
+          <p>Only patients who shared a report or questionnaire with you are listed here.</p>
+          <div className="mt-4"><button className="btn btn-primary" onClick={refreshPatients} disabled={loading}>{loading ? 'Syncing...' : 'Sync'}</button></div>
         </div>
         <div className="feature-card">
           <h3>Analytics</h3>
-          <p>Track risk distribution and activity across your panel at a glance.</p>
+          <p>Track risk distribution across your shared panel at a glance.</p>
           <div className="mt-4"><span className="badge">Soon</span></div>
         </div>
         <div className="feature-card">
           <h3>Reports</h3>
-          <p>Review AI reports generated from recent patient assessments.</p>
+          <p>Review AI reports generated from patient assessments that were shared with you.</p>
           <div className="mt-4"><span className="badge">Soon</span></div>
         </div>
       </section>
 
       <div className="card mt-8">
         <h3 className="card-title">Patient List</h3>
-        {patientsCount != null && patients.length < patientsCount && (
-          <div className="alert alert-warning mb-3">
-            Showing {patients.length} of {patientsCount} patients. Some results may be hidden by RLS.
-            <button className="btn btn-outline ml-2" onClick={retryServiceFetch}>Try service again</button>
+        {patients.length === 0 && !loading && (
+          <div className="alert alert-info mb-3">
+            No patients have shared their records with you yet. Ask patients to share a report from the assessments page.
           </div>
         )}
         <div className="table-container">
@@ -2795,14 +3169,14 @@ function DoctorPortal() {
                   </td>
                   <td>{patient.lastCheck}</td>
                   <td>
-                    <Link 
-                      className="btn btn-primary" 
-                      to={`/doctor/patient/${patient.user_id}`} 
+                    <Link
+                      className="btn btn-primary"
+                      to={`/doctor/patient/${patient.user_id}`}
                       state={{ name: patient.name }}
                     >
                       View Details
                     </Link>
-                    <button className="btn btn-success ml-2">
+                    <button className="btn btn-success ml-2" onClick={() => openFeedbackForm(patient)}>
                       Add Feedback
                     </button>
                   </td>
@@ -2812,7 +3186,52 @@ function DoctorPortal() {
           </table>
         </div>
       </div>
-    </main>
+      </main>
+      {feedbackTarget && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15,23,42,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+            padding: '16px'
+          }}
+        >
+          <div className="card" style={{ maxWidth: 520, width: '100%', padding: 24, position: 'relative' }}>
+            <h3 className="card-title" style={{ marginBottom: 4 }}>Send Feedback</h3>
+            <p className="muted" style={{ marginBottom: 12 }}>Patient: {feedbackTarget.name}</p>
+            {feedbackStatus && (
+              <div className={`alert ${feedbackStatus.type === 'error' ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: 12 }}>
+                {feedbackStatus.message}
+              </div>
+            )}
+            <form onSubmit={submitFeedback}>
+              <textarea
+                className="form-input"
+                rows={5}
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+                placeholder="Share clinical notes, next steps, or recommendations"
+                style={{ width: '100%', minHeight: 140, resize: 'vertical', marginBottom: 16 }}
+                disabled={feedbackSaving}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <button type="button" className="btn btn-light" onClick={closeFeedbackForm} disabled={feedbackSaving}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={feedbackSaving}>
+                  {feedbackSaving ? 'Sending…' : 'Send Feedback'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2990,7 +3409,7 @@ function App() {
               } />
               <Route path="/patient/questionnaire" element={
                 <ProtectedRoute role="patient">
-                  <QuestionnairePage />
+                  <AIQuestionnairesPage />
                 </ProtectedRoute>
               } />
               <Route path="/patient/ai-questionnaires" element={
@@ -3006,6 +3425,11 @@ function App() {
               <Route path="/patient/uploads" element={
                 <ProtectedRoute role="patient">
                   <UploadDocumentsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/patient/documents" element={
+                <ProtectedRoute role="patient">
+                  <UploadedDocumentsPage />
                 </ProtectedRoute>
               } />
               <Route path="/patient/profile" element={
@@ -3066,3 +3490,4 @@ function App() {
 // Re-export auth hook so layout components (Sidebar, etc.) can consume without circular complexity
 export { useAuth };
 export default App;
+

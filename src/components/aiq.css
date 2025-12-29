@@ -1,0 +1,138 @@
+/* Styles for AIQuestionnairesPage - focused, minimal, responsive */
+:root{
+  --aiq-gap: 16px;
+  --aiq-bg: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  --aiq-muted: #6b7280;
+  --aiq-accent: #06b6d4; /* cyan-500 */
+  --aiq-accent-2: #6366f1; /* indigo */
+  --aiq-pill-bg: #eef2f7;
+  --aiq-success: #10b981;
+  --card-radius: 12px;
+  --glass-bg: rgba(255,255,255,0.7);
+  --glass-border: rgba(15,23,42,0.06);
+  --shadow-soft: 0 8px 24px rgba(15,23,42,0.06);
+}
+
+.aiq-page { padding: 22px 0; font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; color: #0f172a; width: 100vw; max-width: 100vw; }
+.aiq-page .card { background: var(--glass-bg); border-radius: var(--card-radius); padding: 18px; box-shadow: var(--shadow-soft); border: 1px solid var(--glass-border); backdrop-filter: blur(6px); }
+
+/* Layout polish: center content, consistent spacing */
+.aiq-page {
+  max-width: none;
+  margin: 0;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+.aiq-page .card { margin-bottom: 16px; }
+.aiq-main-grid { display: grid; grid-template-columns: 1fr minmax(320px, 360px); gap: 18px; align-items: start; }
+.aiq-primary-stack { min-width: 0; }
+.aiq-support-stack { width: min(360px, 34vw); display:flex; flex-direction:column; gap:12px }
+
+/* Keep AI Questionnaires page more compact - focus widening on Live conversation only */
+@media (min-width: 1024px) {
+  .aiq-main-grid { grid-template-columns: 1fr minmax(320px, 380px); gap: 24px; }
+  .aiq-support-stack { width: min(380px, 35vw); }
+}
+
+@media (min-width: 1280px) {
+  .aiq-main-grid { grid-template-columns: 1fr minmax(340px, 400px); gap: 28px; }
+  .aiq-support-stack { width: min(400px, 38vw); }
+}
+/* Ensure support column cards stack vertically and take full width */
+.aiq-support-stack { align-items: stretch; }
+.aiq-support-stack > .card { width: 100%; box-sizing: border-box; }
+
+/* Make toolbar input and controls fill the card width */
+.aiq-doctor-toolbar .form-input, .aiq-doctor-toolbar input.form-input { width: 100%; }
+
+/* Ensure doctor grid is single-column and options are stacked vertically */
+.aiq-doctor-grid { grid-template-columns: 1fr !important; }
+.aiq-doctor-card-option { width: 100%; }
+
+/* Ensure report preview is full width and legible */
+.aiq-report-preview { width: 100%; box-sizing: border-box; font-size: 0.95rem; line-height: 1.6; }
+
+@media (max-width: 1024px) {
+  .aiq-layout { grid-template-columns: 1fr; }
+  .aiq-main-grid { grid-template-columns: 1fr; gap: 20px; }
+  .aiq-support-stack { width: 100%; }
+  .aiq-aside { width: 100%; }
+}
+
+.aiq-hero { margin-bottom: 20px; padding: 18px; border-radius: 14px; background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(6,182,212,0.06)); box-shadow: 0 10px 30px rgba(99,102,241,0.06); width:100%; }
+.aiq-hero-grid { display: grid; grid-template-columns: 1fr minmax(220px, 320px); gap: 18px; align-items: center; }
+.aiq-eyebrow { text-transform: uppercase; font-size: 12px; letter-spacing: 0.08em; color: var(--aiq-muted); margin:0 0 6px 0 }
+.aiq-hero-title { margin:0 0 6px 0; font-size: 26px; font-weight: 700; color: #0f172a; }
+.aiq-hero-subtitle { margin:0; color:var(--aiq-muted); font-size: 15px }
+.aiq-pill-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px }
+.aiq-pill { background: rgba(15,23,42,0.04); color:#0f172a; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:600 }
+.aiq-pill-success { background: rgba(16,185,129,0.10); color:var(--aiq-success) }
+.aiq-pill-info { background: rgba(6,182,212,0.10); color:var(--aiq-accent) }
+
+.aiq-hero-actions { display:flex; flex-direction:row; gap:12px; align-items:center; justify-content:flex-end }
+.btn-lg { padding:12px 18px }
+.aiq-language-switch { margin-top:0 }
+
+.aiq-layout { display:grid; grid-template-columns: 1fr minmax(300px, 360px); gap:20px; align-items: start }
+.aiq-aside { width: min(340px, 32vw) }
+
+.aiq-section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
+.aiq-section-header.compact { margin-bottom:8px }
+.aiq-status-dot { font-size:13px; padding:6px 10px; border-radius:999px; background:rgba(15,23,42,0.04); color: var(--aiq-muted); font-weight:600 }
+.aiq-status-dot.active { background: linear-gradient(90deg, rgba(6,182,212,0.12), rgba(99,102,241,0.08)); color:var(--aiq-accent-2) }
+
+.aiq-question-block h3 { margin:6px 0 12px }
+.aiq-button-row { display:flex; gap:8px; margin-top:12px }
+
+.transcript { max-height:220px; overflow:auto; padding:10px; border-radius:8px; background:linear-gradient(180deg,#ffffff,#fbfdff); border:1px solid rgba(15,23,42,0.03) }
+.aiq-transcript-row { padding:8px 6px; border-bottom:1px solid rgba(15,23,42,0.03) }
+
+.aiq-subcard { margin-top:12px }
+.aiq-report-preview { background: linear-gradient(180deg, rgba(2,6,23,0.95), rgba(15,23,42,0.95)); color:#f8fafc; padding:14px; border-radius:10px; min-height:240px; max-height:720px; overflow:auto; box-shadow: 0 8px 30px rgba(2,6,23,0.35); border-left: 4px solid rgba(99,102,241,0.9); width:100%; white-space: pre-wrap; }
+
+/* Expanded mode: show full report (no max-height), let the content flow */
+.aiq-report-preview.expanded {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Strong override when inside global card rules that force colors */
+.card .aiq-report-preview,
+.card.aiq-report-container .aiq-report-preview {
+  background: #0f172a !important;
+  color: #ffffff !important;
+}
+
+.aiq-doctor-grid { display:grid; grid-template-columns: 1fr; gap:10px; max-height:420px; overflow:auto }
+@media(min-width:760px){ .aiq-doctor-grid { grid-template-columns: 1fr; } }
+.aiq-doctor-card-option { display:flex; gap:12px; align-items:center; padding:12px; border-radius:10px; border:1px solid rgba(15,23,42,0.06); cursor:pointer; transition: transform .18s ease, box-shadow .18s ease; background: linear-gradient(180deg, rgba(255,255,255,0.4), rgba(250,250,250,0.4)); min-height:72px }
+.aiq-doctor-card-option:hover { transform: translateY(-4px); box-shadow: 0 8px 18px rgba(15,23,42,0.06); }
+.aiq-doctor-card-option.selected { background: linear-gradient(90deg, rgba(14,165,164,0.06), rgba(99,102,241,0.04)); border-color: rgba(99,102,241,0.12); }
+.aiq-doctor-avatar { width:44px; height:44px; border-radius:999px; background: linear-gradient(135deg,#e6eefc,#eef9ff); display:flex; align-items:center; justify-content:center; font-weight:700; color:#111827 }
+.aiq-doctor-name { font-weight:700; }
+.aiq-doctor-card-option .muted { color:var(--aiq-muted); font-size:13px }
+.badge.danger { background: #fee2e2; color:#b91c1c; padding:2px 6px; border-radius:6px; margin-left:6px; font-size:11px }
+
+.aiq-context-card .aiq-context-list div { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed rgba(15,23,42,0.03) }
+.aiq-upload-list { list-style:none; padding:0; margin:0 }
+.aiq-upload-list li { padding:8px 0; border-bottom:1px solid rgba(15,23,42,0.03) }
+
+.aiq-empty-state { padding:12px; color:var(--aiq-muted) }
+.aiq-hint { display:block; margin-top:8px; color:var(--aiq-muted) }
+
+/* Small tweaks for inputs */
+.form-input { padding:8px 10px; border-radius:8px; border:1px solid rgba(15,23,42,0.06); }
+
+/* make buttons visually consistent if site doesn't have global btn classes */
+.btn { border: none; background: #0ea5a4; color: white; padding:8px 10px; border-radius:8px; cursor:pointer }
+.btn.btn-secondary { background:#e6e9ee; color:#0f172a }
+.btn.btn-light { background: #fff; color:#0f172a; border:1px solid rgba(15,23,42,0.06) }
+.btn:disabled { opacity:0.6; cursor:not-allowed }
+
+/* Responsive adjustments */
+@media(max-width:1024px){
+  .aiq-hero-grid { grid-template-columns: 1fr; }
+  .aiq-layout { grid-template-columns: 1fr; }
+  .aiq-support-stack { width:auto }
+  .aiq-aside { width:auto }
+}

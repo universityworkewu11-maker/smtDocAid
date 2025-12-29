@@ -20,31 +20,78 @@ const DoctorNotificationsPage = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .select(`
-          id,
-          message,
-          type,
-          is_read,
-          created_at,
-          diagnosis_id,
-          patient:patient_id (
-            id,
-            full_name,
-            name,
-            email
-          ),
-          diagnosis:diagnosis_id (
-            content,
-            severity,
-            created_at
-          )
-        `)
-        .eq('doctor_id', user.id)
-        .order('created_at', { ascending: false });
+      // If a doctors row exists linking to this auth user, prefer that id for doctor lookup
+      const { data: doctorRow } = await supabase
+        .from('doctors')
+        .select('id, user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const doctorIdForQuery = doctorRow?.id || null;
 
-      if (error) throw error;
+      const baseSelect = `
+        id,
+        message,
+        type,
+        is_read,
+        created_at,
+        diagnosis_id,
+        patient_id,
+        patient:patient_id (
+          id,
+          user_id,
+          full_name,
+          name,
+          email
+        ),
+        diagnosis:diagnosis_id (
+          content,
+          severity,
+          created_at
+        )
+      `;
+
+      let data = null;
+      let error = null;
+
+      // Try to query notifications. Prefer matching by doctor_id = auth uid, but if a doctors.id exists, include it as an alternative.
+      try {
+        if (doctorIdForQuery) {
+          ({ data, error } = await supabase
+            .from('notifications')
+            .select(baseSelect)
+            .or(`doctor_id.eq.${user.id},doctor_id.eq.${doctorIdForQuery}`)
+            .order('created_at', { ascending: false }));
+        } else {
+          ({ data, error } = await supabase
+            .from('notifications')
+            .select(baseSelect)
+            .eq('doctor_id', user.id)
+            .order('created_at', { ascending: false }));
+        }
+        if (error) throw error;
+      } catch (err) {
+        // If the column is missing or another schema issue, try safer fallbacks: query by doctor_id only (already attempted), or by doctors.id if present.
+        const msg = err?.message || String(err);
+        if (msg.includes('doctor_id') || (err?.code === '42703')) {
+          try {
+            if (doctorIdForQuery) {
+              const q = await supabase
+                .from('notifications')
+                .select(baseSelect)
+                .eq('doctor_id', doctorIdForQuery)
+                .order('created_at', { ascending: false });
+              data = q.data;
+              error = q.error;
+              if (error) throw error;
+            }
+          } catch (err2) {
+            throw err2;
+          }
+        } else {
+          throw err;
+        }
+      }
+
       setNotifications(data || []);
     } catch (e) {
       setError(e?.message || String(e));
@@ -75,8 +122,17 @@ const DoctorNotificationsPage = () => {
     }
   };
 
-  const viewPatientReport = (patientId) => {
-    navigate(`/doctor/patient/${patientId}`);
+  const viewPatientReport = (notification) => {
+    const patientIdentifier = notification.patient?.user_id || notification.patient?.id || notification.patient_id;
+    if (!patientIdentifier) {
+      setError('Unable to open patient record. Missing identifier.');
+      return;
+    }
+    navigate(`/doctor/patient/${patientIdentifier}`, {
+      state: {
+        name: notification.patient?.full_name || notification.patient?.name
+      }
+    });
   };
 
   return (
@@ -168,7 +224,7 @@ const DoctorNotificationsPage = () => {
                 <div className="notification-actions" style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
                   <button
                     className="btn btn-primary"
-                    onClick={() => viewPatientReport(notification.patient?.id)}
+                    onClick={() => viewPatientReport(notification)}
                     style={{ fontSize: '12px', padding: '6px 12px' }}
                   >
                     View Full Report

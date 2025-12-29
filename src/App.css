@@ -95,10 +95,15 @@
 
 html {
   scroll-behavior: smooth;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
   margin: 0;
+  padding: 0;
+  width: 100%;
   font-family: var(--font-family);
   font-size: var(--font-size-base);
   line-height: 1.6;
@@ -107,7 +112,6 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
 }
 
 /* Modern Scrollbar */
@@ -132,14 +136,13 @@ body {
 .app-container {
   min-height: 100vh;
   position: relative;
-  overflow-x: hidden;
 }
 
 .content-layer {
   position: relative;
   z-index: 10;
   min-height: 100vh;
-  padding: var(--space-6) 0;
+  padding: var(--space-6);
 }
 
 /* Modern Header */
@@ -164,7 +167,7 @@ header:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: 1400px;
+  max-width: none;
   margin: 0 auto;
   width: 100%;
   gap: var(--space-8);
@@ -350,10 +353,10 @@ header:hover {
 /* Main Content Area */
 main {
   flex: 1;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-8) 0;
   width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   min-height: calc(100vh - 200px);
 }
 
@@ -548,7 +551,7 @@ main {
   display: block;
   margin-bottom: var(--space-2);
   font-weight: 600;
-  color: var(--white);
+  color: var(--gray-700);
   font-size: var(--font-size-sm);
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -559,28 +562,27 @@ main {
 .form-group textarea {
   width: 100%;
   padding: var(--space-4);
-  border: 2px solid var(--glass-border);
+  border: 2px solid var(--gray-300);
   border-radius: var(--border-radius-sm);
   font-size: var(--font-size-base);
-  background: var(--glass-bg);
-  backdrop-filter: blur(10px);
-  color: var(--white);
+  background: var(--white);
+  color: var(--gray-800);
   transition: var(--transition-base);
   font-family: var(--font-family);
 }
 
 .form-group input::placeholder,
 .form-group textarea::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--gray-500);
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--primary-light);
+  border-color: var(--primary);
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1), var(--shadow-lg);
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--white);
   transform: translateY(-2px);
 }
 
@@ -1922,6 +1924,12 @@ main {
   border: 1px solid var(--danger);
 }
 
+.alert-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--warning-dark);
+  border: 1px solid var(--warning);
+}
+
 /* Upload Page Responsive Styles */
 @media (max-width: 768px) {
   .upload-zone {
@@ -1955,624 +1963,320 @@ main {
   }
 }
 
-@media (max-width: 480px) {
-  .logo {
-    font-size: var(--font-size-xl);
+  /* AI Questionnaires layout */
+  .aiq-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-4);
   }
 
-  .logo-icon {
-    font-size: var(--font-size-2xl);
+  .aiq-hero {
+    background: var(--primary-gradient);
+    color: var(--white);
+    border: none;
+    box-shadow: var(--shadow-2xl);
   }
 
-  .btn {
-    padding: var(--space-3) var(--space-4);
+  .aiq-hero-grid {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    flex-wrap: wrap;
+  }
+
+  .aiq-eyebrow {
+    text-transform: uppercase;
     font-size: var(--font-size-xs);
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: var(--space-2);
   }
 
-  .dashboard-card {
-    padding: var(--space-4);
-    min-height: 160px;
+  .aiq-hero-title {
+    font-size: var(--font-size-4xl);
+    margin-bottom: var(--space-3);
   }
 
-  .dashboard-card .value {
-    font-size: var(--font-size-3xl);
-  }
-
-  .dashboard-card h3 {
-    font-size: var(--font-size-base);
-  }
-
-  .sensor-value-container {
-    padding: var(--space-3);
-    min-height: 120px;
-  }
-
-  .sensor-value-container .value {
-    font-size: var(--font-size-2xl);
-  }
-
-  .sensor-value-container h3 {
-    font-size: var(--font-size-base);
-  }
-
-  .card {
-    padding: var(--space-4);
+  .aiq-hero-subtitle {
+    font-size: var(--font-size-lg);
+    max-width: 720px;
     margin-bottom: var(--space-4);
   }
-}
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --glass-bg: rgba(0, 0, 0, 0.2);
-    --glass-border: rgba(255, 255, 255, 0.1);
-  }
-}
-
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* New Patient Portal Styles - Guided Assessment Dashboard */
-.dashboard-header {
-  text-align: center;
-  margin-bottom: var(--space-12);
-  padding-bottom: var(--space-8);
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.dashboard-header h1 {
-  color: var(--gray-900);
-  font-size: var(--font-size-4xl);
-  font-weight: 800;
-  margin-bottom: var(--space-4);
-  letter-spacing: -0.025em;
-}
-
-.dashboard-subtitle {
-  color: var(--gray-600);
-  font-size: var(--font-size-xl);
-  font-weight: 500;
-  max-width: 600px;
-  margin: 0 auto;
-  line-height: 1.5;
-}
-
-.progress-overview {
-  margin: var(--space-12) 0;
-}
-
-.progress-steps {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-8);
-  margin-bottom: var(--space-8);
-  flex-wrap: wrap;
-}
-
-.progress-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  opacity: 0.4;
-  transition: var(--transition-base);
-  position: relative;
-  min-width: 120px;
-}
-
-.progress-step.active {
-  opacity: 1;
-  transform: scale(1.05);
-}
-
-.progress-step.completed {
-  opacity: 1;
-}
-
-.progress-step::after {
-  content: '';
-  position: absolute;
-  top: 20px;
-  left: calc(100% + var(--space-4));
-  width: var(--space-8);
-  height: 2px;
-  background: var(--glass-border);
-  z-index: 1;
-}
-
-.progress-step:last-child::after {
-  display: none;
-}
-
-.progress-step.completed::after {
-  background: var(--success);
-}
-
-.step-number {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--gray-100);
-  border: 1px solid var(--gray-300);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: var(--font-size-lg);
-  color: var(--gray-800);
-  transition: var(--transition-base);
-  position: relative;
-  z-index: 2;
-}
-
-.progress-step.active .step-number {
-  background: var(--primary-gradient);
-  border-color: var(--primary-light);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-  animation: pulse 2s infinite;
-}
-
-.progress-step.completed .step-number {
-  background: var(--success);
-  border-color: var(--success);
-  color: var(--white);
-}
-
-.step-info {
-  text-align: center;
-  max-width: 120px;
-}
-
-.step-title {
-  color: var(--gray-800);
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  margin-bottom: var(--space-1);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.step-description {
-  color: var(--gray-600);
-  font-size: var(--font-size-xs);
-  line-height: 1.4;
-}
-
-.current-step-card {
-  background: var(--white);
-  border-radius: var(--border-radius);
-  padding: var(--space-12);
-  border: 1px solid var(--gray-200);
-  text-align: center;
-  margin: var(--space-12) 0;
-  transition: var(--transition-base);
-  position: relative;
-  overflow: hidden;
-}
-
-.current-step-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: var(--primary-gradient);
-}
-
-.current-step-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-xl);
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.step-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-6);
-  margin-bottom: var(--space-8);
-}
-
-.step-icon {
-  font-size: var(--font-size-5xl);
-  animation: float 3s ease-in-out infinite;
-  color: var(--primary);
-}
-
-.step-header h3 {
-  color: var(--gray-800);
-  font-size: var(--font-size-2xl);
-  font-weight: 700;
-  margin-bottom: var(--space-2);
-}
-
-.step-header p {
-  color: var(--gray-600);
-  font-size: var(--font-size-base);
-  line-height: 1.5;
-}
-
-.btn-large {
-  padding: var(--space-5) var(--space-12);
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  min-width: 200px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.step-navigation {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--space-8);
-  padding-top: var(--space-6);
-  border-top: 1px solid var(--glass-border);
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-
-.step-counter {
-  color: var(--gray-700);
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  background: var(--gray-100);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--gray-300);
-}
-
-.ai-summary-section {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border-radius: var(--border-radius);
-  padding: var(--space-8);
-  border: 1px solid var(--glass-border);
-  margin-top: var(--space-12);
-  text-align: center;
-}
-
-.ai-summary-section h3 {
-  color: var(--white);
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-  margin-bottom: var(--space-6);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.ai-summary-section .btn-large {
-  margin-bottom: var(--space-6);
-}
-
-.health-summary {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: var(--border-radius-sm);
-  padding: var(--space-6);
-  border-left: 4px solid var(--success);
-  text-align: left;
-}
-
-.health-summary h4 {
-  color: var(--white);
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  margin-bottom: var(--space-4);
-  text-align: center;
-}
-
-.health-summary pre {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  background: rgba(0, 0, 0, 0.1);
-  padding: var(--space-4);
-  border-radius: var(--border-radius-sm);
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.quick-access {
-  background: var(--white);
-  border-radius: var(--border-radius);
-  padding: var(--space-8);
-  border: 1px solid var(--gray-200);
-  margin-top: var(--space-8);
-}
-
-.quick-access h3 {
-  color: var(--gray-800);
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  margin-bottom: var(--space-6);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.quick-access-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--space-4);
-}
-
-.quick-access-item {
-  background: var(--white);
-  border-radius: var(--border-radius-sm);
-  padding: var(--space-4);
-  text-decoration: none;
-  transition: var(--transition-base);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  border: 1px solid var(--gray-200);
-}
-
-.quick-access-item:hover {
-  background: var(--gray-50);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.quick-access-icon {
-  font-size: var(--font-size-xl);
-  color: var(--primary);
-}
-
-.quick-access-item span:last-child {
-  color: var(--gray-800);
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-}
-
-/* Enhanced Button Styles for New Design */
-.btn-primary.btn-large {
-  background: var(--primary-gradient);
-  box-shadow: var(--shadow-lg);
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-primary.btn-large::before {
-  background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-}
-
-.btn-success.btn-large {
-  background: linear-gradient(135deg, var(--success) 0%, var(--success-dark) 100%);
-  box-shadow: var(--shadow-lg);
-}
-
-/* Responsive Design for New Patient Portal */
-@media (max-width: 768px) {
-  .dashboard-header {
-    margin-bottom: var(--space-8);
-    padding-bottom: var(--space-6);
-  }
-
-  .dashboard-header h1 {
-    font-size: var(--font-size-3xl);
-  }
-
-  .dashboard-subtitle {
-    font-size: var(--font-size-base);
-  }
-
-  .progress-steps {
-    gap: var(--space-4);
-    flex-direction: column;
-  }
-
-  .progress-step {
-    flex-direction: row;
-    min-width: auto;
-    gap: var(--space-4);
-  }
-
-  .progress-step::after {
-    display: none;
-  }
-
-  .step-info {
-    text-align: left;
-    max-width: none;
-  }
-
-  .step-number {
-    width: 40px;
-    height: 40px;
-    font-size: var(--font-size-base);
-  }
-
-  .current-step-card {
-    padding: var(--space-8);
-    margin: var(--space-8) 0;
-  }
-
-  .step-header {
-    flex-direction: column;
-    gap: var(--space-4);
-    text-align: center;
-  }
-
-  .step-header h3 {
-    font-size: var(--font-size-xl);
-  }
-
-  .btn-large {
-    padding: var(--space-4) var(--space-8);
-    font-size: var(--font-size-base);
-    min-width: 180px;
-  }
-
-  .step-navigation {
-    flex-direction: column;
+  .aiq-pill-row {
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-3);
   }
 
-  .step-counter {
-    order: -1;
+  .aiq-doctor-card-option.stale {
+    opacity: 0.6;
+    background-color: var(--gray-100);
+    border-color: var(--danger);
+    cursor: not-allowed;
   }
 
-  .ai-summary-section {
-    padding: var(--space-6);
+  .aiq-doctor-card-option.stale .aiq-doctor-name {
+    text-decoration: line-through;
   }
 
-  .health-summary pre {
-    font-size: var(--font-size-xs);
-    max-height: 300px;
+  .badge.danger {
+    background-color: var(--danger);
+    color: white;
   }
 
-  .quick-access {
-    padding: var(--space-6);
+/* AI Interview Workspace Styles */
+.interview-workspace {
+ display: grid;
+ grid-template-columns: 1fr;
+ gap: var(--space-8);
+ max-width: none;
+ margin: 0;
+}
+
+.interview-main {
+ display: flex;
+ flex-direction: column;
+ gap: var(--space-6);
+}
+
+.interview-sidebar {
+ display: flex;
+ flex-direction: column;
+ gap: var(--space-6);
+}
+
+.interview-question-section {
+ order: 1;
+}
+
+.interview-transcript-section {
+ order: 2;
+}
+
+.interview-report-section {
+ order: 3;
+ grid-column: 1 / -1;
+}
+
+/* Vertical layout - Transcript below Interview Workspace */
+@media (min-width: 1024px) {
+  .interview-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-16);
   }
 
-  .quick-access-grid {
-    grid-template-columns: 1fr;
+  .interview-main {
+    flex: 1;
+    width: 100%;
+  }
+
+  .interview-sidebar {
+    width: 100%;
+    max-width: 100%;
+    align-self: flex-end;
+    justify-self: flex-end;
+  }
+
+  .interview-question-section {
+    order: 1;
+  }
+
+  .interview-transcript-section {
+    order: 2;
+    width: 100%;
+  }
+
+  .interview-report-section {
+    order: 3;
+    width: 100%;
   }
 }
 
-@media (max-width: 480px) {
-  .dashboard-header h1 {
-    font-size: var(--font-size-2xl);
+/* Horizontal layout - Question and Transcript side by side on wide screens */
+@media (min-width: 1000px) {
+  .interview-workspace {
+    display: grid;
+    /* Make the interview/main section substantially larger than the sidebar */
+    grid-template-columns: 3fr 0.2fr;
+    gap: var(--space-24);
+    align-items: start;
   }
 
-  .current-step-card {
-    padding: var(--space-6);
+  .interview-main {
+    grid-column: 1;
+    width: 100%;
   }
 
-  .step-icon {
-    font-size: var(--font-size-4xl);
+  .interview-sidebar {
+    grid-column: 2;
+    width: 100%;
+    max-width: 100%;
   }
 
-  .btn-large {
-    min-width: 160px;
-    padding: var(--space-3) var(--space-6);
+  .interview-question-section {
+    order: 1;
   }
 
-  .progress-step {
-    gap: var(--space-3);
+  .interview-transcript-section {
+    order: 1;
+    width: 100%;
+    height: fit-content;
   }
 
-  .step-number {
-    width: 36px;
-    height: 36px;
-    font-size: var(--font-size-sm);
-  }
-
-  .step-title {
-    font-size: var(--font-size-xs);
-  }
-
-  .step-description {
-    font-size: 0.65rem;
+  .interview-report-section {
+    grid-column: 1 / -1;
+    order: 2;
+    width: 100%;
+    margin-top: var(--space-16);
   }
 }
 
-/* Accessibility: improve text contrast on light cards and controls */
-.card {
-  background: #ffffff; /* ensure solid background for readability */
-  color: var(--gray-800);
+/* Ultra-wide layout - Aggressive horizontal layout */
+@media (min-width: 1200px) {
+  .interview-workspace {
+    grid-template-columns: 3.5fr 0.15fr;
+    gap: var(--space-32);
+  }
+
+  .interview-main {
+    grid-column: 1;
+  }
+
+  .interview-sidebar {
+    grid-column: 2;
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-24);
+  }
 }
 
-.card .card-title,
-.card h1,
-.card h2,
-.card h3,
-.card h4 {
-  color: var(--gray-900);
+/* Maximum wide screens - Extreme utilization */
+@media (min-width: 1400px) {
+  .interview-workspace {
+    grid-template-columns: 4fr 0.1fr;
+    gap: var(--space-40);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-32);
+  }
 }
 
-.card .muted,
-.muted {
-  color: var(--gray-600);
+/* Ultra-maximum screens - Absolute maximum utilization */
+@media (min-width: 1600px) {
+  .interview-workspace {
+    grid-template-columns: 5fr 0.08fr;
+    gap: var(--space-48);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-40);
+  }
 }
 
-/* Form controls inside cards: dark text on white fields */
-.card .form-group label {
-  color: var(--gray-700) !important;
+/* Insanely wide screens - Extreme right push */
+@media (min-width: 2000px) {
+  .interview-workspace {
+    grid-template-columns: 6fr 0.05fr;
+    gap: var(--space-56);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-48);
+  }
 }
 
-.card .form-group input,
-.card .form-group select,
-.card .form-group textarea {
-  background: #ffffff;
-  color: var(--gray-900);
-  border: 1px solid var(--gray-300);
+/* Ultra-insanely wide screens - Maximum right push */
+@media (min-width: 2400px) {
+  .interview-workspace {
+    grid-template-columns: 8fr 0.02fr;
+    gap: var(--space-64);
+  }
+
+  .interview-report-section {
+    margin-top: var(--space-56);
+  }
 }
 
-.card .form-group input::placeholder,
-.card .form-group textarea::placeholder {
-  color: var(--gray-500);
+@media (min-width: 1280px) {
+  .interview-workspace {
+    gap: var(--space-20);
+  }
 }
 
-/* Secondary buttons: use dark text on light background for contrast */
-.btn-secondary {
-  background: var(--gray-100);
-  color: var(--gray-900);
-  border: 1px solid var(--gray-300);
-  backdrop-filter: none;
+@media (min-width: 1440px) {
+  .interview-workspace {
+    gap: var(--space-24);
+  }
 }
 
-.btn-secondary:hover {
-  background: var(--gray-200);
+@media (min-width: 1600px) {
+  .interview-workspace {
+    gap: var(--space-28);
+  }
 }
 
-/* Patient Dashboard high-contrast adjustments */
-.dashboard-card {
-  background: #ffffff !important;
-  border: 1px solid var(--gray-200);
+.transcript {
+ max-height: 400px;
+ overflow-y: auto;
+ padding: var(--space-4);
+ background: var(--gray-50);
+ border-radius: var(--border-radius-sm);
+ border: 1px solid var(--gray-200);
 }
 
-.dashboard-card h3 {
-  color: var(--gray-900) !important;
+.transcript-item {
+ margin-bottom: var(--space-4);
+ padding: var(--space-3);
+ background: var(--white);
+ border-radius: var(--border-radius-sm);
+ border-left: 4px solid var(--primary);
+ box-shadow: var(--shadow-sm);
 }
 
-.dashboard-card .value {
-  background: none !important;
-  -webkit-background-clip: initial !important;
-  -webkit-text-fill-color: initial !important;
-  background-clip: initial !important;
-  color: var(--gray-900) !important;
-  text-shadow: none !important;
+.transcript-question {
+ font-weight: 600;
+ color: var(--gray-800);
+ margin-bottom: var(--space-2);
 }
 
-.dashboard-card .unit {
-  color: var(--gray-600) !important;
+.transcript-answer {
+ color: var(--gray-700);
+ line-height: 1.5;
 }
 
-/* Sensor tiles on dashboard */
-.sensor-value-container {
-  background: #ffffff !important;
-  border: 1px solid var(--gray-200) !important;
+.question-input-container {
+ margin-top: var(--space-4);
 }
 
-.sensor-value-container h3 {
-  color: var(--gray-900) !important;
+.question-actions {
+ display: flex;
+ gap: var(--space-3);
+ flex-wrap: wrap;
+ margin-top: var(--space-4);
 }
 
-.sensor-value-container .value {
-  background: none !important;
-  -webkit-background-clip: initial !important;
-  -webkit-text-fill-color: initial !important;
-  background-clip: initial !important;
-  color: var(--gray-900) !important;
-  text-shadow: none !important;
+.report-container {
+ background: var(--gray-50);
+ border-radius: var(--border-radius);
+ padding: var(--space-6);
+ border: 1px solid var(--gray-200);
 }
 
-.sensor-value-container .unit {
-  color: var(--gray-600) !important;
+.report-content {
+ white-space: pre-wrap;
+ font-family: 'Courier New', monospace;
+ font-size: var(--font-size-sm);
+ line-height: 1.6;
+ color: var(--gray-800);
+ background: var(--white);
+ padding: var(--space-4);
+ border-radius: var(--border-radius-sm);
+ border: 1px solid var(--gray-300);
+ max-height: 600px;
+ overflow-y: auto;
 }

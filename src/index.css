@@ -63,6 +63,24 @@ main { @apply max-w-7xl mx-auto px-6 py-8; }
 .card-title { @apply text-xl font-semibold mb-4 tracking-tight; }
 .muted { @apply text-slate-500 dark:text-slate-400 text-sm; }
 
+.card {
+  color: var(--color-fg);
+}
+.dark .card {
+  color: var(--color-fg);
+}
+.card * {
+  color: inherit;
+}
+.dark .card * {
+  color: inherit;
+}
+.form-input, .form-select, .textarea-input {
+  color: var(--color-fg) !important;
+}
+.card-title { color: var(--color-fg) !important; }
+.muted { color: var(--color-fg-muted) !important; }
+
 /* Simple table styling */
 table { @apply w-full border-collapse text-sm; }
 th { @apply text-left font-semibold py-3 px-4 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300; }
@@ -89,7 +107,14 @@ tr:hover td { @apply bg-slate-50/50 dark:bg-slate-800/40; }
 .progress-fill { @apply h-full bg-primary transition-all; }
 
 /* Report */
-.report-content { @apply whitespace-pre-wrap text-sm leading-relaxed font-mono bg-slate-900/80 text-slate-100 p-4 rounded-lg overflow-x-auto; }
+.report-content { @apply whitespace-pre-wrap text-sm leading-relaxed font-mono bg-slate-900/80 p-4 rounded-lg overflow-x-auto; color: #ffffff !important; }
+
+/* Stronger override when report is inside a card to ensure readability */
+.card.report-container .report-content {
+  background-color: rgba(15,23,42,0.95) !important;
+  color: #ffffff !important;
+  font-weight: 500;
+}
 
 /* Questionnaire */
 .question-text { @apply text-lg font-semibold mb-4; }

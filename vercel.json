@@ -1,9 +1,9 @@
 {
   "version": 2,
   "env": {
-    "OPENAI_API_KEY": "@openai_api_key",
     "OPENAI_MODEL": "gpt-4o-2024-11-20",
-    "ASSISTANT_ID": "asst_6L1yKM9HfwQiFenkGMOZWmxN"
+    "ASSISTANT_ID": "asst_6L1yKM9HfwQiFenkGMOZWmxN",
+    "SERVER_BASE": "https://smt-doc-aid-backend-server-dlucoq5j7-amitubs-projects.vercel.app"
   },
   "rewrites": [
     {

@@ -111,6 +111,16 @@ function AIInterviewPage() {
     }
   }
 
+  function restartInterview() {
+    setSessionId(null);
+    setQuestion('');
+    setAnswer('');
+    setTurns([]);
+    setReport('');
+    setDone(false);
+    setError('');
+  }
+
   return (
     <main>
       <div className="card">
@@ -128,60 +138,76 @@ function AIInterviewPage() {
         {!sessionId && (
           <p className="muted">Click Start to begin a one-by-one interview. Each next question depends on your last answer.</p>
         )}
+      </div>
 
-        {sessionId && !done && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3 className="card-title">Question</h3>
-            <p style={{ fontSize: 18 }}>{question || '…'}</p>
-            <div className="form-group">
-              <input
-                className="form-input"
-                value={answer}
-                onChange={e => setAnswer(e.target.value)}
-                placeholder="Type your answer"
-                onKeyDown={(e) => { if (e.key === 'Enter') sendAnswer(); }}
-              />
-            </div>
-            <button className="btn btn-primary" onClick={sendAnswer} disabled={loading.next || !answer.trim()}>
-              {loading.next ? 'Sending…' : 'Send Answer'}
-            </button>
-          </div>
-        )}
-
-        {turns.length > 0 && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3 className="card-title">Transcript</h3>
-            <div className="transcript">
-              {turns.map((t, idx) => (
-                <div key={idx} style={{ marginBottom: 8 }}>
-                  <div><strong>Q{idx + 1}:</strong> {t.q}</div>
-                  <div><strong>A{idx + 1}:</strong> {t.a}</div>
+      <div className="interview-workspace">
+        <div className="interview-main">
+          {sessionId && !done && (
+            <div className="card interview-question-section">
+              <h3 className="card-title">Question</h3>
+              <p style={{ fontSize: 18 }}>{question || '…'}</p>
+              <div className="question-input-container">
+                <div className="form-group">
+                  <input
+                    className="form-input"
+                    value={answer}
+                    onChange={e => setAnswer(e.target.value)}
+                    placeholder="Type your answer"
+                    onKeyDown={(e) => { if (e.key === 'Enter') sendAnswer(); }}
+                  />
                 </div>
-              ))}
+                <div className="question-actions">
+                  <button className="btn btn-primary" onClick={sendAnswer} disabled={loading.next || !answer.trim()}>
+                    {loading.next ? 'Sending…' : 'Send Answer'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={restartInterview} disabled={loading.next || loading.report}>
+                    Start Over
+                  </button>
+                  <button className="btn btn-secondary" onClick={generateReport} disabled={loading.report} title="Finish now and generate a report">
+                    {loading.report ? 'Generating…' : 'Generate Report'}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {done && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <h3 className="card-title">Interview Complete</h3>
-            <p className="muted">Generate a final report based on your answers.</p>
-            <button className="btn btn-success" onClick={generateReport} disabled={loading.report}>
-              {loading.report ? 'Generating…' : 'Generate Report'}
-            </button>
-          </div>
-        )}
+          {done && (
+            <div className="card interview-question-section">
+              <h3 className="card-title">Interview Complete</h3>
+              <p className="muted">Generate a final report based on your answers.</p>
+              <button className="btn btn-success" onClick={generateReport} disabled={loading.report}>
+                {loading.report ? 'Generating…' : 'Generate Report'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="interview-sidebar">
+          {turns.length > 0 && (
+            <div className="card interview-transcript-section">
+              <h3 className="card-title">Transcript</h3>
+              <div className="transcript">
+                {turns.map((t, idx) => (
+                  <div key={idx} className="transcript-item">
+                    <div className="transcript-question">Q{idx + 1}: {t.q}</div>
+                    <div className="transcript-answer">A{idx + 1}: {t.a}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {report && (
-          <div className="card report-container" style={{ marginTop: 16 }}>
+          <div className="card report-container interview-report-section">
             <h3 className="card-title">AI Health Report</h3>
             <pre className="report-content">{report}</pre>
           </div>
         )}
+      </div>
 
-        <div className="back-actions" style={{ marginTop: 16 }}>
-          <button className="btn-secondary" onClick={() => navigate('/patient')}>Back</button>
-        </div>
+      <div className="back-actions" style={{ marginTop: 16 }}>
+        <button className="btn-secondary" onClick={() => navigate('/patient')}>Back</button>
       </div>
     </main>
   );

@@ -23,7 +23,7 @@ const DoctorDirectoryPage = () => {
 				try {
 					const res = await supabase
 						.from('doctors')
-						.select('id, user_id, name, email, specialist, bio, license_number, age, updated_at')
+						.select('id, user_id, name, email, specialty, bio, license_number, age, updated_at')
 						.order('updated_at', { ascending: false })
 						.limit(100);
 					if (res.error) throw res.error;
@@ -56,7 +56,7 @@ const DoctorDirectoryPage = () => {
 		return (doctors || []).filter(d => {
 			const name = String(d.name || d.full_name || '').toLowerCase();
 			const email = String(d.email || '').toLowerCase();
-			const spec = String(d.specialist || d.specialty || d.specialities || '').toLowerCase();
+					const spec = String(d.specialty || d.specialist || d.specialities || '').toLowerCase();
 			const loc = String(d.location || d.city || '').toLowerCase();
 			const matchesQ = !term || name.includes(term) || email.includes(term) || spec.includes(term) || loc.includes(term);
 			const matchSpec = !filters.specialty || spec.includes(filters.specialty.toLowerCase());
@@ -131,7 +131,7 @@ const DoctorDirectoryPage = () => {
 											filtered.map((d) => (
 												<div key={d.id || d.user_id} className="feature-card tilt reveal scroll-float">
 									<div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-														<div className="badge">{(d.specialist || d.specialty || d.specialities || 'General').slice(0, 24)}</div>
+														<div className="badge">{(d.specialty || d.specialist || d.specialities || 'General').slice(0, 24)}</div>
 									</div>
 													<h3 style={{ marginBottom: 6 }}>{d.name || d.full_name || 'Doctor'}</h3>
 													<p className="muted" style={{ marginBottom: 8 }}>{d.location || d.city || ''}</p>

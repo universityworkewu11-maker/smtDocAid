@@ -3,6 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../lib/supabaseClient';
 
 // Supabase client imported from centralized module
+const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_UPLOAD_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'application/pdf'
+];
+
+const mapDocumentRow = (row) => ({
+  id: row?.id || row?.storage_path || row?.file_name,
+  name: row?.original_name || row?.file_name || 'Document',
+  path: row?.storage_path || row?.file_name || '',
+  url: row?.public_url || null,
+  size: row?.size_bytes || null,
+  lastModified: row?.uploaded_at || row?.updated_at || null,
+  type: row?.mime_type || 'application/octet-stream',
+  status: row?.extraction_status || 'pending',
+  summary: row?.extraction_summary || null,
+  extractedText: row?.extracted_text || null
+});
 
 const UploadDocumentsPage = () => {
   const navigate = useNavigate();
@@ -13,51 +33,216 @@ const UploadDocumentsPage = () => {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
   const [previousUploads, setPreviousUploads] = useState([]);
+  const [previousUploadsLoading, setPreviousUploadsLoading] = useState(true);
+  const [expandedDocId, setExpandedDocId] = useState(null);
 
-  const maxFileSize = 10 * 1024 * 1024; // 10MB
-  const allowedTypes = [
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'application/pdf'
-  ];
-
-  // Fetch previously uploaded files from Supabase Storage (bucket per user folder)
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        const uid = user?.id;
-        if (!uid) return;
-        const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
-        const { data, error } = await supabase.storage.from(bucket).list(uid, { limit: 100, sortBy: { column: 'name', order: 'asc' } });
-        if (!error && Array.isArray(data)) {
-          // Attempt to construct public URLs if bucket is public; fallback to just names
-          const items = await Promise.all(data.map(async (it) => {
-            const key = `${uid}/${it.name}`;
-            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(key);
-            let url = urlData?.publicUrl || null;
-            // If not public, try a short-lived signed URL
-            if (!url) {
-              try {
-                const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(key, 3600);
-                url = signed?.signedUrl || null;
-              } catch (_) {}
-            }
-            return {
-              name: it.name,
-              path: key,
-              url,
-              size: it.metadata?.size || null,
-              lastModified: it.updated_at || it.created_at || null
-            };
-          }));
-          setPreviousUploads(items);
-        }
-      } catch (_) {}
-    })();
+  const loadPersistedDocuments = useCallback(async () => {
+    setPreviousUploadsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        setPreviousUploads([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('documents')
+        .select('*')
+        .eq('user_id', uid)
+        .order('uploaded_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setPreviousUploads((data || []).map(mapDocumentRow));
+    } catch (docError) {
+      console.warn('Failed to load document metadata:', docError);
+      setPreviousUploads([]);
+    } finally {
+      setPreviousUploadsLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadPersistedDocuments();
+  }, [loadPersistedDocuments]);
+
+  // Upload files to Supabase (or mock)
+  const uploadFiles = useCallback(async (files) => {
+    if (!files?.length) return;
+    setIsUploading(true);
+    setError('');
+    const newFiles = [];
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setError('You must be signed in to upload documents.');
+        return;
+      }
+
+      const bucket = process.env.REACT_APP_SUPABASE_BUCKET || 'uploads';
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const sanitizedOriginalName = file.name.replace(/\s+/g, '_');
+        const fileName = `${fileId}-${sanitizedOriginalName}`;
+        const storagePath = `${user.id}/${fileName}`;
+
+        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(storagePath, file, {
+            upsert: true,
+            contentType: file.type || 'application/octet-stream'
+          });
+
+        if (uploadError) {
+          console.error('Upload failed:', uploadError);
+          setUploadProgress(prev => ({ ...prev, [fileId]: 'error' }));
+          setError(uploadError.message || 'Failed to upload file.');
+          continue;
+        }
+
+        let publicUrl = null;
+        const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(storagePath);
+        publicUrl = publicData?.publicUrl || null;
+
+        if (!publicUrl) {
+          try {
+            const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(storagePath, 3600);
+            publicUrl = signed?.signedUrl || null;
+          } catch (signedError) {
+            console.warn('Signed URL error:', signedError);
+          }
+        }
+
+        try {
+          const { data: insertedDocument, error: docError } = await supabase
+            .from('documents')
+            .insert([{
+              user_id: user.id,
+              storage_bucket: bucket,
+              storage_path: storagePath,
+              file_name: fileName,
+              original_name: file.name,
+              mime_type: file.type,
+              size_bytes: file.size,
+              public_url: publicUrl,
+              extraction_status: 'pending',
+              metadata: { source: 'UploadDocumentsPage' }
+            }])
+            .select('*')
+            .single();
+          if (docError) throw docError;
+          // Add the inserted document to UI list
+          setPreviousUploads(prev => [mapDocumentRow(insertedDocument), ...prev]);
+
+          // Immediately mark document as processing (best-effort) so UI reflects work in progress
+          try {
+            await supabase.from('documents').update({ extraction_status: 'processing', extraction_error: null }).eq('id', insertedDocument.id);
+            // update local UI state to show processing status without waiting for reload
+            setPreviousUploads(prev => prev.map(d => (d.id === insertedDocument.id ? { ...d, status: 'processing' } : d)));
+          } catch (markErr) {
+            console.warn('Failed to mark document as processing:', markErr);
+          }
+
+          // Trigger server-side extraction for this document (best-effort).
+          // Use the client's current access token so the server can validate the caller.
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            // Normalize backend URL: allow values with or without scheme in env.
+            let backend = process.env.REACT_APP_BACKEND_URL || '';
+            if (backend && !/^https?:\/\//i.test(backend)) {
+              // If user set hostname without scheme, assume https
+              backend = `https://${backend}`;
+            }
+            // If backend not set, fall back to same-origin so relative path works in local/dev
+            const url = backend ? `${backend.replace(/\/$/, '')}/api/v1/documents/${insertedDocument.id}/extract` : `${window.location.origin}/api/v1/documents/${insertedDocument.id}/extract`;
+            console.log('[upload] triggering extraction', { url, tokenPresent: !!token, backendEnv: process.env.REACT_APP_BACKEND_URL });
+            if (token && insertedDocument?.id) {
+              const resp = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({})
+              });
+              if (!resp.ok) {
+                const txt = await resp.text().catch(() => '');
+                console.warn('Extraction trigger failed', resp.status, txt);
+                // record a trigger error on the document row so user can see status
+                await supabase.from('documents').update({ extraction_error: `trigger_failed: ${resp.status}` }).eq('id', insertedDocument.id);
+                // also reflect failure in UI
+                setPreviousUploads(prev => prev.map(d => (d.id === insertedDocument.id ? { ...d, status: 'failed' } : d)));
+              }
+            } else {
+              console.warn('No access token available; skipping extraction trigger');
+            }
+          } catch (triggerErr) {
+            console.warn('Failed to call extraction endpoint:', triggerErr);
+            try { await supabase.from('documents').update({ extraction_error: `trigger_call_error: ${String(triggerErr)}` }).eq('id', insertedDocument.id); } catch (_) {}
+            try { setPreviousUploads(prev => prev.map(d => (d.id === insertedDocument.id ? { ...d, status: 'failed' } : d))); } catch (_) {}
+          }
+        } catch (docInsertError) {
+          console.error('Failed to record document metadata:', docInsertError);
+        }
+
+        const uploadedFile = {
+          id: fileId,
+          name: file.name,
+          fileName,
+          storagePath,
+          size: file.size,
+          type: file.type,
+          url: publicUrl,
+          uploadedAt: new Date().toISOString(),
+          status: 'completed'
+        };
+
+        newFiles.push(uploadedFile);
+        setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+      }
+
+      if (newFiles.length) {
+        setUploadedFiles(prev => [...prev, ...newFiles]);
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }, []);
+
+  // Process selected files
+  const handleFiles = useCallback(async (files) => {
+    const validFiles = [];
+    const errors = [];
+
+    files.forEach(file => {
+      // Validate file type
+      if (!ALLOWED_UPLOAD_TYPES.includes(file.type)) {
+        errors.push(`${file.name}: Invalid file type. Please upload JPG, PNG, or PDF files.`);
+        return;
+      }
+
+      // Validate file size
+      if (file.size > MAX_UPLOAD_FILE_SIZE) {
+        errors.push(`${file.name}: File too large. Maximum size is 10MB.`);
+        return;
+      }
+
+      validFiles.push(file);
+    });
+
+    if (errors.length > 0) {
+      setError(errors.join('\n'));
+      return;
+    }
+
+    setError('');
+    await uploadFiles(validFiles);
+  }, [uploadFiles]);
 
   // Handle drag events
   const handleDrag = useCallback((e) => {
@@ -78,113 +263,12 @@ const UploadDocumentsPage = () => {
 
     const files = [...e.dataTransfer.files];
     handleFiles(files);
-  }, []);
+  }, [handleFiles]);
 
   // Handle file selection
   const handleFileSelect = (e) => {
     const files = [...e.target.files];
     handleFiles(files);
-  };
-
-  // Process selected files
-  const handleFiles = async (files) => {
-    const validFiles = [];
-    const errors = [];
-
-    files.forEach(file => {
-      // Validate file type
-      if (!allowedTypes.includes(file.type)) {
-        errors.push(`${file.name}: Invalid file type. Please upload JPG, PNG, or PDF files.`);
-        return;
-      }
-
-      // Validate file size
-      if (file.size > maxFileSize) {
-        errors.push(`${file.name}: File too large. Maximum size is 10MB.`);
-        return;
-      }
-
-      validFiles.push(file);
-    });
-
-    if (errors.length > 0) {
-      setError(errors.join('\n'));
-      return;
-    }
-
-    setError('');
-    await uploadFiles(validFiles);
-  };
-
-  // Upload files to Supabase (or mock)
-  const uploadFiles = async (files) => {
-    setIsUploading(true);
-    const newFiles = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const fileName = `${fileId}-${file.name}`;
-
-      try {
-        // Simulate upload progress
-        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
-
-        // Mock upload process
-        await mockFileUpload(file, fileId, fileName);
-
-        const uploadedFile = {
-          id: fileId,
-          name: file.name,
-          fileName: fileName,
-          size: file.size,
-          type: file.type,
-          url: `https://example.com/uploads/${fileName}`, // Mock URL
-          uploadedAt: new Date().toISOString(),
-          status: 'completed'
-        };
-
-        newFiles.push(uploadedFile);
-
-        // Update progress
-        setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-
-      } catch (err) {
-        console.error('Upload failed:', err);
-        setUploadProgress(prev => ({ ...prev, [fileId]: 'error' }));
-      }
-    }
-
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-    setIsUploading(false);
-  };
-
-  // Mock file upload with progress simulation
-  const mockFileUpload = (file, fileId, fileName) => {
-    return new Promise((resolve, reject) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 30;
-        setUploadProgress(prev => ({ ...prev, [fileId]: Math.min(progress, 90) }));
-
-        if (progress >= 90) {
-          clearInterval(interval);
-          // Simulate completion
-          setTimeout(() => {
-            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-            resolve({ success: true });
-          }, 500);
-        }
-      }, 200);
-
-      // Simulate occasional errors
-      if (Math.random() < 0.1) {
-        setTimeout(() => {
-          clearInterval(interval);
-          reject(new Error('Upload failed'));
-        }, 1000);
-      }
-    });
   };
 
   // Remove uploaded file
@@ -215,20 +299,20 @@ const UploadDocumentsPage = () => {
 
   // Handle next step
   const handleNext = () => {
-    if (uploadedFiles.length === 0) {
+    if (uploadedFiles.length === 0 && previousUploads.length === 0) {
       setError('Please upload at least one document before proceeding.');
       return;
     }
-
-    // Store uploaded files data
-    localStorage.setItem('uploadedDocuments', JSON.stringify(uploadedFiles));
     navigate('/patient/questionnaire');
   };
 
   // Skip uploads and continue
   const handleSkip = () => {
-    try { localStorage.setItem('uploadedDocuments', JSON.stringify(uploadedFiles || [])); } catch (_) {}
     navigate('/patient/questionnaire');
+  };
+
+  const toggleDocDetails = (docId) => {
+    setExpandedDocId(prev => (prev === docId ? null : docId));
   };
 
   // Handle back navigation
@@ -386,7 +470,7 @@ const UploadDocumentsPage = () => {
         {/* Previously Uploaded from Supabase */}
         <div className="uploaded-files reveal">
           <h3>Previously Uploaded (from your account)</h3>
-          {previousUploads.length === 0 ? (
+          {previousUploadsLoading ? (
             <div className="files-grid" style={{ marginTop: 8 }}>
               {Array.from({ length: 4 }).map((_,i) => (
                 <div key={i} className="file-card" style={{ padding:'12px' }}>
@@ -396,23 +480,72 @@ const UploadDocumentsPage = () => {
                 </div>
               ))}
             </div>
+          ) : previousUploads.length === 0 ? (
+            <div className="empty-state" style={{ marginTop: 8 }}>
+              <p>No uploaded documents found yet.</p>
+            </div>
           ) : (
             <div className="files-grid">
-              {previousUploads.map((it) => (
-                <div key={it.path} className="file-card">
+              {previousUploads.map((doc) => (
+                <div key={doc.id || doc.path} className="file-card">
                   <div className="file-header">
-                    <div className="file-icon">{it.name.toLowerCase().endsWith('.pdf') ? '📄' : '🖼️'}</div>
-                    <div className="file-info">
-                      <div className="file-name" title={it.name}>{it.name}</div>
-                      <div className="file-meta">
-                        {(it.size ? `${(it.size/1024/1024).toFixed(2)} MB` : '')}
-                        {it.lastModified ? ` • ${new Date(it.lastModified).toLocaleString()}` : ''}
-                      </div>
+                    <div className="file-icon">
+                      {doc.type?.includes('pdf') ? '📄' : doc.type?.includes('image') ? '🖼️' : '📎'}
                     </div>
-                    {it.url && (
-                      <a className="btn btn-outline btn-sm" href={it.url} target="_blank" rel="noreferrer">Open</a>
+                    <div className="file-info">
+                      <div className="file-name" title={doc.name}>{doc.name}</div>
+                      <div className="file-meta">
+                        {doc.size ? `${(doc.size/1024/1024).toFixed(2)} MB` : ''}
+                        {doc.lastModified ? ` • ${new Date(doc.lastModified).toLocaleString()}` : ''}
+                        {doc.status ? ` • ${doc.status}` : ''}
+                      </div>
+                      {doc.summary && (
+                        <div className="muted" style={{ marginTop: 4 }}>{doc.summary}</div>
+                      )}
+                    </div>
+                    {doc.url && (
+                      <a className="btn btn-outline btn-sm" href={doc.url} target="_blank" rel="noreferrer">Open</a>
                     )}
                   </div>
+                  {doc.extractedText && (
+                    <div className="extracted-text" style={{ marginTop: 12 }}>
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <span className="muted text-sm">AI extracted text ({doc.extractedText.length.toLocaleString()} chars)</span>
+                        <button
+                          type="button"
+                          className="btn btn-light btn-sm"
+                          onClick={() => toggleDocDetails(doc.id || doc.path)}
+                        >
+                          {expandedDocId === (doc.id || doc.path) ? 'Hide text' : 'Show text'}
+                        </button>
+                      </div>
+                      {expandedDocId === (doc.id || doc.path) ? (
+                        <pre
+                          className="extracted-text-block"
+                          style={{
+                            marginTop: 8,
+                            background: 'var(--card-bg, rgba(148,163,184,0.08))',
+                            padding: '12px',
+                            borderRadius: '12px',
+                            maxHeight: 240,
+                            overflowY: 'auto',
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'var(--font-mono, "SFMono-Regular", Consolas, monospace)'
+                          }}
+                        >
+                          {doc.extractedText}
+                        </pre>
+                      ) : (
+                        <p className="muted" style={{ marginTop: 8 }}>
+                          {doc.extractedText.slice(0, 200)}
+                          {doc.extractedText.length > 200 ? '…' : ''}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {!doc.extractedText && doc.status && doc.status !== 'complete' && (
+                    <p className="muted" style={{ marginTop: 12 }}>Extraction still {doc.status}. Check back shortly.</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -428,7 +561,7 @@ const UploadDocumentsPage = () => {
           <button
             className="btn btn-primary"
             onClick={handleNext}
-            disabled={uploadedFiles.length === 0 || isUploading}
+            disabled={isUploading || (uploadedFiles.length === 0 && previousUploads.length === 0)}
           >
             {isUploading ? 'Uploading...' : 'Generate AI Questionnaire →'}
           </button>
