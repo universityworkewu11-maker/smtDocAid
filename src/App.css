@@ -2272,8 +2272,8 @@ main {
  font-family: 'Courier New', monospace;
  font-size: var(--font-size-sm);
  line-height: 1.6;
- color: var(--gray-800);
- background: var(--white);
+ color: #ffffff;
+ background: #000000;
  padding: var(--space-4);
  border-radius: var(--border-radius-sm);
  border: 1px solid var(--gray-300);

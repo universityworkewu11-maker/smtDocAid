@@ -18,38 +18,22 @@ const DoctorPatientView = () => {
 		const [filterTimeStart, setFilterTimeStart] = useState('');
 		const [filterTimeEnd, setFilterTimeEnd] = useState('');
 
-	const verifyDoctorAccess = async (doctorId, patientIdentifier) => {
+	const verifyDoctorAccess = async (doctorAuthId, doctorRowId, patientIdentifier, patientRowId) => {
+		const doctorIdOr = doctorRowId
+			? `doctor_id.eq.${doctorAuthId},doctor_id.eq.${doctorRowId}`
+			: `doctor_id.eq.${doctorAuthId}`;
+		const patientIdOr = patientRowId && patientRowId !== patientIdentifier
+			? `patient_id.eq.${patientIdentifier},patient_id.eq.${patientRowId}`
+			: `patient_id.eq.${patientIdentifier}`;
 		const { data, error } = await supabase
 			.from('notifications')
 			.select('id')
-			.eq('doctor_id', doctorId)
-			.eq('patient_id', patientIdentifier)
 			.eq('type', 'report_shared')
+			.or(doctorIdOr)
+			.or(patientIdOr)
 			.limit(1);
 		if (error) throw error;
 		if (Array.isArray(data) && data.length) return true;
-		// Fallback: some rows may use patients.id instead of user_id
-		try {
-			const { data: patientRow, error: patientErr } = await supabase
-				.from('patients')
-				.select('id')
-				.eq('user_id', patientIdentifier)
-				.maybeSingle();
-			if (patientErr) throw patientErr;
-			if (patientRow?.id && patientRow.id !== patientIdentifier) {
-				const { data: fallbackData, error: fallbackErr } = await supabase
-					.from('notifications')
-					.select('id')
-					.eq('doctor_id', doctorId)
-					.eq('patient_id', patientRow.id)
-					.eq('type', 'report_shared')
-					.limit(1);
-				if (fallbackErr) throw fallbackErr;
-				return Array.isArray(fallbackData) && fallbackData.length > 0;
-			}
-		} catch (fallbackError) {
-			console.warn('DoctorPatientView access fallback failed:', fallbackError?.message || fallbackError);
-		}
 		return false;
 	};
 
@@ -61,7 +45,28 @@ const DoctorPatientView = () => {
 			try {
 				const { data: { user } } = await supabase.auth.getUser();
 				if (!user) throw new Error('Not authenticated');
-				const allowed = await verifyDoctorAccess(user.id, id);
+
+				// Get doctor row id for legacy notifications (some rows used doctors.id)
+				const { data: doctorRow } = await supabase
+					.from('doctors')
+					.select('id, user_id')
+					.eq('user_id', user.id)
+					.maybeSingle();
+				const doctorRowId = doctorRow?.id || null;
+
+				// Fetch patient row early so we can use both user_id and patients.id when matching notifications
+				let p = await supabase
+					.from('patients')
+					.select('user_id, full_name, name, age, gender, phone, email, address, created_at, updated_at, id')
+					.eq('user_id', id)
+					.maybeSingle();
+				if (p.data) {
+					setPatient(p.data);
+				} else if (p.error) {
+					setError(p.error.message || 'Patient not found');
+				}
+
+				const allowed = await verifyDoctorAccess(user.id, doctorRowId, id, p.data?.id || null);
 				if (!allowed) {
 					if (mounted) {
 						setError('Access denied. This patient has not shared their records with you yet.');
@@ -74,17 +79,6 @@ const DoctorPatientView = () => {
 					return;
 				}
 				if (!mounted) return;
-				// Strictly fetch patient details from public.patients by user_id
-				let p = await supabase
-					.from('patients')
-					.select('user_id, full_name, name, age, gender, phone, email, address, created_at, updated_at, id')
-					.eq('user_id', id)
-					.maybeSingle();
-				if (p.data) {
-					setPatient(p.data);
-				} else if (p.error) {
-					setError(p.error.message || 'Patient not found');
-				}
 
 				// Latest vitals from public.vitals
 				try {
@@ -97,47 +91,55 @@ const DoctorPatientView = () => {
 					if (Array.isArray(vv) && vv.length) setVitals(vv[0]);
 				} catch (_) {}
 
-				// Diagnoses / AI reports for this patient with fallback heuristics
+				// Only show reports that were explicitly shared with THIS doctor.
 				const tbl = process.env.REACT_APP_TBL_REPORT || 'diagnoses';
-				const targetUserId = p.data?.user_id || id;
-				let diagError = null;
-				let list = [];
+				const patientIdOr = p.data?.id && p.data.id !== id
+					? `patient_id.eq.${id},patient_id.eq.${p.data.id}`
+					: `patient_id.eq.${id}`;
+				const doctorIdOr = doctorRowId
+					? `doctor_id.eq.${user.id},doctor_id.eq.${doctorRowId}`
+					: `doctor_id.eq.${user.id}`;
+
+				let sharedRows = [];
 				try {
-					const { data: rr, error: rErr } = await supabase
-						.from(tbl)
-						.select('id,patient_id,content,severity,ai_generated,created_at,metadata')
-						.eq('patient_id', targetUserId)
+					const { data: nrows, error: nerr } = await supabase
+						.from('notifications')
+						.select('diagnosis_id, report_id, created_at')
+						.eq('type', 'report_shared')
+						.or(doctorIdOr)
+						.or(patientIdOr)
 						.order('created_at', { ascending: false })
-						.limit(50);
-					if (rErr) diagError = rErr; else list = rr || [];
+						.limit(200);
+					if (nerr) throw nerr;
+					sharedRows = Array.isArray(nrows) ? nrows : [];
 				} catch (e) {
-					diagError = e;
+					console.warn('Failed to fetch shared report pointers:', e?.message || e);
+					sharedRows = [];
 				}
 
-				// Fallback: sometimes data may have been inserted with an internal patient row id instead of auth user id.
-				if (!list.length && p.data?.id && p.data?.id !== targetUserId) {
-					try {
-						const { data: rr2 } = await supabase
-							.from(tbl)
-							.select('id,patient_id,content,severity,ai_generated,created_at,metadata')
-							.eq('patient_id', p.data.id)
-							.order('created_at', { ascending: false })
-							.limit(50);
-						list = rr2 || [];
-					} catch (_) {}
-				}
+				const sharedIds = Array.from(
+					new Set(
+						(sharedRows || [])
+							.map((r) => r?.diagnosis_id || r?.report_id)
+							.filter(Boolean)
+					)
+				);
 
-				// Optional broad fallback: attempt OR query if still empty
-				if (!list.length && p.data?.id && p.data?.id !== targetUserId) {
+				let list = [];
+				if (sharedIds.length) {
 					try {
-						const { data: rr3 } = await supabase
+						const { data: rr, error: rErr } = await supabase
 							.from(tbl)
 							.select('id,patient_id,content,severity,ai_generated,created_at,metadata')
-							.or(`patient_id.eq.${targetUserId},patient_id.eq.${p.data.id}`)
+							.in('id', sharedIds)
 							.order('created_at', { ascending: false })
 							.limit(50);
-						if (rr3?.length) list = rr3;
-					} catch (_) {}
+						if (rErr) throw rErr;
+						list = rr || [];
+					} catch (e) {
+						console.warn('Failed to fetch shared diagnoses:', e?.message || e);
+						list = [];
+					}
 				}
 
 				setReports(list);
@@ -148,10 +150,6 @@ const DoctorPatientView = () => {
 				}
 				setSeverityCounts(counts);
 				if (list.length) setLatestSeverity((list[0].severity || 'low').toLowerCase());
-				if (!list.length && diagError) {
-					// Provide a subtle hint if RLS or permissions likely blocked access
-					console.warn('[diagnoses] empty result. Possible RLS/permission issue:', diagError.message || diagError);
-				}
 			} catch (e) {
 				if (mounted) setError(e?.message || String(e));
 			} finally {
