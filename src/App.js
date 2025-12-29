@@ -1605,21 +1605,30 @@ function QuestionnairePage() {
     if (!Array.isArray(doctors) || doctors.length === 0) return;
     if (!Array.isArray(selectedDoctors) || selectedDoctors.length === 0) return;
 
-    const doctorIdSet = new Set((doctors || []).map(doc => doc.id).filter(Boolean));
+    // notifications.doctor_id is expected to be auth.users.id (doctor's user id)
+    const doctorUserIdSet = new Set((doctors || []).map(doc => doc.user_id).filter(Boolean));
     const legacyMap = new Map();
     (doctors || []).forEach(doc => {
-      if (doc.user_id && doc.id) legacyMap.set(doc.user_id, doc.id);
-      if (doc.email && doc.id) legacyMap.set(doc.email, doc.id);
+      if (doc.id && doc.user_id) legacyMap.set(doc.id, doc.user_id);
+      if (doc.email && doc.user_id) {
+        legacyMap.set(doc.email, doc.user_id);
+        legacyMap.set(String(doc.email).toLowerCase(), doc.user_id);
+      }
     });
 
     const normalized = [];
     (selectedDoctors || []).forEach(entry => {
-      if (doctorIdSet.has(entry)) {
+      if (doctorUserIdSet.has(entry)) {
         normalized.push(entry);
         return;
       }
       if (legacyMap.has(entry)) {
         normalized.push(legacyMap.get(entry));
+        return;
+      }
+      if (typeof entry === 'string') {
+        const lower = entry.toLowerCase();
+        if (legacyMap.has(lower)) normalized.push(legacyMap.get(lower));
       }
     });
 
@@ -2012,17 +2021,17 @@ function QuestionnairePage() {
                 <button className="btn btn-light" onClick={() => setDoctorQuery('')}>Clear</button>
               </div>
               <div className="doctor-selection-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-              {filteredDoctors.filter(doc => Boolean(doc.id)).map(doctor => (
+              {filteredDoctors.filter(doc => Boolean(doc.user_id)).map(doctor => (
                 <label
-                  key={doctor.id}
+                  key={doctor.user_id || doctor.id}
                   className="doctor-option"
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.id) ? '#f0f8ff' : 'transparent' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', background: selectedDoctors.includes(doctor.user_id) ? '#f0f8ff' : 'transparent' }}
                 >
                   <input
                     type="checkbox"
-                    checked={selectedDoctors.includes(doctor.id)}
+                    checked={selectedDoctors.includes(doctor.user_id)}
                     onChange={(e) => {
-                      const doctorId = doctor.id;
+                      const doctorId = doctor.user_id;
                       if (!doctorId) return;
                       if (e.target.checked) {
                         setSelectedDoctors(prev => {

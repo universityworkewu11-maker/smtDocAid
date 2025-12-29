@@ -186,15 +186,15 @@ function AIQuestionnairesPage() {
     const map = new Map();
     (doctors || []).forEach((doc) => {
       if (!doc) return;
-      if (doc.id) {
-        map.set(doc.id, doc.id);
-      }
+      // Notifications RLS expects notifications.doctor_id to be the doctor's auth.users.id.
+      // Therefore, normalize any stored selection (doctors.id / user_id / email) to doc.user_id.
       if (doc.user_id) {
-        map.set(doc.user_id, doc.id);
-      }
-      if (doc.email) {
-        map.set(doc.email, doc.id);
-        map.set(doc.email.toLowerCase(), doc.id);
+        map.set(doc.user_id, doc.user_id);
+        if (doc.id) map.set(doc.id, doc.user_id);
+        if (doc.email) {
+          map.set(doc.email, doc.user_id);
+          map.set(doc.email.toLowerCase(), doc.user_id);
+        }
       }
     });
     return map;
@@ -203,7 +203,7 @@ function AIQuestionnairesPage() {
   const doctorIdSet = useMemo(() => {
     const ids = new Set();
     (doctors || []).forEach((doc) => {
-      if (doc?.id) ids.add(doc.id);
+      if (doc?.user_id) ids.add(doc.user_id);
     });
     return ids;
   }, [doctors]);
@@ -557,8 +557,12 @@ function AIQuestionnairesPage() {
           is_read: false
         }));
         const { error: notifError } = await supabase.from('notifications').insert(notifications);
+        if (notifError) {
+          console.warn('Failed to create notifications:', notifError);
+          alert(`Report saved, but sharing failed. Doctors were not notified.\n\n${notifError.message || String(notifError)}`);
+          return;
+        }
         const numShared = shareableDoctorIds.length;
-        if (notifError) console.warn('Failed to create notifications:', notifError);
         let alertMessage = `Report saved and shared with ${numShared} doctor(s)!`;
         if (numShared < selectedDoctors.length) {
           alertMessage += `\n\nNote: ${selectedDoctors.length - numShared} previously selected doctor(s) were unavailable and not notified.`;
@@ -681,9 +685,9 @@ function AIQuestionnairesPage() {
   const initialDoctorList = normalizedQuery ? matchingDoctors : doctors.slice(0, MAX_VISIBLE_DOCTORS);
   const selectedSupplements = !normalizedQuery
     ? doctors.filter((doc) => {
-        const key = doc?.id;
+        const key = doc?.user_id;
         if (!key) return false;
-        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => d?.id === key);
+        return selectedDoctors.includes(key) && !initialDoctorList.some((d) => (d?.user_id || null) === key);
       })
     : [];
   const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
@@ -901,11 +905,11 @@ function AIQuestionnairesPage() {
               ) : displayedDoctors.length > 0 ? (
                 <div className="aiq-doctor-grid">
                   {displayedDoctors.map((doctor, idx) => {
-                    const doctorId = doctor?.id;
-                    const optionKey = doctorId || doctor?.user_id || doctor?.email || `doctor-${idx}`;
-                    const isSelectable = Boolean(doctorId);
-                    const isChecked = isSelectable ? selectedDoctors.includes(doctorId) : false;
-                    const isStale = isChecked && !doctorIdSet.has(doctorId);
+                    const doctorAuthId = doctor?.user_id;
+                    const optionKey = doctor?.id || doctorAuthId || doctor?.email || `doctor-${idx}`;
+                    const isSelectable = Boolean(doctorAuthId);
+                    const isChecked = isSelectable ? selectedDoctors.includes(doctorAuthId) : false;
+                    const isStale = isChecked && !doctorIdSet.has(doctorAuthId);
                     return (
                       <label key={optionKey} className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''} ${isStale ? 'stale' : ''}`}>
                         <input
@@ -915,9 +919,9 @@ function AIQuestionnairesPage() {
                           onChange={(e) => {
                             if (!isSelectable) return;
                             if (e.target.checked) {
-                              setSelectedDoctors((prev) => Array.from(new Set([...prev, doctorId])));
+                              setSelectedDoctors((prev) => Array.from(new Set([...prev, doctorAuthId])));
                             } else {
-                              setSelectedDoctors((prev) => prev.filter((id) => id !== doctorId));
+                              setSelectedDoctors((prev) => prev.filter((id) => id !== doctorAuthId));
                             }
                           }}
                         />
