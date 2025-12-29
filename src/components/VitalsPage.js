@@ -49,6 +49,25 @@ const VitalsPage = () => {
   const currentVital = vitalsConfig[currentStep];
   const allVitalsConfirmed = Object.values(vitalsData).every(vital => vital.confirmed);
 
+  const toFiniteNumber = (v) => {
+    const n = typeof v === 'string' ? Number.parseFloat(v) : v;
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const generateMockValue = (vitalType) => {
+    const cfg = vitalsConfig.find(v => v.key === vitalType);
+    const range = cfg?.normalRange;
+    if (!range) return null;
+
+    if (vitalType === 'temperature') {
+      // One decimal place for temperature
+      return Math.round((range.min + Math.random() * (range.max - range.min)) * 10) / 10;
+    }
+
+    // Integers for HR and SpO2
+    return Math.floor(range.min + Math.random() * (range.max - range.min + 1));
+  };
+
   // Load previous vitals from Supabase (public.vitals) or fallback to localStorage
   useEffect(() => {
     (async () => {
@@ -113,22 +132,21 @@ const VitalsPage = () => {
       // Extract value based on vitalType
       let value = null;
       if (vitalType === 'temperature') {
-        value = data.object_temp_C;
+        const c = toFiniteNumber(data.object_temp_C);
+        // API indicates Celsius; UI displays Fahrenheit
+        value = c === null ? null : Math.round((((c * 9) / 5) + 32) * 10) / 10;
       } else if (vitalType === 'heartRate') {
-        value = data.heart_rate_bpm;
+        value = toFiniteNumber(data.heart_rate_bpm);
       } else if (vitalType === 'spo2') {
-        value = data.spo2_percent;
+        value = toFiniteNumber(data.spo2_percent);
       }
+
+      // Normalize invalid numbers
+      if (value !== null && !Number.isFinite(value)) value = null;
 
       // If value is null or undefined, use random mock values within normal range
       if (value === null || value === undefined) {
-        if (vitalType === 'temperature') {
-          value = Math.round((97 + Math.random() * (99.5 - 97)) * 10) / 10; // 97.0 to 99.5
-        } else if (vitalType === 'heartRate') {
-          value = Math.floor(60 + Math.random() * (100 - 60 + 1)); // 60 to 100
-        } else if (vitalType === 'spo2') {
-          value = Math.floor(95 + Math.random() * (100 - 95 + 1)); // 95 to 100
-        }
+        value = generateMockValue(vitalType);
       }
 
       const timestamp = new Date().toISOString();
@@ -143,14 +161,7 @@ const VitalsPage = () => {
       }));
     } catch (err) {
       // If endpoint fails, use random mock values within normal range
-      let mockValue;
-      if (vitalType === 'temperature') {
-        mockValue = Math.round((97 + Math.random() * (99.5 - 97)) * 10) / 10; // 97.0 to 99.5
-      } else if (vitalType === 'heartRate') {
-        mockValue = Math.floor(60 + Math.random() * (100 - 60 + 1)); // 60 to 100
-      } else if (vitalType === 'spo2') {
-        mockValue = Math.floor(95 + Math.random() * (100 - 95 + 1)); // 95 to 100
-      }
+      const mockValue = generateMockValue(vitalType);
       const timestamp = new Date().toISOString();
       setVitalsData(prev => ({
         ...prev,
@@ -370,7 +381,7 @@ const VitalsPage = () => {
                   <div className="vital-summary-info">
                     <div className="vital-summary-name">{vital.name}</div>
                     <div className="vital-summary-value">
-                      {vitalsData[vital.key]?.value ? `${vitalsData[vital.key].value} ${vital.unit}` : '--'}
+                      {typeof vitalsData[vital.key]?.value === 'number' ? `${vitalsData[vital.key].value} ${vital.unit}` : '--'}
                     </div>
                     <div className="vital-summary-status" style={{ color: getStatusColor(vitalsData[vital.key]?.status) }}>
                       {getStatusText(vitalsData[vital.key]?.status)}
