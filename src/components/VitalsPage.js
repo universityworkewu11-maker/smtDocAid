@@ -120,14 +120,14 @@ const VitalsPage = () => {
         value = data.spo2_percent;
       }
 
-      // If value is null or undefined, use mock values
+      // If value is null or undefined, use random mock values within normal range
       if (value === null || value === undefined) {
         if (vitalType === 'temperature') {
-          value = 98.6;
+          value = Math.round((97 + Math.random() * (99.5 - 97)) * 10) / 10; // 97.0 to 99.5
         } else if (vitalType === 'heartRate') {
-          value = 72;
+          value = Math.floor(60 + Math.random() * (100 - 60 + 1)); // 60 to 100
         } else if (vitalType === 'spo2') {
-          value = 98;
+          value = Math.floor(95 + Math.random() * (100 - 95 + 1)); // 95 to 100
         }
       }
 
@@ -142,14 +142,14 @@ const VitalsPage = () => {
         }
       }));
     } catch (err) {
-      // If endpoint fails, use mock values
+      // If endpoint fails, use random mock values within normal range
       let mockValue;
       if (vitalType === 'temperature') {
-        mockValue = 98.6;
+        mockValue = Math.round((97 + Math.random() * (99.5 - 97)) * 10) / 10; // 97.0 to 99.5
       } else if (vitalType === 'heartRate') {
-        mockValue = 72;
+        mockValue = Math.floor(60 + Math.random() * (100 - 60 + 1)); // 60 to 100
       } else if (vitalType === 'spo2') {
-        mockValue = 98;
+        mockValue = Math.floor(95 + Math.random() * (100 - 95 + 1)); // 95 to 100
       }
       const timestamp = new Date().toISOString();
       setVitalsData(prev => ({
