@@ -169,6 +169,10 @@ function AIQuestionnairesPage() {
   const [iAnswer, setIAnswer] = useState('');
   const [iLoading, setILoading] = useState({ start: false, next: false, report: false });
   const [reportExpanded, setReportExpanded] = useState(false);
+  const [generatedReports, setGeneratedReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState('');
+  const [selectedReportId, setSelectedReportId] = useState(null);
   const [doctors, setDoctors] = useState([]);
   const [doctorSearch, setDoctorSearch] = useState('');
   const [selectedDoctors, setSelectedDoctors] = useState(loadInitialSelectedDoctors);
@@ -329,6 +333,100 @@ function AIQuestionnairesPage() {
       setError('Unable to load doctors right now. Please refresh later.');
     }
   }, []);
+
+  const fetchGeneratedReports = useCallback(async () => {
+    setReportsLoading(true);
+    setReportsError('');
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error: fetchErr } = await supabase
+        .from('diagnoses')
+        .select('id, patient_id, content, severity, ai_generated, created_at, metadata')
+        .eq('patient_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(25);
+      if (fetchErr) throw fetchErr;
+
+      const list = Array.isArray(data) ? data : [];
+      setGeneratedReports(list);
+      if (!selectedReportId && list.length > 0) {
+        setSelectedReportId(list[0].id);
+      }
+    } catch (e) {
+      setReportsError(e?.message || String(e));
+      setGeneratedReports([]);
+    } finally {
+      setReportsLoading(false);
+    }
+  }, [selectedReportId]);
+
+  const saveReportOnly = useCallback(async (reportContent, metadata = {}) => {
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData?.user;
+    if (!user) throw new Error('User not authenticated');
+
+    const { data: diagData, error: diagError } = await supabase
+      .from('diagnoses')
+      .insert([
+        {
+          patient_id: user.id,
+          content: reportContent,
+          severity: 'medium',
+          ai_generated: true,
+          metadata: { ...metadata, created_via: 'AIQuestionnairesPage', language: interviewLanguage }
+        }
+      ])
+      .select('id')
+      .single();
+    if (diagError) throw diagError;
+    return diagData?.id || null;
+  }, [interviewLanguage]);
+
+  const shareDiagnosisToDoctors = useCallback(async (diagnosisId) => {
+    if (!diagnosisId) {
+      alert('Please select a report to share.');
+      return;
+    }
+    if (!selectedDoctors.length) {
+      alert('Please select at least one doctor before sharing the report.');
+      return;
+    }
+    const shareableDoctorIds = selectedDoctors.filter((doctorId) => doctorIdSet.has(doctorId));
+    if (!shareableDoctorIds.length) {
+      alert('Selected doctors are no longer available. Please re-select from the latest list before sharing.');
+      return;
+    }
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) throw new Error('User not authenticated');
+
+      const notifications = shareableDoctorIds.map((doctorId) => ({
+        doctor_id: doctorId,
+        patient_id: user.id,
+        diagnosis_id: diagnosisId,
+        message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
+        type: 'report_shared',
+        is_read: false
+      }));
+
+      const { error: notifError } = await supabase.from('notifications').insert(notifications);
+      if (notifError) throw notifError;
+
+      const numShared = shareableDoctorIds.length;
+      let alertMessage = `Report shared with ${numShared} doctor(s)!`;
+      if (numShared < selectedDoctors.length) {
+        alertMessage += `\n\nNote: ${selectedDoctors.length - numShared} previously selected doctor(s) were unavailable and not notified.`;
+      }
+      alert(alertMessage);
+    } catch (shareError) {
+      console.error('Error sharing report with doctors:', shareError);
+      alert(`Failed to share report. ${shareError?.message || String(shareError)}`);
+    }
+  }, [selectedDoctors, doctorIdSet]);
 
   const buildInterviewContext = useCallback(async () => {
     const snapshot = { patient: {}, vitals: [], uploads: [] };
@@ -530,50 +628,23 @@ function AIQuestionnairesPage() {
       if (shareableDoctorIds.length < selectedDoctors.length) {
         console.warn('One or more selected doctors were skipped because their profiles are unavailable.');
       }
+      // Backward-compatible helper: save the report then share it.
+      // New UI prefers explicitly selecting a saved report from the list.
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const user = authData?.user;
-        if (!user) throw new Error('User not authenticated');
-        const { data: diagData, error: diagError } = await supabase
-          .from('diagnoses')
-          .insert([
-            {
-              patient_id: user.id,
-              content: reportContent,
-              severity: 'medium',
-              ai_generated: true,
-              metadata: { ...metadata, created_via: 'AIQuestionnairesPage', language: interviewLanguage }
-            }
-          ])
-          .select('id')
-          .single();
-        if (diagError) throw diagError;
-        const notifications = shareableDoctorIds.map((doctorId) => ({
-          doctor_id: doctorId,
-          patient_id: user.id,
-          diagnosis_id: diagData.id,
-          message: `New AI-generated report available for patient ${user.email || 'Unknown'}`,
-          type: 'report_shared',
-          is_read: false
-        }));
-        const { error: notifError } = await supabase.from('notifications').insert(notifications);
-        if (notifError) {
-          console.warn('Failed to create notifications:', notifError);
-          alert(`Report saved, but sharing failed. Doctors were not notified.\n\n${notifError.message || String(notifError)}`);
-          return;
+        const diagnosisId = await saveReportOnly(reportContent, metadata);
+        if (diagnosisId) {
+          setSelectedReportId(diagnosisId);
+          await fetchGeneratedReports();
+          await shareDiagnosisToDoctors(diagnosisId);
+        } else {
+          throw new Error('Failed to save report');
         }
-        const numShared = shareableDoctorIds.length;
-        let alertMessage = `Report saved and shared with ${numShared} doctor(s)!`;
-        if (numShared < selectedDoctors.length) {
-          alertMessage += `\n\nNote: ${selectedDoctors.length - numShared} previously selected doctor(s) were unavailable and not notified.`;
-        }
-        alert(alertMessage);
       } catch (shareError) {
         console.error('Error saving report and notifying doctors:', shareError);
-        alert('Report generated but failed to save/share. Please try again.');
+        alert(`Report generated but failed to save/share. ${shareError?.message || String(shareError)}`);
       }
     },
-    [selectedDoctors, interviewLanguage, doctorIdSet]
+    [selectedDoctors, interviewLanguage, doctorIdSet, saveReportOnly, fetchGeneratedReports, shareDiagnosisToDoctors]
   );
 
   const generateInterviewReport = async () => {
@@ -595,8 +666,13 @@ function AIQuestionnairesPage() {
       });
       // Auto-expand when a report is generated
       setReportExpanded(true);
-      if (selectedDoctors.length > 0) {
-        await saveReportAndNotify(enrichedReport, { from: 'interview', turns: interview.turns, context: contextData });
+      // Save report so it appears in the generated reports list. Sharing is done explicitly via the Share button.
+      try {
+        const newId = await saveReportOnly(enrichedReport, { from: 'interview', turns: interview.turns, context: contextData });
+        if (newId) setSelectedReportId(newId);
+        await fetchGeneratedReports();
+      } catch (persistErr) {
+        console.warn('Failed to save generated report:', persistErr?.message || persistErr);
       }
     } catch (reportError) {
       setError(reportError.message || String(reportError));
@@ -608,6 +684,10 @@ function AIQuestionnairesPage() {
   useEffect(() => {
     fetchDoctors();
   }, [fetchDoctors]);
+
+  useEffect(() => {
+    fetchGeneratedReports();
+  }, [fetchGeneratedReports]);
 
   useEffect(() => {
     refreshContext();
@@ -693,6 +773,11 @@ function AIQuestionnairesPage() {
   const displayedDoctors = normalizedQuery ? initialDoctorList : [...initialDoctorList, ...selectedSupplements];
   const noDoctorMatches = normalizedQuery && displayedDoctors.length === 0;
   const shareDisabled = !interview.report || availableDoctorCount === 0;
+  const selectedReport = useMemo(() => {
+    if (!selectedReportId) return null;
+    return (generatedReports || []).find((r) => r?.id === selectedReportId) || null;
+  }, [generatedReports, selectedReportId]);
+  const shareSelectedDisabled = !selectedReportId || availableDoctorCount === 0;
 
   return (
     <div className="aiq-page">
@@ -955,20 +1040,83 @@ function AIQuestionnairesPage() {
                   <strong>Doctors selected</strong>
                   <span>{availableDoctorCount}</span>
                 </div>
+                <div>
+                  <strong>Selected report</strong>
+                  <span>
+                    {selectedReport?.created_at
+                      ? new Date(selectedReport.created_at).toLocaleString()
+                      : selectedReportId
+                        ? String(selectedReportId).slice(0, 8)
+                        : 'None'}
+                  </span>
+                </div>
               </div>
               <button
                 className="btn btn-primary"
-                onClick={() => saveReportAndNotify(interview.report, { from: 'interview', turns: interview.turns, context: contextData })}
-                disabled={shareDisabled}
+                onClick={() => shareDiagnosisToDoctors(selectedReportId)}
+                disabled={shareSelectedDisabled}
               >
-                Share with doctor{availableDoctorCount === 1 ? '' : 's'}
+                Share selected report with doctor{availableDoctorCount === 1 ? '' : 's'}
               </button>
-              <small className="aiq-hint">Generate a report and select at least one doctor to enable sharing.</small>
+              <small className="aiq-hint">Select a report below and choose at least one doctor to enable sharing.</small>
               {hasUnavailableSelections && (
                 <small className="aiq-hint" style={{ color: '#b45309' }}>
                   One or more saved selections are unavailable. Re-select them to notify those doctors.
                 </small>
               )}
+            </section>
+
+            <section className="card aiq-share-card">
+              <header className="aiq-section-header">
+                <div>
+                  <p className="aiq-eyebrow">Reports</p>
+                  <h2>Generated reports</h2>
+                </div>
+              </header>
+
+              {reportsError && (
+                <div className="alert alert-warning" style={{ marginBottom: 12 }}>
+                  {reportsError}
+                </div>
+              )}
+
+              {reportsLoading ? (
+                <p className="muted">Loading reports…</p>
+              ) : (generatedReports || []).length === 0 ? (
+                <p className="muted">No saved reports yet. Generate a report to see it here.</p>
+              ) : (
+                <div className="aiq-doctor-grid">
+                  {(generatedReports || []).map((r) => {
+                    const isChecked = r?.id === selectedReportId;
+                    const title = r?.created_at ? new Date(r.created_at).toLocaleString() : String(r?.id || '').slice(0, 8);
+                    const severity = String(r?.severity || '').toLowerCase();
+                    return (
+                      <label
+                        key={r.id}
+                        className={`aiq-doctor-card-option ${isChecked ? 'selected' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="selected-report"
+                          checked={isChecked}
+                          onChange={() => setSelectedReportId(r.id)}
+                        />
+                        <div>
+                          <div className="aiq-doctor-name">{title}</div>
+                          <div className="muted">Severity: {severity || 'n/a'}</div>
+                          <div className="muted">{truncate(String(r?.content || ''), 160)}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="aiq-button-row" style={{ marginTop: 12 }}>
+                <button className="btn btn-light" onClick={fetchGeneratedReports} disabled={reportsLoading}>
+                  {reportsLoading ? 'Refreshing…' : 'Refresh list'}
+                </button>
+              </div>
             </section>
           
             <section className="card aiq-context-card">
